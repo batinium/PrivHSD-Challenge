@@ -5,10 +5,11 @@ before making changes.
 
 ## Required Reading
 
-1. `../docs/challenge_requirements.md`
-2. `../docs/pipeline_design.md`
-3. `coding_rules.md`
-4. `task_board.md`
+1. `current_handoff.md`
+2. `../docs/challenge_requirements.md`
+3. `../docs/pipeline_design.md`
+4. `coding_rules.md`
+5. `task_board.md`
 
 ## Current Objective
 
@@ -36,4 +37,3 @@ a fresh challenge-specific implementation.
 - Add `privatized_text` by default.
 - Keep audit output machine-readable.
 - Avoid raw hateful examples in docs unless absolutely necessary.
-
