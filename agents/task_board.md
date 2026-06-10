@@ -13,7 +13,7 @@ Status values:
 | --- | --- | --- | --- |
 | A01 | done | Codex | Create fresh package, CLI, CSV pipeline, metrics, and tests. |
 | A02 | todo | unassigned | Add official-dataset schema adapter once starter kit arrives. |
-| A03 | todo | unassigned | Add Streamlit or NiceGUI demo for upload, preview, audit, and download. |
+| A03 | todo | unassigned | Add Streamlit or NiceGUI demo for upload, preview, audit, and download after the anonymizer and classifier pipeline are stable. |
 | A04 | todo | unassigned | Improve target-group handling with a safe preserve/generalize policy. |
 | A05 | done | Codex | Add stronger local utility proxy using a lightweight optional scikit-learn benchmark. |
 | A06 | todo | unassigned | Add score log template for official leaderboard submissions. |
@@ -21,19 +21,20 @@ Status values:
 | A08 | todo | unassigned | Add final pitch outline and demo script. |
 | A09 | done | Codex | Run Consensus/academic search for OSS technologies, then update `docs/research_oss_tech.md` and convert findings into implementation tasks. |
 | A10 | done | Codex | Add a local scikit-learn utility benchmark that trains on original text and compares original-vs-privatized macro-F1, prediction agreement, label recall deltas, and confidence drift. Keep it optional or isolated so the base package can stay dependency-light. |
-| A11 | todo | unassigned | Add an ablation runner that evaluates identity, regex-only, balanced, privacy, balanced-with-target-generalization, and any optional detector backend into one JSON/CSV report. |
-| A12 | todo | unassigned | Expand deterministic privacy/utility metrics with TAB-inspired mask density, placeholder density by type, residual identifier count, quasi-identifier flags, target cue retention, and over-masking warnings. |
+| A11 | done | Codex | Add an ablation runner that evaluates identity, regex-only, balanced, privacy, balanced-with-target-generalization, and any optional detector backend into one JSON/CSV report. |
+| A12 | done | Copernicus | Expand deterministic privacy/utility metrics with TAB-inspired mask density, placeholder density by type, residual identifier count, quasi-identifier flags, target cue retention, and over-masking warnings. |
 | A13 | todo | unassigned | Add committed synthetic PII stress fixtures and tests for noisy handles, emails, phone numbers, URLs, IPs, dates, names, locations, schools/orgs, IDs, aliases, and direct-plus-quasi identifier combinations. |
 | A14 | todo | unassigned | Prototype optional Presidio/spaCy detector comparison behind an extra or separate command; map external spans into PrivHSD audit format without replacing the deterministic default. |
 | A15 | todo | unassigned | Prototype optional local neural utility evaluators for Dynabench/HateXplain/Detoxify models after model-license checks; use them only as offline evaluation aids, not required pipeline dependencies. |
+| A16 | todo | unassigned | Add a local baseline hate-speech classifier pipeline for CSV train/evaluate/predict workflows using original or privatized text, with dependency isolation so the anonymizer remains runnable without classifier extras. |
 
 ## Next Recommended Task
 
-Run A11-A13 before heavier UI work if time allows. A10 added the optional local
-utility benchmark; the next highest-value work is an ablation runner that can
-compare identity, regex-only, balanced, privacy, and target-generalized runs in
-one report. A03 remains useful, but the UI should display the richer audit and
-benchmark outputs rather than reimplementing the pipeline.
+Prioritize pipeline work before UI. A11 added the ablation runner and A12 added
+richer anonymizer metrics and warning rollups. Next, run A13 to add committed
+synthetic PII stress fixtures, then add A16 for a local baseline classifier
+pipeline. A03 is last; the UI should display the anonymizer, audit, ablation,
+and classifier outputs rather than reimplementing them.
 
 Optional heavy integrations should stay optional. Presidio/spaCy, Hugging Face
 classifiers, Detoxify, sentence-transformers, GLiNER, and DP libraries must not
@@ -83,7 +84,7 @@ Please search academic literature and OSS ecosystem for:
 4. PII detection and anonymization libraries suitable for local/offline use.
 5. Hate speech or toxicity classifiers useful as local utility evaluators.
 6. Metrics for measuring privacy gain, utility retention, semantic preservation, and re-identification risk.
-7. Open-source tools we can realistically integrate during a short hackathon.
+7. Open-source tools we can realistically integrate into this project.
 
 Important constraints:
 - Prefer local/offline OSS tools.
@@ -129,7 +130,7 @@ Also propose a further testing plan:
 Expected output:
 1. Ranked OSS technology shortlist
 2. Academic findings summary with citations
-3. Recommended integration roadmap for the next 48 hours
+3. Recommended integration roadmap
 4. Evaluation and ablation plan
 5. Risks and fallback options
 ```

@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from .ablation import AblationError, run_ablation
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .datasets import add_prepare_dynahate_parser, prepare_dynahate
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
@@ -58,6 +59,19 @@ def build_parser() -> argparse.ArgumentParser:
     benchmark.add_argument("--test-size", type=float, default=0.25)
     benchmark.add_argument("--random-state", type=int, default=13)
 
+    ablate = subparsers.add_parser(
+        "ablate",
+        help="Compare deterministic privatization variants on one CSV.",
+    )
+    ablate.add_argument("--input", type=Path, required=True)
+    ablate.add_argument("--text-col", required=True)
+    ablate.add_argument("--id-col")
+    ablate.add_argument("--label-col")
+    ablate.add_argument("--output", type=Path)
+    ablate.add_argument("--output-dir", type=Path)
+    ablate.add_argument("--test-size", type=float, default=0.25)
+    ablate.add_argument("--random-state", type=int, default=13)
+
     add_prepare_dynahate_parser(subparsers)
 
     return parser
@@ -102,6 +116,17 @@ def main(argv: list[str] | None = None) -> int:
                 test_size=args.test_size,
                 random_state=args.random_state,
             )
+        elif args.command == "ablate":
+            result = run_ablation(
+                args.input,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                output_path=args.output,
+                output_dir=args.output_dir,
+                test_size=args.test_size,
+                random_state=args.random_state,
+            )
         else:
             count = prepare_dynahate(
                 raw_path=args.raw,
@@ -117,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except (BenchmarkError, CsvPipelineError, OSError, ValueError) as exc:
+    except (AblationError, BenchmarkError, CsvPipelineError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

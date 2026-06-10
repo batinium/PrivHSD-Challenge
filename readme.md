@@ -30,6 +30,7 @@ The active package is `privhsd/`.
 
 ```text
 privhsd/
+  ablation.py
   cli.py
   csv_pipeline.py
   detectors.py
@@ -78,6 +79,10 @@ python -m privhsd.cli evaluate \
   --output data/outputs/dynahate.metrics.json
 ```
 
+The metrics report includes privacy/utility proxy scores, placeholder density,
+residual identifier counts, quasi-identifier flags, target cue retention, and
+privacy or over-masking warnings.
+
 Optionally benchmark downstream utility loss with a local classifier:
 
 ```bash
@@ -93,6 +98,23 @@ python -m privhsd.cli benchmark-utility \
 
 The utility benchmark is a relative proxy for privatization impact. It is not
 the project’s core classifier and does not replace the official evaluator.
+
+Compare all built-in privatization variants:
+
+```bash
+python -m privhsd.cli ablate \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --id-col id \
+  --label-col label \
+  --output data/outputs/dynahate.ablation.json \
+  --output-dir data/outputs/dynahate_ablation
+```
+
+The ablation report compares `identity`, `regex_only`, `balanced`, `privacy`,
+and `balanced_with_targets`. It includes local proxy metrics for every variant
+and records `utility_benchmark_skipped` when the optional benchmark dependency
+is unavailable.
 
 ## Modes
 

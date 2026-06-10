@@ -23,6 +23,7 @@ After install:
 privhsd anonymize --help
 privhsd evaluate --help
 privhsd benchmark-utility --help
+privhsd ablate --help
 privhsd prepare-dynahate --help
 ```
 
@@ -41,6 +42,7 @@ privhsd benchmark-utility --help
 The wheel includes:
 
 - `privhsd.cli`
+- `privhsd.ablation`
 - `privhsd.csv_pipeline`
 - `privhsd.datasets`
 - `privhsd.detectors`

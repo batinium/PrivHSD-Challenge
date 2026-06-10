@@ -6,6 +6,7 @@ The active implementation is in `privhsd/`.
 
 ```text
 privhsd/
+  ablation.py      multi-mode ablation report runner
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   detectors.py     deterministic span detectors
@@ -57,6 +58,64 @@ text and `privatized_text`. It reports accuracy, macro-F1, prediction
 agreement, label recall deltas, and confidence drift. This is a local relative
 utility proxy, not a production hate-speech classifier and not a replacement for
 the official challenge evaluator.
+
+Compare privatization variants in one machine-readable report:
+
+```bash
+python -m privhsd.cli ablate \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --id-col id \
+  --label-col label \
+  --output data/outputs/dynahate.ablation.json \
+  --output-dir data/outputs/dynahate_ablation
+```
+
+`ablate` compares:
+
+- `identity`: no privatization.
+- `regex_only`: direct regex detectors only, no context detectors, no target
+  generalization.
+- `balanced`: current default.
+- `privacy`: privacy mode.
+- `balanced_with_targets`: balanced mode plus target-group generalization.
+
+The JSON report contains input and column configuration, variant definitions,
+aggregate proxy metrics, per-row metric/audit metadata without raw text, and
+optional utility benchmark summaries. If `--output-dir` is provided, one CSV per
+variant is written with original columns preserved and a `privatized_text`
+column added. If `--label-col` is provided and scikit-learn is installed, the
+report includes the same local relative utility benchmark used by
+`benchmark-utility` for each variant. If scikit-learn is not installed, the
+report includes `utility_benchmark_skipped` with the install hint and still
+writes the deterministic ablation metrics.
+
+## Local Metrics
+
+`privhsd evaluate`, anonymize audit summaries, and ablation reports use the same
+deterministic proxy metrics from `privhsd.metrics`. Existing compatibility keys
+such as `privacy_gain_mean`, `utility_cue_retention_mean`,
+`character_utility_retention_mean`, `proxy_tradeoff_mean`, and
+`identifier_counts` remain stable.
+
+Row-level metrics also include:
+
+- placeholder and mask density: `mask_density`, `placeholder_density`,
+  `placeholder_count`, `placeholder_counts_by_type`, and
+  `placeholder_character_count`
+- residual leakage indicators: `residual_identifier_count`,
+  `residual_direct_identifier_count`, `residual_quasi_identifier_count`, and
+  residual counts by entity type
+- quasi-identifier signals: before/after counts for `AGE`, `DATE`, `LOCATION`,
+  and `ORGANIZATION`, plus `quasi_identifier_flags`
+- target cue retention: target cue/category counts, literal target term
+  retention, and target category retention
+- warning lists: `privacy_warnings`, `overmasking_warnings`, and combined
+  `warnings`
+
+Aggregate metrics roll these fields up with totals, means, warning counts, and
+rows-with-warning counts. These are local explainability signals for comparing
+runs; they are not official challenge scores.
 
 ## Data Contract
 

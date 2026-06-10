@@ -32,6 +32,7 @@ privhsd
 
 Main modules:
 
+- `privhsd.ablation` - multi-mode local ablation report runner.
 - `privhsd.cli` - console interface.
 - `privhsd.csv_pipeline` - CSV read/write, batch privatization, audit JSON.
 - `privhsd.datasets` - Dynahate download/normalization helper.
@@ -52,6 +53,7 @@ Available subcommands:
 privhsd anonymize
 privhsd evaluate
 privhsd benchmark-utility
+privhsd ablate
 privhsd prepare-dynahate
 ```
 
@@ -80,7 +82,7 @@ python -m pytest -q
 Last verified result:
 
 ```text
-8 passed, 1 skipped
+15 passed, 2 skipped
 ```
 
 Last verified date:
@@ -154,7 +156,7 @@ Branch:
 main
 ```
 
-Files changed by A09/A10:
+Files changed by A09/A10/A11/A12:
 
 ```text
 agents/current_handoff.md
@@ -164,10 +166,14 @@ docs/packaging.md
 docs/pipeline_design.md
 docs/quickstart.md
 docs/research_oss_tech.md
+privhsd/ablation.py
 privhsd/cli.py
+privhsd/metrics.py
 privhsd/utility_benchmark.py
 pyproject.toml
 readme.md
+tests/test_ablation.py
+tests/test_metrics.py
 tests/test_utility_benchmark.py
 ```
 
@@ -183,15 +189,18 @@ The task board is `agents/task_board.md`.
 Recommended next task:
 
 ```text
-A11 - Add an ablation runner.
+A13 - Add synthetic PII stress fixtures and tests.
 ```
 
 Reason:
 
-A10 added `benchmark-utility`, an optional local scikit-learn relative utility
-proxy. A11 should compare identity, regex-only, balanced, privacy, and
-target-generalized modes in one JSON/CSV report so the team can pick a
-submission mode empirically.
+A11 added `privhsd ablate`, which compares identity, regex-only, balanced,
+privacy, and target-generalized modes in one JSON report with optional
+per-variant CSVs. A12 added richer deterministic metrics and warnings for
+residual leakage and over-masking. A13 synthetic PII stress fixtures are the
+next natural follow-up for anonymizer coverage. A16 is tracked for the local
+baseline classifier pipeline after the anonymizer is better covered. Keep GUI
+work last.
 
 ## A09 Research Output
 
@@ -218,11 +227,12 @@ agents/task_board.md
 New implementation tasks from the research findings:
 
 - A10: scikit-learn utility benchmark. Done.
-- A11: ablation runner.
-- A12: TAB-inspired metrics and over-masking warnings.
+- A11: ablation runner. Done.
+- A12: TAB-inspired metrics and over-masking warnings. Done.
 - A13: synthetic PII stress fixtures and tests.
 - A14: optional Presidio/spaCy detector comparison.
 - A15: optional local neural utility evaluators after license checks.
+- A16: local baseline hate-speech classifier pipeline.
 
 ## Important Constraints
 
@@ -237,7 +247,7 @@ New implementation tasks from the research findings:
 
 ## Current Product Shape
 
-The project is a preprocessing layer:
+The current code is a preprocessing layer:
 
 ```text
 CSV with text
@@ -245,7 +255,9 @@ CSV with text
   -> typed text privatization
   -> CSV with privatized_text
   -> audit JSON
-  -> local proxy metrics
+  -> local proxy metrics and warning rollups
 ```
 
-It is not primarily a classifier or moderation enforcement tool.
+A baseline local classifier is a planned first-class pipeline task, but the
+anonymizer should remain runnable without classifier dependencies or external
+LLM APIs.
