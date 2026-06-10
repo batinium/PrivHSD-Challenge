@@ -201,6 +201,18 @@ this mode first for official leaderboard submissions.
 More aggressive. Also generalizes known target-group mentions into typed
 categories. Useful for policy demos, but it may reduce classifier utility.
 
+Target-group policy:
+
+- `utility` and `balanced` preserve target-group terms by default so downstream
+  hate-speech cues remain visible.
+- `privacy` and `--generalize-targets` generalize target-group terms into typed
+  categories.
+- Broad gender terms such as `woman`, `women`, `man`, `men`, `girl`, `girls`,
+  `boy`, and `boys` are context-gated before generalization. They are preserved
+  in neutral contexts and generalized only near hostile or exclusionary cues
+  such as `do not belong`, `should leave`, `deport`, `exclude`, `hate`, or
+  `worthless`.
+
 ## Transformation Style
 
 Use typed placeholders:

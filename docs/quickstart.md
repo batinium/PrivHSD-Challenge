@@ -45,6 +45,11 @@ identifier counts, quasi-identifier flags, target cue retention, and privacy or
 over-masking warning counts. These fields are for local comparison and audit,
 not official leaderboard scoring.
 
+By default, `balanced` preserves target-group terms for classifier utility.
+`privacy` or `--generalize-targets` can generalize target groups, with broad
+gender terms preserved in neutral contexts and generalized only near hostile or
+exclusionary cues.
+
 ## Benchmark Utility
 
 Install the optional local benchmark extra:

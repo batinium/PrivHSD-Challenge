@@ -14,7 +14,7 @@ Status values:
 | A01 | done | Codex | Create fresh package, CLI, CSV pipeline, metrics, and tests. |
 | A02 | todo | unassigned | Add official-dataset schema adapter once starter kit arrives. |
 | A03 | todo | unassigned | Add Streamlit or NiceGUI demo for upload, preview, audit, and download after the anonymizer and classifier pipeline are stable. |
-| A04 | todo | unassigned | Improve target-group handling with a safe preserve/generalize policy. |
+| A04 | done | Codex | Improve target-group handling with a safe preserve/generalize policy. |
 | A05 | done | Codex | Add stronger local utility proxy using a lightweight optional scikit-learn benchmark. |
 | A06 | todo | unassigned | Add score log template for official leaderboard submissions. |
 | A07 | done | Codex | Add packaging/install instructions for judges. |
@@ -33,9 +33,10 @@ Status values:
 Prioritize pipeline work before UI. A13 added committed synthetic PII stress
 fixtures and tests for anonymizer coverage, metrics residual warnings, and
 ablation behavior. A16 added optional local classifier train/evaluate/predict
-workflows. Next, improve A04 target-group handling and add A06 score-log
-templates. A03 is last; the UI should display the anonymizer, audit, ablation,
-and classifier outputs rather than reimplementing them.
+workflows. A04 added context-gated target-group handling for broad gender terms.
+Next, add A06 score-log templates. A03 is last; the UI should display the
+anonymizer, audit, ablation, and classifier outputs rather than reimplementing
+them.
 
 Optional heavy integrations should stay optional. Presidio/spaCy, Hugging Face
 classifiers, Detoxify, sentence-transformers, GLiNER, and DP libraries must not

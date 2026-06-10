@@ -257,20 +257,23 @@ Completed today:
 ```text
 A13 - Added synthetic PII stress fixtures and tests.
 A16 - Added optional local baseline classifier train/evaluate/predict workflows.
+A04 - Added safe target-group handling for broad gender terms.
 ```
 
 Recommended next task:
 
 ```text
-A04 - Improve target-group handling with a safe preserve/generalize policy.
+A06 - Add score log template for official leaderboard submissions.
 ```
 
 Reason:
 
 A13 now validates anonymizer fixture coverage, residual-warning metrics, row
 order/metadata preservation, and ablation behavior on committed synthetic data.
-A16 now provides optional classifier workflows and local JSON metrics. A04 and
-A06 are next before GUI work.
+A16 now provides optional classifier workflows and local JSON metrics. A04 now
+preserves broad gender terms in neutral contexts and generalizes them only near
+hostile/exclusionary cues in target-generalizing modes. A06 is next before GUI
+work.
 
 ## A09 Research Output
 

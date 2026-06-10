@@ -180,6 +180,36 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
 }
 
 
+CONTEXTUAL_TARGET_TERMS = {
+    "boy",
+    "boys",
+    "girl",
+    "girls",
+    "man",
+    "men",
+    "woman",
+    "women",
+}
+
+TARGET_GENERALIZATION_CONTEXT_CUES = (
+    "attack",
+    "ban",
+    "deport",
+    "deported",
+    "do not belong",
+    "exclude",
+    "excluded",
+    "hate",
+    "inferior",
+    "not belong",
+    "should leave",
+    "threat",
+    "violent",
+    "violence",
+    "worthless",
+)
+
+
 def regex_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for entity_type, pattern in REGEX_PATTERNS:
@@ -223,12 +253,30 @@ def context_spans(text: str) -> list[Span]:
     return spans
 
 
+def has_target_generalization_context(text: str, start: int, end: int) -> bool:
+    window = text[max(0, start - 80) : min(len(text), end + 80)].lower()
+    for cue in TARGET_GENERALIZATION_CONTEXT_CUES:
+        pattern = r"(?<![a-z0-9])" + re.escape(cue) + r"(?![a-z0-9])"
+        if re.search(pattern, window):
+            return True
+    return False
+
+
 def target_group_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for category, terms in TARGET_GROUP_TERMS.items():
         for term in terms:
             pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])", re.I)
             for match in pattern.finditer(text):
+                if (
+                    term.lower() in CONTEXTUAL_TARGET_TERMS
+                    and not has_target_generalization_context(
+                        text,
+                        match.start(),
+                        match.end(),
+                    )
+                ):
+                    continue
                 spans.append(
                     Span(
                         start=match.start(),

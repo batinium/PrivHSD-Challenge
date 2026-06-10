@@ -33,3 +33,19 @@ def test_utility_mode_keeps_context_detectors_but_not_target_generalization():
     assert "[PERSON]" in result.text
     assert "refugees" in result.text
 
+
+def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():
+    text = "The women from River City organized a public meeting."
+    result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert "women" in result.text
+    assert "[TARGET_GROUP:gender]" not in result.text
+    assert "[LOCATION]" in result.text
+
+
+def test_privacy_mode_generalizes_broad_gender_terms_in_hostile_context():
+    text = "Women do not belong in the public meeting."
+    result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert "Women" not in result.text
+    assert "[TARGET_GROUP:gender]" in result.text
