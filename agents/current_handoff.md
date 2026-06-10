@@ -98,7 +98,7 @@ python -m pytest -q
 Last verified result:
 
 ```text
-20 passed, 3 skipped
+22 passed, 3 skipped
 ```
 
 Optional classifier environment:
@@ -113,7 +113,7 @@ python -m venv .venv
 Last optional-environment result:
 
 ```text
-22 passed, 1 skipped
+24 passed, 1 skipped
 ```
 
 Last verified date:
@@ -134,8 +134,13 @@ Install-test wheel:
 python -m venv /tmp/privhsd-install-test
 /tmp/privhsd-install-test/bin/pip install --no-index --find-links /tmp/privhsd-wheelhouse privhsd
 /tmp/privhsd-install-test/bin/privhsd --help
-/tmp/privhsd-install-test/bin/privhsd prepare-dynahate --help
+/tmp/privhsd-install-test/bin/privhsd train-classifier --help
+/tmp/privhsd-install-test/bin/privhsd predict-classifier --help
 ```
+
+Last package smoke result: wheel built successfully, installed into
+`/tmp/privhsd-install-test`, and CLI help worked for the root command plus
+classifier commands.
 
 Dataset prep:
 
@@ -195,6 +200,93 @@ and predict ran on all 8 synthetic rows; prediction counts were 4 `hate` and 4
 `nothate`; evaluate macro-F1 was 0.873. Generated files are under ignored
 `data/outputs/`.
 
+Dynahate local experiments:
+
+```bash
+.venv/bin/python -m privhsd.cli anonymize \
+  --input data/public_dev/dynahate.csv \
+  --output data/outputs/dynahate.balanced.privatized.csv \
+  --text-col text \
+  --id-col id \
+  --audit data/outputs/dynahate.balanced.audit.json \
+  --mode balanced
+
+.venv/bin/python -m privhsd.cli evaluate \
+  --input data/outputs/dynahate.balanced.privatized.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --output data/outputs/dynahate.balanced.metrics.json
+
+.venv/bin/python -m privhsd.cli train-classifier \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --model data/outputs/dynahate.classifier.pkl \
+  --output data/outputs/dynahate.classifier.train.json \
+  --test-size 0.25 \
+  --random-state 13
+
+.venv/bin/python -m privhsd.cli evaluate-classifier \
+  --input data/public_dev/dynahate.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.evaluate_original.json
+
+.venv/bin/python -m privhsd.cli evaluate-classifier \
+  --input data/outputs/dynahate.balanced.privatized.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col privatized_text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.evaluate_privatized.json
+
+.venv/bin/python -m privhsd.cli predict-classifier \
+  --input data/outputs/dynahate.balanced.privatized.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col privatized_text \
+  --id-col id \
+  --label-col label \
+  --output data/outputs/dynahate.classifier.predictions_on_privatized.csv
+
+.venv/bin/python -m privhsd.cli ablate \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --id-col id \
+  --output data/outputs/dynahate.ablation.json \
+  > data/outputs/dynahate.ablation.stdout.json
+```
+
+Dynahate dataset summary: 41,144 rows; labels are 22,175 `hate` and 18,969
+`nothate`; splits are 32,924 train, 4,100 dev, and 4,120 test.
+
+Balanced anonymizer summary: privacy gain mean 0.0489; 2,315 placeholders; 3
+residual identifiers, all direct `USER` detections; 0 residual
+quasi-identifiers; target cue retention mean 0.9994; character utility
+retention mean 0.9953; 125 rows with warnings.
+
+Classifier summary: train split used 30,858 train rows and 10,286 dev rows; dev
+accuracy 0.6101 and macro-F1 0.6098. Full original-text evaluation accuracy
+was 0.7765 and macro-F1 0.7764. Full privatized-text evaluation accuracy was
+0.7757 and macro-F1 0.7756, for deltas of -0.0008 and -0.0008. Prediction CSV
+preserved 41,144 rows and added `predicted_label` and `predicted_confidence`.
+
+Ablation aggregate summary:
+
+| Variant | Changed rows | Privacy gain mean | Residual IDs | Target cue retention | Character retention |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| identity | 0 | 0.0000 | 2315 | 1.0000 | 1.0000 |
+| regex_only | 167 | 0.0038 | 2123 | 1.0000 | 0.9996 |
+| balanced | 2015 | 0.0489 | 3 | 0.9994 | 0.9953 |
+| privacy | 9022 | 0.0489 | 3 | 0.9997 | 0.9565 |
+| balanced_with_targets | 9022 | 0.0489 | 3 | 0.9997 | 0.9565 |
+
+Generated Dynahate outputs are under ignored `data/outputs/`. Notable sizes:
+metrics JSON about 91 MB, prediction CSV about 14 MB, and ablation JSON about
+631 MB.
+
 ## Git Status
 
 Previous pushed commit before A09/A10:
@@ -244,9 +336,9 @@ tests/test_utility_benchmark.py
 ```
 
 `Webinar.txt` is still the intentionally untracked noisy webinar transcript.
-The temporary repo-local micromamba env `./.venv` was removed after creation.
-The existing `contextsafe-hsd` micromamba env is present, but did not contain
-`pytest` or `scikit-learn` when checked with `PYTHONNOUSERSITE=1`.
+The repo-local `.venv/` is ignored and currently contains editable `privhsd`,
+the optional `classifier` extra, and `pytest` for optional-path tests.
+The existing `contextsafe-hsd` micromamba env was not used.
 
 ## Next Tasks
 
@@ -259,12 +351,14 @@ A13 - Added synthetic PII stress fixtures and tests.
 A16 - Added optional local baseline classifier train/evaluate/predict workflows.
 A04 - Added safe target-group handling for broad gender terms.
 A06 - Added official score-log template.
+Dynahate - Ran balanced anonymizer, metrics, classifier, prediction, and ablation experiments.
+Packaging - Built and install-tested a wheel with classifier CLI help.
 ```
 
 Recommended next task:
 
 ```text
-Run Dynahate local ablation/classifier experiments and record summaries.
+Consider A14 optional Presidio/spaCy comparison, or start final pitch/demo notes.
 ```
 
 Reason:
@@ -275,7 +369,9 @@ A16 now provides optional classifier workflows and local JSON metrics. A04 now
 preserves broad gender terms in neutral contexts and generalizes them only near
 hostile/exclusionary cues in target-generalizing modes. A06 now provides
 `docs/score_log_template.md` for official leaderboard submission tracking.
-Dynahate local experiments are next before GUI work.
+Dynahate local experiment summaries are recorded above. Package/install smoke is
+also complete. Optional integrations, final pitch/demo notes, and GUI work are
+the remaining larger tasks.
 
 ## A09 Research Output
 
@@ -331,8 +427,8 @@ CSV with text
   -> CSV with privatized_text
   -> audit JSON
   -> local proxy metrics and warning rollups
+  -> optional local classifier train/evaluate/predict reports
 ```
 
-A baseline local classifier is a planned first-class pipeline task, but the
-anonymizer should remain runnable without classifier dependencies or external
-LLM APIs.
+The anonymizer remains runnable without classifier dependencies or external LLM
+APIs. The classifier workflow is optional through the `classifier` extra.
