@@ -26,15 +26,16 @@ Status values:
 | A13 | done | Codex | Add committed synthetic PII stress fixtures and tests for noisy handles, emails, phone numbers, URLs, IPs, dates, names, locations, schools/orgs, IDs, aliases, and direct-plus-quasi identifier combinations. |
 | A14 | todo | unassigned | Prototype optional Presidio/spaCy detector comparison behind an extra or separate command; map external spans into PrivHSD audit format without replacing the deterministic default. |
 | A15 | todo | unassigned | Prototype optional local neural utility evaluators for Dynabench/HateXplain/Detoxify models after model-license checks; use them only as offline evaluation aids, not required pipeline dependencies. |
-| A16 | todo | unassigned | Add a local baseline hate-speech classifier pipeline for CSV train/evaluate/predict workflows using original or privatized text, with dependency isolation so the anonymizer remains runnable without classifier extras. |
+| A16 | done | Codex | Add a local baseline hate-speech classifier pipeline for CSV train/evaluate/predict workflows using original or privatized text, with dependency isolation so the anonymizer remains runnable without classifier extras. |
 
 ## Next Recommended Task
 
 Prioritize pipeline work before UI. A13 added committed synthetic PII stress
 fixtures and tests for anonymizer coverage, metrics residual warnings, and
-ablation behavior. Next, add A16 for a local baseline classifier pipeline. A03
-is last; the UI should display the anonymizer, audit, ablation, and classifier
-outputs rather than reimplementing them.
+ablation behavior. A16 added optional local classifier train/evaluate/predict
+workflows. Next, improve A04 target-group handling and add A06 score-log
+templates. A03 is last; the UI should display the anonymizer, audit, ablation,
+and classifier outputs rather than reimplementing them.
 
 Optional heavy integrations should stay optional. Presidio/spaCy, Hugging Face
 classifiers, Detoxify, sentence-transformers, GLiNER, and DP libraries must not

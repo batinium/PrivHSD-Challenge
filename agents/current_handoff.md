@@ -36,6 +36,7 @@ privhsd
 Main modules:
 
 - `privhsd.ablation` - multi-mode local ablation report runner.
+- `privhsd.classifier` - optional scikit-learn baseline classifier train/evaluate/predict workflows.
 - `privhsd.cli` - console interface.
 - `privhsd.csv_pipeline` - CSV read/write, batch privatization, audit JSON.
 - `privhsd.datasets` - Dynahate download/normalization helper.
@@ -66,6 +67,9 @@ privhsd anonymize
 privhsd evaluate
 privhsd benchmark-utility
 privhsd ablate
+privhsd train-classifier
+privhsd evaluate-classifier
+privhsd predict-classifier
 privhsd prepare-dynahate
 ```
 
@@ -94,7 +98,22 @@ python -m pytest -q
 Last verified result:
 
 ```text
-18 passed, 2 skipped
+20 passed, 3 skipped
+```
+
+Optional classifier environment:
+
+```bash
+python -m venv .venv
+.venv/bin/python -m pip install -e '.[classifier]'
+.venv/bin/python -m pip install pytest
+.venv/bin/python -m pytest -q
+```
+
+Last optional-environment result:
+
+```text
+22 passed, 1 skipped
 ```
 
 Last verified date:
@@ -140,6 +159,41 @@ Normalized row count:
 ```
 
 Dataset folders are ignored by git.
+
+Classifier synthetic smoke:
+
+```bash
+.venv/bin/python -m privhsd.cli train-classifier \
+  --input tests/fixtures/synthetic_pii_stress.csv \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --model data/outputs/synthetic_pii.classifier.pkl \
+  --output data/outputs/synthetic_pii.classifier.train.json \
+  --test-size 0.25 \
+  --random-state 7
+
+.venv/bin/python -m privhsd.cli evaluate-classifier \
+  --input tests/fixtures/synthetic_pii_stress.csv \
+  --model data/outputs/synthetic_pii.classifier.pkl \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/synthetic_pii.classifier.evaluate.json
+
+.venv/bin/python -m privhsd.cli predict-classifier \
+  --input tests/fixtures/synthetic_pii_stress.csv \
+  --model data/outputs/synthetic_pii.classifier.pkl \
+  --text-col text \
+  --id-col id \
+  --label-col label \
+  --output data/outputs/synthetic_pii.classifier.predictions.csv
+```
+
+Synthetic smoke summary: train split used 6 train rows and 2 dev rows; evaluate
+and predict ran on all 8 synthetic rows; prediction counts were 4 `hate` and 4
+`nothate`; evaluate macro-F1 was 0.873. Generated files are under ignored
+`data/outputs/`.
 
 ## Git Status
 
@@ -202,19 +256,21 @@ Completed today:
 
 ```text
 A13 - Added synthetic PII stress fixtures and tests.
+A16 - Added optional local baseline classifier train/evaluate/predict workflows.
 ```
 
 Recommended next task:
 
 ```text
-A16 - Add a local baseline hate-speech classifier pipeline.
+A04 - Improve target-group handling with a safe preserve/generalize policy.
 ```
 
 Reason:
 
 A13 now validates anonymizer fixture coverage, residual-warning metrics, row
 order/metadata preservation, and ablation behavior on committed synthetic data.
-A16 is the next pipeline task. Keep GUI work last.
+A16 now provides optional classifier workflows and local JSON metrics. A04 and
+A06 are next before GUI work.
 
 ## A09 Research Output
 

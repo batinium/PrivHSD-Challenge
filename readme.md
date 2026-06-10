@@ -31,6 +31,7 @@ The active package is `privhsd/`.
 ```text
 privhsd/
   ablation.py
+  classifier.py
   cli.py
   csv_pipeline.py
   detectors.py
@@ -103,6 +104,36 @@ python -m privhsd.cli benchmark-utility \
 
 The utility benchmark is a relative proxy for privatization impact. It is not
 the project’s core classifier and does not replace the official evaluator.
+
+Optionally train a local baseline classifier:
+
+```bash
+python -m pip install '.[classifier]'
+python -m privhsd.cli train-classifier \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --model data/outputs/dynahate.classifier.pkl \
+  --output data/outputs/dynahate.classifier.train.json
+python -m privhsd.cli evaluate-classifier \
+  --input data/public_dev/dynahate.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.evaluate.json
+python -m privhsd.cli predict-classifier \
+  --input data/outputs/dynahate.privatized.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col privatized_text \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.predictions.csv
+```
+
+The classifier commands are local scikit-learn baselines. Prediction CSVs
+preserve input rows and metadata, then add `predicted_label` and
+`predicted_confidence`.
 
 Compare all built-in privatization variants:
 

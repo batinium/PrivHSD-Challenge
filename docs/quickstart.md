@@ -69,6 +69,52 @@ This trains a lightweight local classifier on original text and reports how much
 predictions change on `privatized_text`. It is a proxy for utility loss, not a
 production hate-speech detector.
 
+## Train A Local Baseline Classifier
+
+Install the optional classifier extra:
+
+```bash
+python -m pip install '.[classifier]'
+```
+
+Train a TF-IDF + logistic regression baseline:
+
+```bash
+python -m privhsd.cli train-classifier \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --model data/outputs/dynahate.classifier.pkl \
+  --output data/outputs/dynahate.classifier.train.json
+```
+
+Evaluate the saved model:
+
+```bash
+python -m privhsd.cli evaluate-classifier \
+  --input data/public_dev/dynahate.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.evaluate.json
+```
+
+Predict on privatized text while preserving input rows and metadata:
+
+```bash
+python -m privhsd.cli predict-classifier \
+  --input data/outputs/dynahate.privatized.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col privatized_text \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.predictions.csv
+```
+
+Classifier metrics are local baseline scores and are not official leaderboard
+results.
+
 ## Compare Ablations
 
 Run all deterministic variants in one report:

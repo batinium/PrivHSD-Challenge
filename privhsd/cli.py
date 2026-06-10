@@ -8,6 +8,16 @@ import sys
 from pathlib import Path
 
 from .ablation import AblationError, run_ablation
+from .classifier import (
+    DEFAULT_EVALUATE_REPORT_PATH,
+    DEFAULT_MODEL_PATH,
+    DEFAULT_PREDICTION_PATH,
+    DEFAULT_TRAIN_REPORT_PATH,
+    ClassifierError,
+    evaluate_classifier,
+    predict_classifier,
+    train_classifier,
+)
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .datasets import add_prepare_dynahate_parser, prepare_dynahate
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
@@ -72,6 +82,58 @@ def build_parser() -> argparse.ArgumentParser:
     ablate.add_argument("--test-size", type=float, default=0.25)
     ablate.add_argument("--random-state", type=int, default=13)
 
+    train_classifier_parser = subparsers.add_parser(
+        "train-classifier",
+        help="Train a local baseline hate-speech classifier on a labeled CSV.",
+    )
+    train_classifier_parser.add_argument("--input", type=Path, required=True)
+    train_classifier_parser.add_argument("--text-col", required=True)
+    train_classifier_parser.add_argument("--label-col", default="label")
+    train_classifier_parser.add_argument("--id-col")
+    train_classifier_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    train_classifier_parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_TRAIN_REPORT_PATH,
+    )
+    train_classifier_parser.add_argument("--test-size", type=float, default=0.25)
+    train_classifier_parser.add_argument("--random-state", type=int, default=13)
+
+    evaluate_classifier_parser = subparsers.add_parser(
+        "evaluate-classifier",
+        help="Evaluate a trained local baseline classifier on a labeled CSV.",
+    )
+    evaluate_classifier_parser.add_argument("--input", type=Path, required=True)
+    evaluate_classifier_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    evaluate_classifier_parser.add_argument("--text-col", required=True)
+    evaluate_classifier_parser.add_argument("--label-col", default="label")
+    evaluate_classifier_parser.add_argument("--id-col")
+    evaluate_classifier_parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_EVALUATE_REPORT_PATH,
+    )
+
+    predict_classifier_parser = subparsers.add_parser(
+        "predict-classifier",
+        help="Write row-preserving predictions from a trained local classifier.",
+    )
+    predict_classifier_parser.add_argument("--input", type=Path, required=True)
+    predict_classifier_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    predict_classifier_parser.add_argument("--text-col", required=True)
+    predict_classifier_parser.add_argument("--id-col")
+    predict_classifier_parser.add_argument("--label-col", default="label")
+    predict_classifier_parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_PREDICTION_PATH,
+    )
+    predict_classifier_parser.add_argument("--prediction-col", default="predicted_label")
+    predict_classifier_parser.add_argument(
+        "--confidence-col",
+        default="predicted_confidence",
+    )
+
     add_prepare_dynahate_parser(subparsers)
 
     return parser
@@ -127,6 +189,37 @@ def main(argv: list[str] | None = None) -> int:
                 test_size=args.test_size,
                 random_state=args.random_state,
             )
+        elif args.command == "train-classifier":
+            result = train_classifier(
+                args.input,
+                text_col=args.text_col,
+                label_col=args.label_col,
+                id_col=args.id_col,
+                model_path=args.model,
+                output_path=args.output,
+                test_size=args.test_size,
+                random_state=args.random_state,
+            )
+        elif args.command == "evaluate-classifier":
+            result = evaluate_classifier(
+                args.input,
+                model_path=args.model,
+                text_col=args.text_col,
+                label_col=args.label_col,
+                id_col=args.id_col,
+                output_path=args.output,
+            )
+        elif args.command == "predict-classifier":
+            result = predict_classifier(
+                args.input,
+                model_path=args.model,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                output_path=args.output,
+                prediction_col=args.prediction_col,
+                confidence_col=args.confidence_col,
+            )
         else:
             count = prepare_dynahate(
                 raw_path=args.raw,
@@ -142,7 +235,14 @@ def main(argv: list[str] | None = None) -> int:
             }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except (AblationError, BenchmarkError, CsvPipelineError, OSError, ValueError) as exc:
+    except (
+        AblationError,
+        BenchmarkError,
+        ClassifierError,
+        CsvPipelineError,
+        OSError,
+        ValueError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

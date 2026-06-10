@@ -7,6 +7,7 @@ The active implementation is in `privhsd/`.
 ```text
 privhsd/
   ablation.py      multi-mode ablation report runner
+  classifier.py    optional local CSV train/evaluate/predict classifier
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   detectors.py     deterministic span detectors
@@ -64,6 +65,51 @@ text and `privatized_text`. It reports accuracy, macro-F1, prediction
 agreement, label recall deltas, and confidence drift. This is a local relative
 utility proxy, not a production hate-speech classifier and not a replacement for
 the official challenge evaluator.
+
+Train a local baseline hate-speech classifier:
+
+```bash
+python -m pip install '.[classifier]'
+python -m privhsd.cli train-classifier \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --model data/outputs/dynahate.classifier.pkl \
+  --output data/outputs/dynahate.classifier.train.json
+```
+
+Evaluate a saved classifier:
+
+```bash
+python -m privhsd.cli evaluate-classifier \
+  --input data/public_dev/dynahate.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.evaluate.json
+```
+
+Write row-preserving predictions:
+
+```bash
+python -m privhsd.cli predict-classifier \
+  --input data/outputs/dynahate.privatized.csv \
+  --model data/outputs/dynahate.classifier.pkl \
+  --text-col privatized_text \
+  --id-col id \
+  --output data/outputs/dynahate.classifier.predictions.csv
+```
+
+`train-classifier`, `evaluate-classifier`, and `predict-classifier` are optional
+scikit-learn workflows. They use a TF-IDF + logistic regression baseline and
+write outputs under `data/outputs/` by default. Metrics JSON includes accuracy,
+macro-F1, per-label precision/recall/F1/support, confusion matrix/counts,
+prediction counts, split configuration, label counts, and a warning that this
+is only a local baseline. `predict-classifier` preserves row count, row order,
+IDs, labels if present, and metadata columns, then adds `predicted_label` and
+`predicted_confidence`.
 
 Compare privatization variants in one machine-readable report:
 

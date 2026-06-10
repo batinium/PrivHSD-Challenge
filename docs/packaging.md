@@ -24,6 +24,9 @@ privhsd anonymize --help
 privhsd evaluate --help
 privhsd benchmark-utility --help
 privhsd ablate --help
+privhsd train-classifier --help
+privhsd evaluate-classifier --help
+privhsd predict-classifier --help
 privhsd prepare-dynahate --help
 ```
 
@@ -37,12 +40,21 @@ python -m pip install '.[benchmark]'
 privhsd benchmark-utility --help
 ```
 
+Install the local baseline classifier extra only when you need CSV
+train/evaluate/predict classifier workflows:
+
+```bash
+python -m pip install '.[classifier]'
+privhsd train-classifier --help
+```
+
 ## Verified Package Contents
 
 The wheel includes:
 
 - `privhsd.cli`
 - `privhsd.ablation`
+- `privhsd.classifier`
 - `privhsd.csv_pipeline`
 - `privhsd.datasets`
 - `privhsd.detectors`
