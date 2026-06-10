@@ -9,6 +9,7 @@ Use it before changing code.
 2. `pipeline_design.md` - current implementation contract and module map.
 3. `dataset_plan.md` - public dataset plan before official data arrives.
 4. `quickstart.md` - commands for running the current pipeline.
+5. `packaging.md` - pip install and wheel build notes.
 
 ## Source Of Truth
 
@@ -20,4 +21,3 @@ The implementation should stay aligned with these points:
 - Add `privatized_text` by default instead of overwriting source text.
 - Produce audit JSON for explainability.
 - Optimize the privacy/utility tradeoff, not privacy alone.
-

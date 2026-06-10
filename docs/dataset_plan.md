@@ -21,7 +21,7 @@ Why:
 Prepare it:
 
 ```bash
-python scripts/prepare_dynahate.py --download \
+python -m privhsd.cli prepare-dynahate --download \
   --raw data/public_dev/dynahate_raw.csv \
   --output data/public_dev/dynahate.csv
 ```
@@ -57,4 +57,3 @@ When the official development dataset arrives:
 4. Submit outputs to the official evaluator.
 5. Record scores in `data/outputs/score_log.md`.
 6. Tune only after comparing official scores with local proxy metrics.
-

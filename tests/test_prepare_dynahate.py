@@ -1,6 +1,6 @@
 import csv
 
-from scripts.prepare_dynahate import normalize
+from privhsd.datasets import normalize_dynahate
 
 
 def test_normalize_dynahate_shape(tmp_path):
@@ -23,7 +23,7 @@ def test_normalize_dynahate_shape(tmp_path):
             }
         )
 
-    count = normalize(raw, out)
+    count = normalize_dynahate(raw, out)
 
     assert count == 1
     with out.open("r", encoding="utf-8", newline="") as handle:
@@ -62,7 +62,7 @@ def test_normalize_dynahate_lowercase_shape(tmp_path):
             }
         )
 
-    count = normalize(raw, out)
+    count = normalize_dynahate(raw, out)
 
     assert count == 1
     with out.open("r", encoding="utf-8", newline="") as handle:

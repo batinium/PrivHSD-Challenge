@@ -17,7 +17,7 @@ Status values:
 | A04 | todo | unassigned | Improve target-group handling with a safe preserve/generalize policy. |
 | A05 | todo | unassigned | Add stronger local utility proxy using a small open classifier if allowed. |
 | A06 | todo | unassigned | Add score log template for official leaderboard submissions. |
-| A07 | todo | unassigned | Add packaging/install instructions for judges. |
+| A07 | done | Codex | Add packaging/install instructions for judges. |
 | A08 | todo | unassigned | Add final pitch outline and demo script. |
 
 ## Next Recommended Task
@@ -35,4 +35,3 @@ Expected UI controls:
 - preview table
 - audit summary
 - download privatized CSV
-

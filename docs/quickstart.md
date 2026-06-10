@@ -9,7 +9,7 @@ python -m pytest -q
 ## Prepare Public Data
 
 ```bash
-python scripts/prepare_dynahate.py --download \
+python -m privhsd.cli prepare-dynahate --download \
   --raw data/public_dev/dynahate_raw.csv \
   --output data/public_dev/dynahate.csv
 ```
@@ -43,4 +43,3 @@ The baseline implementation should pass:
 ```text
 6 passed
 ```
-

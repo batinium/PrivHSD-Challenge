@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
+from .datasets import add_prepare_dynahate_parser, prepare_dynahate
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--privatized-col", default="privatized_text")
     evaluate.add_argument("--output", type=Path)
 
+    add_prepare_dynahate_parser(subparsers)
+
     return parser
 
 
@@ -67,13 +70,26 @@ def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 generalize_targets=generalize_targets,
             )
-        else:
+        elif args.command == "evaluate":
             result = evaluate_csv(
                 args.input,
                 text_col=args.text_col,
                 privatized_col=args.privatized_col,
                 output_path=args.output,
             )
+        else:
+            count = prepare_dynahate(
+                raw_path=args.raw,
+                output_path=args.output,
+                download=args.download,
+                url=args.url,
+            )
+            result = {
+                "output": str(args.output),
+                "raw": str(args.raw),
+                "download": args.download,
+                "row_count": count,
+            }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (CsvPipelineError, OSError, ValueError) as exc:
@@ -83,4 +99,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
