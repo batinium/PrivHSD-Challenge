@@ -6,6 +6,10 @@
 python -m pytest -q
 ```
 
+The committed synthetic PII stress fixtures live under `tests/fixtures/` and
+exercise anonymizer masking, residual-warning metrics, metadata preservation,
+and ablation behavior without using official or raw challenge examples.
+
 ## Prepare Public Data
 
 ```bash

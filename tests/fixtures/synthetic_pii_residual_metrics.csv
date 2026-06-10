@@ -1,0 +1,3 @@
+id,text,privatized_text,label,source,split,case_type
+R001,"Alex Vale emailed alex@example.test from Berlin on Jan 4, 2024.","[PERSON] emailed alex@example.test from Berlin on [DATE].",nothate,synthetic,dev,residual_email_location
+R002,"Call +1 202 555 0100 about case ID-900.","Call [PHONE] about case ID-900.",nothate,synthetic,dev,residual_id

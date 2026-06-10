@@ -15,6 +15,12 @@ privhsd/
   utility_benchmark.py  optional scikit-learn utility-delta benchmark
 ```
 
+The deterministic detectors cover direct identifiers and conservative
+quasi-identifiers including handles, emails, phone numbers, URLs, IP addresses,
+dates, context names, context locations, schools/organizations, common ID
+formats, and explicit aliases such as `alias`, `aka`, `known as`, and
+`goes by`.
+
 ## CLI Contract
 
 Privatize a CSV:
@@ -158,6 +164,7 @@ Use typed placeholders:
 [EMAIL]
 [PHONE]
 [URL]
+[ALIAS]
 [PERSON]
 [LOCATION]
 [ORG]

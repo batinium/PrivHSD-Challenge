@@ -83,6 +83,11 @@ The metrics report includes privacy/utility proxy scores, placeholder density,
 residual identifier counts, quasi-identifier flags, target cue retention, and
 privacy or over-masking warnings.
 
+Committed synthetic PII stress fixtures under `tests/fixtures/` cover handles,
+emails, phone numbers, URLs, IP addresses, dates, names, locations,
+schools/organizations, IDs, aliases, and direct-plus-quasi identifier
+combinations without using official challenge examples.
+
 Optionally benchmark downstream utility loss with a local classifier:
 
 ```bash

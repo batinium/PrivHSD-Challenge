@@ -32,6 +32,7 @@ UTILITY_CUES = (
 
 DIRECT_IDENTIFIER_TYPES = frozenset(
     {
+        "ALIAS",
         "PERSON",
         "USER",
         "EMAIL",

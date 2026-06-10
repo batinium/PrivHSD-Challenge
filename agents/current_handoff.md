@@ -14,13 +14,16 @@ The sibling project `../ContextSafe-HSD` is reference material only. Do not
 continue that older product shape unless explicitly asked. This repo is now a
 fresh PrivHSD-specific implementation.
 
-Only known untracked file at handoff time:
+Known untracked files at handoff time:
 
 ```text
 Webinar.txt
+prompt.md
 ```
 
-It is the noisy webinar transcript and was intentionally not committed.
+`Webinar.txt` is the noisy webinar transcript and was intentionally not
+committed. `prompt.md` is the current overnight-agent instruction file and was
+also left uncommitted.
 
 ## What Has Been Built
 
@@ -40,6 +43,15 @@ Main modules:
 - `privhsd.metrics` - local privacy/utility proxy metrics.
 - `privhsd.pipeline` - single-text privatization API.
 - `privhsd.utility_benchmark` - optional scikit-learn utility-delta benchmark.
+
+Committed synthetic fixtures:
+
+- `tests/fixtures/synthetic_pii_stress.csv`
+- `tests/fixtures/synthetic_pii_residual_metrics.csv`
+
+These fixtures are synthetic only and cover noisy handles, emails, phone
+numbers, URLs, IP addresses, dates, names, locations, schools/organizations,
+IDs, aliases, and direct-plus-quasi identifier combinations.
 
 Console command after install:
 
@@ -82,7 +94,7 @@ python -m pytest -q
 Last verified result:
 
 ```text
-15 passed, 2 skipped
+18 passed, 2 skipped
 ```
 
 Last verified date:
@@ -186,21 +198,23 @@ The existing `contextsafe-hsd` micromamba env is present, but did not contain
 
 The task board is `agents/task_board.md`.
 
+Completed today:
+
+```text
+A13 - Added synthetic PII stress fixtures and tests.
+```
+
 Recommended next task:
 
 ```text
-A13 - Add synthetic PII stress fixtures and tests.
+A16 - Add a local baseline hate-speech classifier pipeline.
 ```
 
 Reason:
 
-A11 added `privhsd ablate`, which compares identity, regex-only, balanced,
-privacy, and target-generalized modes in one JSON report with optional
-per-variant CSVs. A12 added richer deterministic metrics and warnings for
-residual leakage and over-masking. A13 synthetic PII stress fixtures are the
-next natural follow-up for anonymizer coverage. A16 is tracked for the local
-baseline classifier pipeline after the anonymizer is better covered. Keep GUI
-work last.
+A13 now validates anonymizer fixture coverage, residual-warning metrics, row
+order/metadata preservation, and ablation behavior on committed synthetic data.
+A16 is the next pipeline task. Keep GUI work last.
 
 ## A09 Research Output
 

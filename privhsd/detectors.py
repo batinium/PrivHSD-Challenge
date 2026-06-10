@@ -31,6 +31,7 @@ class Span:
 
 TAGS = {
     "PERSON": "[PERSON]",
+    "ALIAS": "[ALIAS]",
     "USER": "[USER]",
     "EMAIL": "[EMAIL]",
     "PHONE": "[PHONE]",
@@ -48,6 +49,7 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
     ("EMAIL", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)),
     ("URL", re.compile(r"\b(?:https?://|www\.)[^\s<>()]+", re.I)),
     ("USER", re.compile(r"(?<!\w)@[A-Za-z0-9._-]{2,64}\b")),
+    ("IP_ADDRESS", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
     (
         "PHONE",
         re.compile(
@@ -55,7 +57,6 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
             re.I,
         ),
     ),
-    ("IP_ADDRESS", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
     (
         "DATE",
         re.compile(
@@ -70,7 +71,8 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
     (
         "IDENTIFIER",
         re.compile(
-            r"\b(?:id|case|ticket|student|user|ref)[-_:#]?[A-Z0-9]*\d[A-Z0-9]*\b",
+            r"\b(?:id|case|ticket|student|user|ref)[-_:#]?"
+            r"(?:[A-Z0-9]+[-_])*[A-Z0-9]*\d[A-Z0-9_-]*\b",
             re.I,
         ),
     ),
@@ -100,9 +102,17 @@ PERSON_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
 )
 
 
+ALIAS_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
+    re.compile(
+        r"\b(?i:alias|aka|a/k/a|known as|goes by)\s+"
+        r"([A-Za-z][A-Za-z0-9._-]{2,64})\b"
+    ),
+)
+
+
 LOCATION_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
     re.compile(
-        r"\b(?:from|in|near|at)\s+"
+        r"\b(?i:from|in|near|at)\s+"
         r"([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})\b"
     ),
 )
@@ -195,6 +205,12 @@ def context_spans(text: str) -> list[Span]:
             spans.append(
                 Span(start, end, "PERSON", text[start:end], 0.72, "context_person")
             )
+    for pattern in ALIAS_CONTEXT_PATTERNS:
+        for match in pattern.finditer(text):
+            start, end = match.span(1)
+            spans.append(
+                Span(start, end, "ALIAS", text[start:end], 0.7, "context_alias")
+            )
     for pattern in LOCATION_CONTEXT_PATTERNS:
         for match in pattern.finditer(text):
             start, end = match.span(1)
@@ -231,6 +247,7 @@ def span_priority(span: Span) -> tuple[int, float, int]:
     source_priority = {
         "regex": 3,
         "context_person": 2,
+        "context_alias": 2,
         "context_location": 1,
         "target_dictionary": 0,
     }.get(span.source, 0)

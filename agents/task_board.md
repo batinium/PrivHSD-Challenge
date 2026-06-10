@@ -23,18 +23,18 @@ Status values:
 | A10 | done | Codex | Add a local scikit-learn utility benchmark that trains on original text and compares original-vs-privatized macro-F1, prediction agreement, label recall deltas, and confidence drift. Keep it optional or isolated so the base package can stay dependency-light. |
 | A11 | done | Codex | Add an ablation runner that evaluates identity, regex-only, balanced, privacy, balanced-with-target-generalization, and any optional detector backend into one JSON/CSV report. |
 | A12 | done | Copernicus | Expand deterministic privacy/utility metrics with TAB-inspired mask density, placeholder density by type, residual identifier count, quasi-identifier flags, target cue retention, and over-masking warnings. |
-| A13 | todo | unassigned | Add committed synthetic PII stress fixtures and tests for noisy handles, emails, phone numbers, URLs, IPs, dates, names, locations, schools/orgs, IDs, aliases, and direct-plus-quasi identifier combinations. |
+| A13 | done | Codex | Add committed synthetic PII stress fixtures and tests for noisy handles, emails, phone numbers, URLs, IPs, dates, names, locations, schools/orgs, IDs, aliases, and direct-plus-quasi identifier combinations. |
 | A14 | todo | unassigned | Prototype optional Presidio/spaCy detector comparison behind an extra or separate command; map external spans into PrivHSD audit format without replacing the deterministic default. |
 | A15 | todo | unassigned | Prototype optional local neural utility evaluators for Dynabench/HateXplain/Detoxify models after model-license checks; use them only as offline evaluation aids, not required pipeline dependencies. |
 | A16 | todo | unassigned | Add a local baseline hate-speech classifier pipeline for CSV train/evaluate/predict workflows using original or privatized text, with dependency isolation so the anonymizer remains runnable without classifier extras. |
 
 ## Next Recommended Task
 
-Prioritize pipeline work before UI. A11 added the ablation runner and A12 added
-richer anonymizer metrics and warning rollups. Next, run A13 to add committed
-synthetic PII stress fixtures, then add A16 for a local baseline classifier
-pipeline. A03 is last; the UI should display the anonymizer, audit, ablation,
-and classifier outputs rather than reimplementing them.
+Prioritize pipeline work before UI. A13 added committed synthetic PII stress
+fixtures and tests for anonymizer coverage, metrics residual warnings, and
+ablation behavior. Next, add A16 for a local baseline classifier pipeline. A03
+is last; the UI should display the anonymizer, audit, ablation, and classifier
+outputs rather than reimplementing them.
 
 Optional heavy integrations should stay optional. Presidio/spaCy, Hugging Face
 classifiers, Detoxify, sentence-transformers, GLiNER, and DP libraries must not
