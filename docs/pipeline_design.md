@@ -11,6 +11,7 @@ privhsd/
   detectors.py     deterministic span detectors
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
+  utility_benchmark.py  optional scikit-learn utility-delta benchmark
 ```
 
 ## CLI Contract
@@ -36,6 +37,26 @@ python -m privhsd.cli evaluate \
   --privatized-col privatized_text \
   --output data/outputs/dynahate.metrics.json
 ```
+
+Benchmark downstream utility with an optional local classifier:
+
+```bash
+python -m pip install '.[benchmark]'
+python -m privhsd.cli benchmark-utility \
+  --input data/outputs/dynahate.privatized.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.utility_benchmark.json
+```
+
+`benchmark-utility` trains a TF-IDF + logistic regression classifier only on the
+original-text training split, then compares dev-split predictions on original
+text and `privatized_text`. It reports accuracy, macro-F1, prediction
+agreement, label recall deltas, and confidence drift. This is a local relative
+utility proxy, not a production hate-speech classifier and not a replacement for
+the official challenge evaluator.
 
 ## Data Contract
 
@@ -94,3 +115,5 @@ The core pipeline must work without LLMs. LLMs may be used later only as optiona
 experiments or demo support, not as a required dependency for the challenge
 submission.
 
+The base install remains dependency-free. Optional evaluator extras such as
+`privhsd[benchmark]` must not become required for `anonymize`.

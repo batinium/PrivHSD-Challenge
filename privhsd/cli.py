@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .datasets import add_prepare_dynahate_parser, prepare_dynahate
+from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +45,19 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--privatized-col", default="privatized_text")
     evaluate.add_argument("--output", type=Path)
 
+    benchmark = subparsers.add_parser(
+        "benchmark-utility",
+        help="Run a local classifier utility-delta benchmark.",
+    )
+    benchmark.add_argument("--input", type=Path, required=True)
+    benchmark.add_argument("--text-col", required=True)
+    benchmark.add_argument("--privatized-col", default="privatized_text")
+    benchmark.add_argument("--label-col", default="label")
+    benchmark.add_argument("--id-col")
+    benchmark.add_argument("--output", type=Path)
+    benchmark.add_argument("--test-size", type=float, default=0.25)
+    benchmark.add_argument("--random-state", type=int, default=13)
+
     add_prepare_dynahate_parser(subparsers)
 
     return parser
@@ -77,6 +91,17 @@ def main(argv: list[str] | None = None) -> int:
                 privatized_col=args.privatized_col,
                 output_path=args.output,
             )
+        elif args.command == "benchmark-utility":
+            result = run_utility_benchmark(
+                args.input,
+                text_col=args.text_col,
+                privatized_col=args.privatized_col,
+                label_col=args.label_col,
+                id_col=args.id_col,
+                output_path=args.output,
+                test_size=args.test_size,
+                random_state=args.random_state,
+            )
         else:
             count = prepare_dynahate(
                 raw_path=args.raw,
@@ -92,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
             }
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except (CsvPipelineError, OSError, ValueError) as exc:
+    except (BenchmarkError, CsvPipelineError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

@@ -38,6 +38,7 @@ Main modules:
 - `privhsd.detectors` - deterministic regex/context span detectors.
 - `privhsd.metrics` - local privacy/utility proxy metrics.
 - `privhsd.pipeline` - single-text privatization API.
+- `privhsd.utility_benchmark` - optional scikit-learn utility-delta benchmark.
 
 Console command after install:
 
@@ -50,6 +51,7 @@ Available subcommands:
 ```bash
 privhsd anonymize
 privhsd evaluate
+privhsd benchmark-utility
 privhsd prepare-dynahate
 ```
 
@@ -62,9 +64,10 @@ Read in this order:
 3. `docs/dataset_plan.md`
 4. `docs/quickstart.md`
 5. `docs/packaging.md`
-6. `agents/README.md`
-7. `agents/task_board.md`
-8. `agents/coding_rules.md`
+6. `docs/research_oss_tech.md`
+7. `agents/README.md`
+8. `agents/task_board.md`
+9. `agents/coding_rules.md`
 
 ## Verified Commands
 
@@ -77,7 +80,13 @@ python -m pytest -q
 Last verified result:
 
 ```text
-7 passed
+8 passed, 1 skipped
+```
+
+Last verified date:
+
+```text
+2026-06-10
 ```
 
 Build wheel:
@@ -120,7 +129,7 @@ Dataset folders are ignored by git.
 
 ## Git Status
 
-Latest pushed commit:
+Previous pushed commit before A09/A10:
 
 ```text
 26ede61 Harden pip package setup
@@ -145,6 +154,28 @@ Branch:
 main
 ```
 
+Files changed by A09/A10:
+
+```text
+agents/current_handoff.md
+agents/task_board.md
+docs/README.md
+docs/packaging.md
+docs/pipeline_design.md
+docs/quickstart.md
+docs/research_oss_tech.md
+privhsd/cli.py
+privhsd/utility_benchmark.py
+pyproject.toml
+readme.md
+tests/test_utility_benchmark.py
+```
+
+`Webinar.txt` is still the intentionally untracked noisy webinar transcript.
+The temporary repo-local micromamba env `./.venv` was removed after creation.
+The existing `contextsafe-hsd` micromamba env is present, but did not contain
+`pytest` or `scikit-learn` when checked with `PYTHONNOUSERSITE=1`.
+
 ## Next Tasks
 
 The task board is `agents/task_board.md`.
@@ -152,29 +183,25 @@ The task board is `agents/task_board.md`.
 Recommended next task:
 
 ```text
-A09 - Run Consensus/academic search for OSS technologies.
+A11 - Add an ablation runner.
 ```
 
 Reason:
 
-Before adding heavier evaluation or UI features, decide which OSS technologies
-are worth integrating under hackathon constraints.
+A10 added `benchmark-utility`, an optional local scikit-learn relative utility
+proxy. A11 should compare identity, regex-only, balanced, privacy, and
+target-generalized modes in one JSON/CSV report so the team can pick a
+submission mode empirically.
 
-If research tooling is unavailable, proceed with:
+## A09 Research Output
 
-```text
-A03 - Build minimal UI around existing privhsd functions.
-```
-
-## A09 Research Output Location
-
-Create:
+A09 is complete. Created:
 
 ```text
 docs/research_oss_tech.md
 ```
 
-The file should contain:
+The file contains:
 
 - ranked OSS shortlist
 - academic findings with citation links
@@ -182,13 +209,20 @@ The file should contain:
 - testing and ablation plan
 - risks and fallback options
 
-After writing it, update:
+Updated:
 
 ```text
 agents/task_board.md
 ```
 
-Add concrete implementation tasks from the research findings.
+New implementation tasks from the research findings:
+
+- A10: scikit-learn utility benchmark. Done.
+- A11: ablation runner.
+- A12: TAB-inspired metrics and over-masking warnings.
+- A13: synthetic PII stress fixtures and tests.
+- A14: optional Presidio/spaCy detector comparison.
+- A15: optional local neural utility evaluators after license checks.
 
 ## Important Constraints
 
@@ -215,4 +249,3 @@ CSV with text
 ```
 
 It is not primarily a classifier or moderation enforcement tool.
-

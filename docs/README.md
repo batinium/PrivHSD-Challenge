@@ -10,6 +10,7 @@ Use it before changing code.
 3. `dataset_plan.md` - public dataset plan before official data arrives.
 4. `quickstart.md` - commands for running the current pipeline.
 5. `packaging.md` - pip install and wheel build notes.
+6. `research_oss_tech.md` - OSS and academic research behind the next tasks.
 
 ## Source Of Truth
 

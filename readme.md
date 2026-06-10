@@ -35,6 +35,7 @@ privhsd/
   detectors.py
   metrics.py
   pipeline.py
+  utility_benchmark.py
 ```
 
 The default path is deterministic and does not require LLM calls.
@@ -76,6 +77,22 @@ python -m privhsd.cli evaluate \
   --privatized-col privatized_text \
   --output data/outputs/dynahate.metrics.json
 ```
+
+Optionally benchmark downstream utility loss with a local classifier:
+
+```bash
+python -m pip install '.[benchmark]'
+python -m privhsd.cli benchmark-utility \
+  --input data/outputs/dynahate.privatized.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --label-col label \
+  --id-col id \
+  --output data/outputs/dynahate.utility_benchmark.json
+```
+
+The utility benchmark is a relative proxy for privatization impact. It is not
+the project’s core classifier and does not replace the official evaluator.
 
 ## Modes
 

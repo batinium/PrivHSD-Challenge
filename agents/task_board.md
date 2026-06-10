@@ -15,17 +15,30 @@ Status values:
 | A02 | todo | unassigned | Add official-dataset schema adapter once starter kit arrives. |
 | A03 | todo | unassigned | Add Streamlit or NiceGUI demo for upload, preview, audit, and download. |
 | A04 | todo | unassigned | Improve target-group handling with a safe preserve/generalize policy. |
-| A05 | todo | unassigned | Add stronger local utility proxy using a small open classifier if allowed. |
+| A05 | done | Codex | Add stronger local utility proxy using a lightweight optional scikit-learn benchmark. |
 | A06 | todo | unassigned | Add score log template for official leaderboard submissions. |
 | A07 | done | Codex | Add packaging/install instructions for judges. |
 | A08 | todo | unassigned | Add final pitch outline and demo script. |
-| A09 | todo | unassigned | Run Consensus/academic search for OSS technologies, then update `docs/research_oss_tech.md` and convert findings into implementation tasks. |
+| A09 | done | Codex | Run Consensus/academic search for OSS technologies, then update `docs/research_oss_tech.md` and convert findings into implementation tasks. |
+| A10 | done | Codex | Add a local scikit-learn utility benchmark that trains on original text and compares original-vs-privatized macro-F1, prediction agreement, label recall deltas, and confidence drift. Keep it optional or isolated so the base package can stay dependency-light. |
+| A11 | todo | unassigned | Add an ablation runner that evaluates identity, regex-only, balanced, privacy, balanced-with-target-generalization, and any optional detector backend into one JSON/CSV report. |
+| A12 | todo | unassigned | Expand deterministic privacy/utility metrics with TAB-inspired mask density, placeholder density by type, residual identifier count, quasi-identifier flags, target cue retention, and over-masking warnings. |
+| A13 | todo | unassigned | Add committed synthetic PII stress fixtures and tests for noisy handles, emails, phone numbers, URLs, IPs, dates, names, locations, schools/orgs, IDs, aliases, and direct-plus-quasi identifier combinations. |
+| A14 | todo | unassigned | Prototype optional Presidio/spaCy detector comparison behind an extra or separate command; map external spans into PrivHSD audit format without replacing the deterministic default. |
+| A15 | todo | unassigned | Prototype optional local neural utility evaluators for Dynabench/HateXplain/Detoxify models after model-license checks; use them only as offline evaluation aids, not required pipeline dependencies. |
 
 ## Next Recommended Task
 
-Run A09 first if research context is available; otherwise build A03. A09 should
-identify which OSS technologies are worth integrating before the UI and utility
-evaluator become too fixed.
+Run A11-A13 before heavier UI work if time allows. A10 added the optional local
+utility benchmark; the next highest-value work is an ablation runner that can
+compare identity, regex-only, balanced, privacy, and target-generalized runs in
+one report. A03 remains useful, but the UI should display the richer audit and
+benchmark outputs rather than reimplementing the pipeline.
+
+Optional heavy integrations should stay optional. Presidio/spaCy, Hugging Face
+classifiers, Detoxify, sentence-transformers, GLiNER, and DP libraries must not
+become required for the core `privhsd anonymize` flow unless the project
+explicitly changes direction.
 
 A03 is a minimal UI that calls the existing `privhsd` functions. The UI should
 not reimplement the pipeline.
