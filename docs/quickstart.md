@@ -120,6 +120,13 @@ python -m privhsd.cli predict-classifier \
 Classifier metrics are local baseline scores and are not official leaderboard
 results.
 
+## Log Official Scores
+
+When submitting to the official leaderboard, copy the structure from
+`docs/score_log_template.md` into a run-specific note and record the commit,
+commands, generated artifact paths, local aggregate metrics, official scores,
+and audit notes. Do not paste raw challenge examples into the score log.
+
 ## Compare Ablations
 
 Run all deterministic variants in one report:

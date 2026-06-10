@@ -16,7 +16,7 @@ Status values:
 | A03 | todo | unassigned | Add Streamlit or NiceGUI demo for upload, preview, audit, and download after the anonymizer and classifier pipeline are stable. |
 | A04 | done | Codex | Improve target-group handling with a safe preserve/generalize policy. |
 | A05 | done | Codex | Add stronger local utility proxy using a lightweight optional scikit-learn benchmark. |
-| A06 | todo | unassigned | Add score log template for official leaderboard submissions. |
+| A06 | done | Codex | Add score log template for official leaderboard submissions. |
 | A07 | done | Codex | Add packaging/install instructions for judges. |
 | A08 | todo | unassigned | Add final pitch outline and demo script. |
 | A09 | done | Codex | Run Consensus/academic search for OSS technologies, then update `docs/research_oss_tech.md` and convert findings into implementation tasks. |

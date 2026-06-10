@@ -21,6 +21,7 @@ CSV with text
 - [docs/pipeline_design.md](docs/pipeline_design.md) - active implementation contract.
 - [docs/dataset_plan.md](docs/dataset_plan.md) - public and official dataset plan.
 - [docs/quickstart.md](docs/quickstart.md) - commands for running the pipeline.
+- [docs/score_log_template.md](docs/score_log_template.md) - official submission score log template.
 - [agents/README.md](agents/README.md) - instructions for coding agents.
 - [agents/task_board.md](agents/task_board.md) - implementation task board.
 

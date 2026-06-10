@@ -258,12 +258,13 @@ Completed today:
 A13 - Added synthetic PII stress fixtures and tests.
 A16 - Added optional local baseline classifier train/evaluate/predict workflows.
 A04 - Added safe target-group handling for broad gender terms.
+A06 - Added official score-log template.
 ```
 
 Recommended next task:
 
 ```text
-A06 - Add score log template for official leaderboard submissions.
+Run Dynahate local ablation/classifier experiments and record summaries.
 ```
 
 Reason:
@@ -272,8 +273,9 @@ A13 now validates anonymizer fixture coverage, residual-warning metrics, row
 order/metadata preservation, and ablation behavior on committed synthetic data.
 A16 now provides optional classifier workflows and local JSON metrics. A04 now
 preserves broad gender terms in neutral contexts and generalizes them only near
-hostile/exclusionary cues in target-generalizing modes. A06 is next before GUI
-work.
+hostile/exclusionary cues in target-generalizing modes. A06 now provides
+`docs/score_log_template.md` for official leaderboard submission tracking.
+Dynahate local experiments are next before GUI work.
 
 ## A09 Research Output
 
