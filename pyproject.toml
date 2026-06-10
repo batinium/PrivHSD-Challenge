@@ -1,0 +1,14 @@
+[project]
+name = "privhsd"
+version = "0.1.0"
+description = "Privacy-preserving text privatization pipeline for hate speech detection datasets."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+privhsd = "privhsd.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
