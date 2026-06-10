@@ -23,16 +23,43 @@ def download(url: str, output: Path) -> None:
         output.write_bytes(response.read())
 
 
+def pick_column(fieldnames: list[str], *candidates: str) -> str:
+    by_lower = {name.lower(): name for name in fieldnames}
+    for candidate in candidates:
+        if candidate in fieldnames:
+            return candidate
+        lowered = candidate.lower()
+        if lowered in by_lower:
+            return by_lower[lowered]
+    raise ValueError(
+        f"missing column; expected one of: {', '.join(candidates)}"
+    )
+
+
+def optional_column(fieldnames: list[str], *candidates: str) -> str | None:
+    by_lower = {name.lower(): name for name in fieldnames}
+    for candidate in candidates:
+        if candidate in fieldnames:
+            return candidate
+        lowered = candidate.lower()
+        if lowered in by_lower:
+            return by_lower[lowered]
+    return None
+
+
 def normalize(raw_path: Path, output_path: Path) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with raw_path.open("r", encoding="utf-8", newline="") as in_handle:
         reader = csv.DictReader(in_handle)
         if reader.fieldnames is None:
             raise ValueError(f"{raw_path}: CSV header is required")
-        required = {"acl.id", "Text", "Label"}
-        missing = sorted(required - set(reader.fieldnames))
-        if missing:
-            raise ValueError(f"{raw_path}: missing column(s): {', '.join(missing)}")
+        fields = list(reader.fieldnames)
+        id_col = pick_column(fields, "acl.id")
+        text_col = pick_column(fields, "Text", "text")
+        label_col = pick_column(fields, "Label", "label")
+        split_col = optional_column(fields, "Split", "split")
+        target_col = optional_column(fields, "Target", "target")
+        type_col = optional_column(fields, "Type", "type")
 
         fieldnames = ["id", "text", "label", "source", "split", "target", "type"]
         with output_path.open("w", encoding="utf-8", newline="") as out_handle:
@@ -42,13 +69,13 @@ def normalize(raw_path: Path, output_path: Path) -> int:
             for row in reader:
                 writer.writerow(
                     {
-                        "id": row.get("acl.id", ""),
-                        "text": row.get("Text", ""),
-                        "label": row.get("Label", ""),
+                        "id": row.get(id_col, ""),
+                        "text": row.get(text_col, ""),
+                        "label": row.get(label_col, ""),
                         "source": "dynahate",
-                        "split": row.get("Split", ""),
-                        "target": row.get("Target", ""),
-                        "type": row.get("Type", ""),
+                        "split": row.get(split_col, "") if split_col else "",
+                        "target": row.get(target_col, "") if target_col else "",
+                        "type": row.get(type_col, "") if type_col else "",
                     }
                 )
                 count += 1
@@ -79,4 +106,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
