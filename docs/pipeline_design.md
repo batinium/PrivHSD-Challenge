@@ -14,6 +14,7 @@ privhsd/
   detectors.py     deterministic span detectors
   dpmlm_spike.py   bounded optional DPMLM spike/blocker report
   hf_utility.py    optional Hugging Face utility model registry/evaluator
+  local_llm.py     optional local OpenAI-compatible candidate generator
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
   presidio_compare.py optional Presidio detector comparison baseline
@@ -293,6 +294,26 @@ python -m privhsd.cli compare-presidio \
 PrivHSD-only counts, Presidio-only counts, false-positive risk on target/action
 cues, runtime, and dependency skips. It does not make Presidio part of core
 anonymization.
+
+Generate local LLM rewrite candidates for reranking only:
+
+```bash
+python -m privhsd.cli generate-llm-candidates \
+  --input INPUT.csv \
+  --output data/outputs/llm_candidates.csv \
+  --text-col text \
+  --id-col id \
+  --sample-size 25 \
+  --endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --model local-model \
+  --report data/outputs/llm_candidates.report.json
+```
+
+`generate-llm-candidates` targets LM Studio or llama.cpp OpenAI-compatible local
+servers. It asks for a JSON object with `privatized_text`, checks target/action
+cue retention and length drift, writes accepted candidates to a candidate
+column, and directs the user to `rerank-candidates --candidate-col`. It does not
+submit raw LLM outputs directly.
 
 ## Local Metrics
 

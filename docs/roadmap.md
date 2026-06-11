@@ -208,6 +208,12 @@ Do not make DPMLM part of the core pipeline until these are answered.
 
 ### 6. Specialized LLM Rewrite
 
+Status: implemented as `privhsd generate-llm-candidates` for LM Studio or
+llama.cpp-style OpenAI-compatible local endpoints. The command requests
+schema-constrained JSON, checks target/action cue retention and length drift,
+and writes candidates only for later reranking. In the current local
+environment no endpoint is running, so sample runs produce clean skipped reports.
+
 If using an LLM, avoid generic "anonymize this" prompting. Use a structured
 pipeline:
 

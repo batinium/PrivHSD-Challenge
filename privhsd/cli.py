@@ -34,6 +34,13 @@ from .hf_utility import (
     run_hf_utility_evaluation,
     write_model_registry,
 )
+from .local_llm import (
+    DEFAULT_ENDPOINT as DEFAULT_LLM_ENDPOINT,
+    DEFAULT_MODEL as DEFAULT_LLM_MODEL,
+    DEFAULT_SAMPLE_SIZE as DEFAULT_LLM_SAMPLE_SIZE,
+    LocalLlmError,
+    run_local_llm_candidates,
+)
 from .presidio_compare import PresidioCompareError, run_presidio_comparison
 from .rerank import RerankError, run_candidate_reranking
 from .submission import SubmissionError, create_submission, validate_submission
@@ -251,6 +258,24 @@ def build_parser() -> argparse.ArgumentParser:
     presidio.add_argument("--sample-size", type=int, default=100)
     presidio.add_argument("--language", default="en")
 
+    llm_candidates = subparsers.add_parser(
+        "generate-llm-candidates",
+        help="Generate local LLM rewrite candidates for reranking only.",
+    )
+    llm_candidates.add_argument("--input", type=Path, required=True)
+    llm_candidates.add_argument("--output", type=Path, required=True)
+    llm_candidates.add_argument("--text-col", required=True)
+    llm_candidates.add_argument("--id-col")
+    llm_candidates.add_argument("--candidate-col", default="llm_candidate")
+    llm_candidates.add_argument("--report", type=Path)
+    llm_candidates.add_argument("--endpoint", default=DEFAULT_LLM_ENDPOINT)
+    llm_candidates.add_argument("--model", default=DEFAULT_LLM_MODEL)
+    llm_candidates.add_argument("--sample-size", type=int, default=DEFAULT_LLM_SAMPLE_SIZE)
+    llm_candidates.add_argument("--timeout", type=float, default=10.0)
+    llm_candidates.add_argument("--min-target-retention", type=float, default=1.0)
+    llm_candidates.add_argument("--min-utility-retention", type=float, default=1.0)
+    llm_candidates.add_argument("--max-length-drift", type=float, default=0.6)
+
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
         help="Train a local baseline hate-speech classifier on a labeled CSV.",
@@ -449,6 +474,22 @@ def main(argv: list[str] | None = None) -> int:
                 sample_size=args.sample_size,
                 language=args.language,
             )
+        elif args.command == "generate-llm-candidates":
+            result = run_local_llm_candidates(
+                args.input,
+                args.output,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                candidate_col=args.candidate_col,
+                report_path=args.report,
+                endpoint=args.endpoint,
+                model=args.model,
+                sample_size=args.sample_size,
+                timeout=args.timeout,
+                min_target_retention=args.min_target_retention,
+                min_utility_retention=args.min_utility_retention,
+                max_length_drift=args.max_length_drift,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -503,6 +544,7 @@ def main(argv: list[str] | None = None) -> int:
         CsvPipelineError,
         DpmlmSpikeError,
         HfUtilityError,
+        LocalLlmError,
         OSError,
         PresidioCompareError,
         RerankError,

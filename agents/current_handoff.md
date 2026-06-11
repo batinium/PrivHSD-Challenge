@@ -75,6 +75,7 @@ privhsd dpmlm-spike
 privhsd create-submission
 privhsd validate-submission
 privhsd compare-presidio
+privhsd generate-llm-candidates
 privhsd prepare-dynahate
 ```
 
@@ -140,6 +141,10 @@ Important slide takeaways:
   `docs/final_pitch_outline.md`.
 - A14: optional Presidio comparison baseline with overlap, detector-only counts,
   false-positive risk on HSD cues, runtime, and structured dependency skips.
+- A21/A29: optional local LLM candidate generator for LM Studio/llama.cpp
+  OpenAI-compatible endpoints with JSON schema prompting, cue/length checks, and
+  reranking-only output. Current local sample run skipped because no endpoint is
+  running.
 
 Recent commits:
 
@@ -157,14 +162,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-52 passed, 1 skipped
+56 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-52 passed, 1 skipped
+56 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -198,8 +203,7 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence:
 
-1. A21/A29: optional specialized local LLM experiments.
-2. A26: HSD cue/rationale checks if time and dependencies allow.
+1. A26: HSD cue/rationale checks if time and dependencies allow.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that

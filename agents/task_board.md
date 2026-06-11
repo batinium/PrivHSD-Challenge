@@ -26,7 +26,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A18 | done | Codex | Add style-scrubbing transformer for authorship cues: casing, punctuation bursts, emojis, repeated chars, spacing, signatures, and idiolect markers. |
 | A19 | done | Codex | Add candidate reranking: compare deterministic, style-scrubbed, target-generalized, and optional rewrite outputs by privacy/HSD utility score. |
 | A20 | todo | unassigned | Spike DPMLM-style rewriting on a tiny sample; document epsilon/runtime/utility tradeoffs before any integration. |
-| A21 | todo | unassigned | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
+| A21 | done | Codex | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
 | A22 | done | Codex | Add human-rights and judging narrative: leaderboard score is only one criterion. |
 | A23 | todo | unassigned | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
 | A24 | done | Codex | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
@@ -34,7 +34,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A26 | todo | unassigned | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
 | A27 | done | Codex | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
 | A28 | done | Codex | Add exact-format submission validator/creator for leaderboard uploads with text columns privatized in place when required. |
-| A29 | todo | unassigned | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
+| A29 | done | Codex | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
 
 ## Current Priority
 
@@ -51,8 +51,7 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A21/A29: optional specialized local LLM experiments.
-2. A26: HSD cue/rationale checks if time and dependencies allow.
+1. A26: HSD cue/rationale checks if time and dependencies allow.
 
 ## Non-Negotiables
 
