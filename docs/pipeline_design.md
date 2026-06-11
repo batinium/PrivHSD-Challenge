@@ -11,6 +11,7 @@ privhsd/
   classifier.py    optional local CSV train/evaluate/predict classifier
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
+  cue_checks.py    conservative HSD cue retention checks
   detectors.py     deterministic span detectors
   dpmlm_spike.py   bounded optional DPMLM spike/blocker report
   hf_utility.py    optional Hugging Face utility model registry/evaluator
@@ -314,6 +315,21 @@ servers. It asks for a JSON object with `privatized_text`, checks target/action
 cue retention and length drift, writes accepted candidates to a candidate
 column, and directs the user to `rerank-candidates --candidate-col`. It does not
 submit raw LLM outputs directly.
+
+Check conservative HSD cue retention:
+
+```bash
+python -m privhsd.cli check-hsd-cues \
+  --input data/outputs/dynahate.reranked.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --id-col id \
+  --output data/outputs/dynahate.reranked.cue_checks.json
+```
+
+`check-hsd-cues` reports target-term, utility-cue, action-term, and
+negation/modality retention by row ID. It is a conservative local fallback when
+HateXplain-style rationale models are unavailable.
 
 ## Local Metrics
 

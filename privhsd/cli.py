@@ -20,6 +20,7 @@ from .classifier import (
     train_classifier,
 )
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
+from .cue_checks import CueCheckError, run_cue_checks
 from .datasets import add_prepare_dynahate_parser, prepare_dynahate
 from .dpmlm_spike import (
     DEFAULT_EPSILONS,
@@ -276,6 +277,17 @@ def build_parser() -> argparse.ArgumentParser:
     llm_candidates.add_argument("--min-utility-retention", type=float, default=1.0)
     llm_candidates.add_argument("--max-length-drift", type=float, default=0.6)
 
+    cue_checks = subparsers.add_parser(
+        "check-hsd-cues",
+        help="Check conservative HSD target/action/negation cue retention.",
+    )
+    cue_checks.add_argument("--input", type=Path, required=True)
+    cue_checks.add_argument("--text-col", required=True)
+    cue_checks.add_argument("--privatized-col", default="privatized_text")
+    cue_checks.add_argument("--id-col")
+    cue_checks.add_argument("--output", type=Path)
+    cue_checks.add_argument("--retention-threshold", type=float, default=1.0)
+
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
         help="Train a local baseline hate-speech classifier on a labeled CSV.",
@@ -490,6 +502,15 @@ def main(argv: list[str] | None = None) -> int:
                 min_utility_retention=args.min_utility_retention,
                 max_length_drift=args.max_length_drift,
             )
+        elif args.command == "check-hsd-cues":
+            result = run_cue_checks(
+                args.input,
+                text_col=args.text_col,
+                privatized_col=args.privatized_col,
+                id_col=args.id_col,
+                output_path=args.output,
+                retention_threshold=args.retention_threshold,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -542,6 +563,7 @@ def main(argv: list[str] | None = None) -> int:
         BenchmarkError,
         ClassifierError,
         CsvPipelineError,
+        CueCheckError,
         DpmlmSpikeError,
         HfUtilityError,
         LocalLlmError,

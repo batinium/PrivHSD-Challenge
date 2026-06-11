@@ -46,6 +46,10 @@ Latest local Dynahate summary:
 | `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 | Chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. |
 | `create-submission --replace-text --mode balanced` | 3 | 0 | 0.9994 | 0.9953 | n/a | Exact-format validation passed: 41,144 rows, same columns/order, no helper columns. |
 
+Additional reranked cue check: 59 rows with any conservative cue loss;
+target-term retention mean 0.9971, utility-cue retention mean 1.0, action-term
+retention mean 0.9995, and negation/modality retention mean 1.0001.
+
 ## Model-Backed Plan
 
 Do not train a new attention mechanism first. The available data is better used
@@ -182,6 +186,13 @@ Transformers classifiers, and write JSON with:
 
 Start with small samples. Full-dataset runs are useful only after memory,
 runtime, and license checks are documented.
+
+### 4a. HSD Cue Checks
+
+Status: implemented as `privhsd check-hsd-cues`. This is the conservative local
+fallback for A26 when rationale models are unavailable. It reports target-term,
+utility-cue, action-term, and negation/modality retention by row ID without raw
+text.
 
 ### 5. DPMLM Spike
 

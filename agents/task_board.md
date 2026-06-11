@@ -31,7 +31,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A23 | todo | unassigned | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
 | A24 | done | Codex | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
 | A25 | done | Codex | Add optional `evaluate-hf-utility` command for original-vs-privatized HSD/toxicity score drift on small samples and full runs. |
-| A26 | todo | unassigned | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
+| A26 | done | Codex | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
 | A27 | done | Codex | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
 | A28 | done | Codex | Add exact-format submission validator/creator for leaderboard uploads with text columns privatized in place when required. |
 | A29 | done | Codex | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
@@ -51,7 +51,7 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A26: HSD cue/rationale checks if time and dependencies allow.
+1. Run additional official-score-informed iterations when leaderboard feedback is available.
 
 ## Non-Negotiables
 

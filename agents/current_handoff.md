@@ -76,6 +76,7 @@ privhsd create-submission
 privhsd validate-submission
 privhsd compare-presidio
 privhsd generate-llm-candidates
+privhsd check-hsd-cues
 privhsd prepare-dynahate
 ```
 
@@ -145,6 +146,8 @@ Important slide takeaways:
   OpenAI-compatible endpoints with JSON schema prompting, cue/length checks, and
   reranking-only output. Current local sample run skipped because no endpoint is
   running.
+- A26: conservative HSD cue retention checker for target terms, utility cues,
+  action terms, and negation/modality terms by row ID.
 
 Recent commits:
 
@@ -162,14 +165,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-56 passed, 1 skipped
+59 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-56 passed, 1 skipped
+59 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -195,6 +198,14 @@ Latest aggregate experiment results:
 | `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 | Chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. |
 | `create-submission --replace-text --mode balanced` | 3 | 0 | 0.9994 | 0.9953 | n/a | Exact-format validation passed: 41,144 rows, same columns/order, no helper columns. |
 
+Reranked cue check:
+
+- rows with any conservative cue loss: 59
+- target-term retention mean: 0.9971
+- utility-cue retention mean: 1.0
+- action-term retention mean: 0.9995
+- negation/modality retention mean: 1.0001
+
 Generated outputs are under ignored `data/outputs/`.
 
 ## Next Work
@@ -203,7 +214,7 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence:
 
-1. A26: HSD cue/rationale checks if time and dependencies allow.
+1. Run additional official-score-informed iterations when leaderboard feedback is available.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that
