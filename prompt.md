@@ -37,8 +37,9 @@ Current status:
   `data/outputs/dynahate.reranked.csv`.
 - A31 bounded Presidio/spaCy comparison is complete on the first 100 local
   Dynahate rows.
-- A33 is locally blocked unless an LM Studio or llama.cpp OpenAI-compatible
-  endpoint is started.
+- A33 bounded local LLM candidate generation/reranking is complete against LM
+  Studio at `http://100.120.207.64:1234`; current LLM candidates are low-yield
+  and did not beat deterministic reranking.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
 - Current full tests should be `59 passed, 1 skipped`.
@@ -120,10 +121,24 @@ false-positive and dependency costs.
 
 ### A33: Local LLM Candidate Generation
 
-Only run if a local LM Studio or llama.cpp OpenAI-compatible endpoint is
-available. Do not use remote paid APIs unless explicitly authorized.
-Current local check against `http://127.0.0.1:1234/v1/models` failed with
-connection refused.
+Bounded run is complete. The local LLM client now supports LM Studio-compatible
+JSON schema response formatting, response-format fallback, wrapped JSON
+extraction, and aggregate `status_counts` in reports.
+
+Latest result:
+
+- endpoint: `http://100.120.207.64:1234/v1/chat/completions`
+- model: `openai/gpt-oss-20b`
+- sample size: 10
+- accepted candidates: 3
+- rejected by checks: 7
+- runtime: 18.2567s
+- reranker selected LLM candidates: 0
+- output metrics: matched deterministic `rerank-candidates`
+
+Do not scale local LLM generation unless a model produces a much higher
+accepted-and-selected rate on bounded samples. Do not use remote paid APIs
+unless explicitly authorized.
 
 Example:
 
@@ -147,9 +162,10 @@ python -m privhsd.cli rerank-candidates \
   --audit data/outputs/dynahate.llm_reranked.sample25.audit.json
 ```
 
-Compare against deterministic `rerank-candidates`. Reject raw LLM outputs that
-lose target/action/negation/modality cues, drift semantically, or increase
-privacy risk.
+Use the example only for a new model comparison. Compare against deterministic
+`rerank-candidates`. Reject raw LLM outputs that lose
+target/action/negation/modality cues, drift semantically, or increase privacy
+risk.
 
 ### A32: Real DPMLM Rewrite Spike
 
@@ -209,6 +225,9 @@ Full Dynahate aggregate evidence already recorded in docs:
   negligible mean drift, and no large utility-drop rows.
 - Presidio sample 100: 27 Presidio spans, 1 PrivHSD span, 1 overlap,
   9 false-positive-risk spans, and 400.7 MB `en_core_web_lg` dependency cost.
+- Local LLM sample 10: `openai/gpt-oss-20b` accepted 3 candidates, rejected 7,
+  but reranking selected no LLM candidates; deterministic reranked remains
+  stronger.
 
 ## Required Updates Before Stopping
 

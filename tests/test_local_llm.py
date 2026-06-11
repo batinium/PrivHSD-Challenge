@@ -1,8 +1,14 @@
 import csv
 import json
+from urllib import error
 
 from privhsd.cli import build_parser
-from privhsd.local_llm import LocalLlmError, run_local_llm_candidates
+from privhsd.local_llm import (
+    LocalLlmError,
+    post_chat_completion,
+    response_text,
+    run_local_llm_candidates,
+)
 
 
 def write_rows(path):
@@ -81,7 +87,9 @@ def test_local_llm_candidate_generation_accepts_schema_checked_candidate(
     written = json.loads(report.read_text(encoding="utf-8"))
     assert result == written
     assert result["status"] == "ok"
+    assert result["detail"] is None
     assert result["accepted_count"] == 1
+    assert result["status_counts"] == {"accepted": 1}
     assert rows[0]["llm_candidate"] == "refugees do not belong here!"
     assert rows[1]["llm_candidate"] == ""
     assert result["rows"][0]["status"] == "accepted"
@@ -112,6 +120,9 @@ def test_local_llm_candidate_generation_skips_when_endpoint_fails(
     rows = read_rows(output)
     assert result["status"] == "skipped"
     assert result["skip_reason"] == "no_accepted_candidates"
+    assert result["detail"] == "endpoint unavailable"
+    assert result["first_error"] == "endpoint unavailable"
+    assert result["status_counts"] == {"failed": 1}
     assert result["rows"][0]["status"] == "failed"
     assert rows[0]["llm_candidate"] == ""
 
@@ -151,4 +162,68 @@ def test_local_llm_candidate_generation_rejects_cue_loss(monkeypatch, tmp_path):
     rows = read_rows(output)
     assert result["status"] == "skipped"
     assert result["rows"][0]["status"] == "rejected_by_checks"
+    assert result["status_counts"] == {"rejected_by_checks": 1}
     assert rows[0]["llm_candidate"] == ""
+
+
+def test_response_text_extracts_json_from_lm_studio_markers():
+    response = {
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        '<|channel|>final <|constrain|>JSON<|message|>'
+                        '{"privatized_text":"refugees do not belong here!",'
+                        '"preserved_cues":["refugees"],"notes":"ok"}'
+                    )
+                }
+            }
+        ]
+    }
+
+    assert response_text(response) == "refugees do not belong here!"
+
+
+def test_post_chat_completion_falls_back_when_response_format_rejected(monkeypatch):
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps(self.payload).encode("utf-8")
+
+        def close(self):
+            pass
+
+    calls = []
+
+    def fake_urlopen(req, timeout):
+        calls.append(json.loads(req.data.decode("utf-8")))
+        if len(calls) == 1:
+            raise error.HTTPError(
+                req.full_url,
+                400,
+                "Bad Request",
+                {},
+                FakeResponse({"error": "unsupported response_format"}),
+            )
+        return FakeResponse({"choices": [{"message": {"content": "{}"}}]})
+
+    monkeypatch.setattr("privhsd.local_llm.request.urlopen", fake_urlopen)
+
+    result = post_chat_completion(
+        endpoint="http://localhost/v1/chat/completions",
+        model="local",
+        messages=[{"role": "user", "content": "test"}],
+        timeout=1,
+    )
+
+    assert result["choices"][0]["message"]["content"] == "{}"
+    assert calls[0]["response_format"]["type"] == "json_schema"
+    assert calls[1]["response_format"]["type"] == "json_object"

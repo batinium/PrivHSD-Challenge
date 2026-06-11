@@ -38,7 +38,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A30 | done | Codex | Run optional Hugging Face utility evaluators with installed `transformers`/CPU `torch` on bounded Dynahate reranked samples; default probes passed on sample 25 and 100, Toxic-BERT passed on sample 25, HateXplain variants produced structured inference skips. |
 | A31 | done | Codex | Run Presidio/spaCy comparison with optional dependencies installed on bounded Dynahate samples; sample 100 recorded overlap, detector-only spans, false-positive risk on HSD cues, runtime, and spaCy model-size cost. |
 | A32 | todo | unassigned | Investigate a real DPMLM backend or reproducible adapter; run tiny epsilon 25/50 rewrites only if protected-cue freezing and row-local determinism can be audited. |
-| A33 | blocked | Codex | Run local LLM candidate generation through LM Studio or llama.cpp OpenAI-compatible endpoint, then rerank accepted candidates and compare against deterministic reranking. Blocked locally because `127.0.0.1:1234` has no running endpoint. |
+| A33 | done | Codex | Run local LLM candidate generation through LM Studio/OpenAI-compatible endpoint, then rerank accepted candidates and compare against deterministic reranking. Bounded `openai/gpt-oss-20b` sample accepted 3/10 candidates, but reranking selected no LLM candidates. |
 | A34 | todo | unassigned | Run transformer fine-tuning or adapter-training experiment only as an evaluator/candidate scorer, not core anonymization; compare against local TF-IDF utility and HF utility probes. |
 | A35 | todo | unassigned | Document whether any attention/fine-tuning approach improves the measured privacy/HSD tradeoff enough to justify complexity, dependencies, and rights/audit risks. |
 
@@ -59,13 +59,11 @@ Recommended next sequence:
 
 1. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    cache size, and model-card review are acceptable.
-2. A33: if LM Studio or llama.cpp endpoint becomes available, generate local
-   LLM candidates and rerank them.
-3. A32: research or install a DPMLM backend only if it can protect HSD cues and
+2. A32: research or install a DPMLM backend only if it can protect HSD cues and
    stay out of core anonymization.
-4. A34/A35: run transformer fine-tuning/attention experiments only as optional
+3. A34/A35: run transformer fine-tuning/attention experiments only as optional
    evidence, then document whether they improve the tradeoff.
-5. When official files arrive, return to exact-format submission and
+4. When official files arrive, return to exact-format submission and
    leaderboard-driven iterations.
 
 ## Non-Negotiables

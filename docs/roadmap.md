@@ -121,10 +121,21 @@ Recommended order:
    - dependency cost is high for a comparison baseline because default
      initialization pulled `en_core_web_lg` 3.8.0
 3. Local LLM candidate generation:
-   - use LM Studio or llama.cpp OpenAI-compatible local endpoint only
-   - generate schema-checked candidates on bounded samples
-   - rerank with `rerank-candidates --candidate-col`
-   - compare privacy/HSD metrics against deterministic reranking
+   - status: bounded LM Studio run complete against
+     `http://100.120.207.64:1234`
+   - implementation now supports LM Studio-compatible JSON schema output,
+     response-format fallback, wrapped JSON extraction, and aggregate
+     `status_counts`
+   - `openai/gpt-oss-20b` sample 10 accepted 3 candidates and rejected 7 by
+     cue/length checks in 18.2567s
+   - reranking selected no LLM candidates; chosen counts and metrics matched
+     deterministic `rerank-candidates`
+   - `mistralai/ministral-3-3b` was faster but accepted 0 of 3 real rows under
+     the conservative checks
+   - `qwen/qwen3-4b-2507` and `google/gemma-4-e4b` also accepted 0 of 3 real
+     rows under the same checks
+   - do not scale LLM generation unless accepted candidates start winning the
+     reranker on bounded samples
 4. DPMLM rewrite spike:
    - find a maintained backend or reproducible adapter
    - run tiny epsilon 25/50 sweeps only if cue-token protection and determinism
@@ -284,8 +295,11 @@ Do not make DPMLM part of the core pipeline until these are answered.
 Status: implemented as `privhsd generate-llm-candidates` for LM Studio or
 llama.cpp-style OpenAI-compatible local endpoints. The command requests
 schema-constrained JSON, checks target/action cue retention and length drift,
-and writes candidates only for later reranking. In the current local
-environment no endpoint is running, so sample runs produce clean skipped reports.
+and writes candidates only for later reranking. The client now handles LM
+Studio JSON-schema response formatting, fallback behavior, and wrapped JSON
+content. Current bounded endpoint evidence is low-yield: `openai/gpt-oss-20b`
+accepted 3 of 10 sample candidates, but reranking selected none of them over
+deterministic candidates.
 
 If using an LLM, avoid generic "anonymize this" prompting. Use a structured
 pipeline:

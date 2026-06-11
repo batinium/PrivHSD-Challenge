@@ -20,6 +20,22 @@ LOCAL_LLM_WARNING = (
     "validated before any submission; generic anonymization prompting is not "
     "used as the product."
 )
+RESPONSE_JSON_SCHEMA = {
+    "name": "privhsd_candidate",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "privatized_text": {"type": "string"},
+            "preserved_cues": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "notes": {"type": "string"},
+        },
+        "required": ["privatized_text", "preserved_cues", "notes"],
+        "additionalProperties": False,
+    },
+}
 
 
 class LocalLlmError(ValueError):
@@ -49,6 +65,7 @@ def protected_cues_for_text(text: str) -> dict[str, Any]:
 
 def prompt_messages(text: str) -> list[dict[str, str]]:
     protected = protected_cues_for_text(text)
+    max_candidate_characters = max(len(text) + 20, int(len(text) * 1.4))
     return [
         {
             "role": "system",
@@ -56,8 +73,11 @@ def prompt_messages(text: str) -> list[dict[str, str]]:
                 "You generate one privacy-preserving candidate rewrite for a "
                 "hate-speech-detection dataset. Rewrite only author/style-bearing "
                 "surface cues. Preserve target groups, hateful action cues, "
-                "negation, threats, modality, and core meaning. Return only JSON "
-                "matching this schema: {\"privatized_text\": string, "
+                "negation, threats, modality, and core meaning. The "
+                "privatized_text field must contain only the replacement text, "
+                "not analysis, labels, apologies, or explanations. Keep it close "
+                "to the original length and do not add new claims. Return only "
+                "JSON matching this schema: {\"privatized_text\": string, "
                 "\"preserved_cues\": [string], \"notes\": string}."
             ),
         },
@@ -67,6 +87,11 @@ def prompt_messages(text: str) -> list[dict[str, str]]:
                 {
                     "text": text,
                     "protected_cues": protected,
+                    "constraints": {
+                        "original_character_count": len(text),
+                        "max_candidate_characters": max_candidate_characters,
+                        "replacement_text_only": True,
+                    },
                 },
                 ensure_ascii=False,
             ),
@@ -81,24 +106,65 @@ def post_chat_completion(
     messages: list[dict[str, str]],
     timeout: float,
 ) -> dict[str, Any]:
-    payload = {
+    payload_base = {
         "model": model,
         "messages": messages,
         "temperature": 0,
-        "response_format": {"type": "json_object"},
     }
-    data = json.dumps(payload).encode("utf-8")
-    req = request.Request(
-        endpoint,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    payloads = [
+        {
+            **payload_base,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": RESPONSE_JSON_SCHEMA,
+            },
+        },
+        {**payload_base, "response_format": {"type": "json_object"}},
+        payload_base,
+    ]
+    errors: list[str] = []
+    for payload in payloads:
+        data = json.dumps(payload).encode("utf-8")
+        req = request.Request(
+            endpoint,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with request.urlopen(req, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            errors.append(f"HTTP {exc.code}: {detail or exc.reason}")
+            if exc.code != 400:
+                break
+        except (OSError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            errors.append(str(exc))
+            break
+    raise LocalLlmError(f"local LLM request failed: {'; '.join(errors)}")
+
+
+def parse_response_json(content: str) -> dict[str, Any]:
+    decoder = json.JSONDecoder()
+    stripped = content.strip()
     try:
-        with request.urlopen(req, timeout=timeout) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (OSError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise LocalLlmError(f"local LLM request failed: {exc}") from exc
+        value = json.loads(stripped)
+    except json.JSONDecodeError:
+        value = None
+    if isinstance(value, dict):
+        return value
+
+    for start, character in enumerate(stripped):
+        if character != "{":
+            continue
+        try:
+            candidate, _ = decoder.raw_decode(stripped[start:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(candidate, dict) and "privatized_text" in candidate:
+            return candidate
+    raise LocalLlmError("local LLM response content was not valid JSON")
 
 
 def response_text(response: dict[str, Any]) -> str:
@@ -106,10 +172,7 @@ def response_text(response: dict[str, Any]) -> str:
         content = response["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise LocalLlmError("local LLM response did not contain message content") from exc
-    try:
-        value = json.loads(content)
-    except json.JSONDecodeError as exc:
-        raise LocalLlmError("local LLM response content was not valid JSON") from exc
+    value = parse_response_json(str(content))
     candidate = value.get("privatized_text")
     if not isinstance(candidate, str) or not candidate.strip():
         raise LocalLlmError("local LLM JSON missing non-empty privatized_text")
@@ -223,6 +286,10 @@ def run_local_llm_candidates(
             )
     write_csv(output_path, output_rows, output_fieldnames)
     status = "ok" if accepted_count else "skipped"
+    status_counts: dict[str, int] = {}
+    for row in audit_rows:
+        row_status = str(row["status"])
+        status_counts[row_status] = status_counts.get(row_status, 0) + 1
     report = {
         "input": str(input_path),
         "output": str(output_path),
@@ -230,7 +297,8 @@ def run_local_llm_candidates(
         "generator_type": "local_openai_compatible_llm",
         "status": status,
         "skip_reason": "no_accepted_candidates" if status == "skipped" else None,
-        "detail": first_error,
+        "detail": first_error if status == "skipped" else None,
+        "first_error": first_error,
         "warning": LOCAL_LLM_WARNING,
         "endpoint": endpoint,
         "model": model,
@@ -246,6 +314,7 @@ def run_local_llm_candidates(
             "strategy": "first_n_rows",
         },
         "accepted_count": accepted_count,
+        "status_counts": status_counts,
         "runtime_seconds": rounded(time.perf_counter() - start),
         "rows": audit_rows,
         "next_step": (

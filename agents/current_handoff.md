@@ -165,6 +165,10 @@ Important slide takeaways:
 - A31: bounded Presidio/spaCy detector comparison on the first 100 Dynahate
   rows; comparison passed but documented false-positive risk and dependency
   cost.
+- A33: bounded local LLM candidate generation and reranking against LM Studio
+  at `http://100.120.207.64:1234`; implementation hardened for JSON-schema
+  response format/fallback and wrapped JSON parsing. Accepted LLM candidates
+  did not beat deterministic reranking.
 
 Recent commits:
 
@@ -254,10 +258,29 @@ Presidio comparison on `data/public_dev/dynahate.csv` sample 100:
   `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, after `en_core_web_sm` was
   installed.
 
-Local LLM endpoint check:
+Local LLM bounded evidence:
 
-- `curl --max-time 2 http://127.0.0.1:1234/v1/models` failed with connection
-  refused, so A33 remains blocked until LM Studio or llama.cpp is running.
+- Endpoint: `http://100.120.207.64:1234/v1/chat/completions`
+- Available model smoke tests:
+  - `openai/gpt-oss-20b`: real sample path works.
+  - `mistralai/ministral-3-3b`: synthetic JSON passed, but real sample 3
+    accepted 0/3 under conservative checks.
+  - `qwen/qwen3-4b-2507`: synthetic JSON passed, but real sample 3 accepted
+    0/3 because of length drift or target cue loss.
+  - `google/gemma-4-e4b`: synthetic JSON passed, but real sample 3 accepted
+    0/3 because of length drift or target cue loss.
+  - `zai-org/glm-4.7-flash`: synthetic structured request returned empty
+    content.
+- `openai/gpt-oss-20b` sample 10 with `--max-length-drift 0.75`: accepted 3,
+  rejected 7, runtime 18.2567s.
+- Full preserved-shape rerank with `--candidate-col llm_candidate` selected no
+  LLM candidates. Chosen counts stayed `balanced` 37,506, `style_scrubbed`
+  3,615, `privacy` 23.
+- LLM-reranked metrics match deterministic reranked metrics: residual IDs 3,
+  residual quasi IDs 0, target-cue retention mean 0.9997, character retention
+  0.9868, local macro-F1 delta +0.0019.
+- Verdict: local LLM harness is functional, but current model outputs are
+  low-yield and should not be scaled or submitted directly.
 
 Generated outputs are under ignored `data/outputs/`.
 
@@ -267,10 +290,9 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence while official files are unavailable:
 
-1. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+1. Review `docs/experiment_verdict.md` for the compact decision table.
+2. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    model-card review, and cache size are acceptable.
-2. A33: if LM Studio or llama.cpp endpoint is available, run
-   `generate-llm-candidates`, then rerank with `rerank-candidates`.
 3. A32: investigate a real DPMLM backend/adapter only if cue-token protection
    and determinism can be audited.
 4. A34/A35: run transformer fine-tuning or attention experiments only as

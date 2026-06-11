@@ -311,7 +311,12 @@ python -m privhsd.cli generate-llm-candidates \
 ```
 
 `generate-llm-candidates` targets LM Studio or llama.cpp OpenAI-compatible local
-servers. It asks for a JSON object with `privatized_text`, checks target/action
+servers. It first requests JSON-schema structured output, falls back for servers
+that reject specific `response_format` variants, and tolerates LM
+Studio/OpenAI-compatible channel markers around the JSON object. The report
+includes `accepted_count`, `status_counts`, `detail`, and `first_error`.
+
+The command asks for a JSON object with `privatized_text`, checks target/action
 cue retention and length drift, writes accepted candidates to a candidate
 column, and directs the user to `rerank-candidates --candidate-col`. It does not
 submit raw LLM outputs directly.

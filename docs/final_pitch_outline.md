@@ -56,6 +56,9 @@ rows, same columns/order, no helper columns.
 - Presidio sample 100 found more spans than PrivHSD, but 9 of 27 Presidio spans
   were flagged as false-positive risk on HSD cues/targets and setup pulled a
   400.7 MB spaCy model.
+- Local LLM candidate generation works through LM Studio after JSON-schema
+  compatibility hardening, but `openai/gpt-oss-20b` accepted only 3/10 sample
+  candidates and reranking selected none of them over deterministic candidates.
 
 ## Rights Framing
 
@@ -80,6 +83,8 @@ rows, same columns/order, no helper columns.
   caches, and license review before full runs.
 - Presidio is a detector comparison baseline, not the product; it can over-mask
   HSD cues and carries a substantial spaCy model dependency.
+- Local LLM output is candidate-only; current bounded runs are too low-yield to
+  justify scaling or direct submission.
 - DPMLM is not integrated because no supported local backend is available and no
   audited adapter has proven cue protection, determinism, and runtime quality.
 - Exact-format validation proves shape and metadata preservation; it does not
