@@ -43,6 +43,8 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A35 | todo | unassigned | Document whether any attention/fine-tuning approach improves the measured privacy/HSD tradeoff enough to justify complexity, dependencies, and rights/audit risks. |
 | A36 | done | Codex | Add weak token-action tagger training experiment with optional scikit-learn extra, CLI, tests, and sample-5,000 Dynahate report. |
 | A37 | done | Codex | Add filtered Presidio augmentation to anonymize, rerank, and submission paths; full Dynahate rerank selected Presidio candidate for 6,085 rows with macro-F1 delta +0.0048. |
+| A38 | done | Codex | Map mentor-adjacent DP NLP papers from Consensus and primary paper pages to concrete PrivHSD design choices in `docs/dp_text_privacy_literature_notes.md`. |
+| A39 | todo | unassigned | Add optional adversarial LLM reconstruction/privacy-judge report only as secondary evidence after deterministic leakage, author-risk, cue, and official metrics. |
 
 ## Current Priority
 
@@ -63,14 +65,16 @@ Recommended next sequence:
    the first `balanced` official submission.
 2. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
    or uncertainty detector, not as a direct anonymizer.
-3. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+3. A39: add an optional LLM reconstruction/privacy-judge report only if it can
+   be kept local, non-leaking, and secondary to deterministic/official metrics.
+4. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    cache size, and model-card review are acceptable.
-4. DPMLM follow-up: keep it candidate-only; scale only if official metrics or a
+5. DPMLM follow-up: keep it candidate-only; scale only if official metrics or a
    better scorer show that protected-token DPMLM candidates can beat
    deterministic/reranked outputs.
-5. A34/A35: run transformer fine-tuning/attention experiments only as optional
+6. A34/A35: run transformer fine-tuning/attention experiments only as optional
    evidence, then document whether they improve the tradeoff.
-6. When official files arrive, return to exact-format submission and
+7. When official files arrive, return to exact-format submission and
    leaderboard-driven iterations.
 
 ## Non-Negotiables

@@ -102,6 +102,12 @@ path.
 Do not train a new attention mechanism first. The available data is better used
 for evaluation, reranking, and small calibration tests. The practical plan is:
 
+The mentor-adjacent DP NLP literature review in
+`docs/dp_text_privacy_literature_notes.md` supports this direction: DPMLM and
+word-level metric DP are serious candidate baselines, but the strongest
+defensible architecture is selective cue protection, privacy-pressure
+allocation, post-processing/reranking, and empirical adversarial evaluation.
+
 | Component | Role | Default? |
 | --- | --- | --- |
 | Local TF-IDF classifiers | HSD utility proxy and author-risk adversary. | Optional, lightweight |

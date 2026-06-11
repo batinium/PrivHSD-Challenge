@@ -35,6 +35,11 @@ python -m privhsd.cli create-submission \
 6. For methodology questions, point to `docs/methodology_justification.md`:
    lexicons are justified by challenge labels, observed audit failures, and
    target-identity/stylometry literature rather than arbitrary word lists.
+7. For DPMLM and mentor-literature questions, point to
+   `docs/dp_text_privacy_literature_notes.md`: the literature supports
+   selective privacy pressure, protected utility cues, post-processing,
+   reranking, and adversarial privacy evaluation rather than blindly replacing
+   the pipeline with DPMLM.
 
 ## Evidence Table
 

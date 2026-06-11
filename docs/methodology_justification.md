@@ -7,6 +7,11 @@ misspelling handling, optional Presidio/DPMLM/LLM candidates, and reranking.
 It is meant to support judge questions about provenance, redundancy, and the
 privacy/utility tradeoff.
 
+For the mentor-adjacent DP NLP literature map, see
+`docs/dp_text_privacy_literature_notes.md`. That companion note explains how
+DPMLM, word-level metric DP, privacy-budget allocation, LLM prompting,
+post-processing, and privacy evaluation papers map to the current pipeline.
+
 ## Core Principle
 
 The task is not generic redaction. The privacy target is reducing

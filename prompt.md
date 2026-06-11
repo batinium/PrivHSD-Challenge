@@ -15,9 +15,10 @@ Start by reading:
 3. `agents/current_handoff.md`
 4. `docs/pipeline_design.md`
 5. `docs/methodology_justification.md`
-6. `agents/coding_rules.md`
-7. `docs/official_submission_checklist.md`
-8. `docs/final_pitch_outline.md`
+6. `docs/dp_text_privacy_literature_notes.md`
+7. `agents/coding_rules.md`
+8. `docs/official_submission_checklist.md`
+9. `docs/final_pitch_outline.md`
 
 Initial commands:
 
@@ -52,6 +53,10 @@ Current status:
 - A37 filtered Presidio augmentation is implemented on `anonymize`,
   `rerank-candidates`, and `create-submission` with `--presidio-augment`.
   Full Dynahate reranking selected `presidio_augmented` for 6,085 rows.
+- A38 mentor-adjacent DP NLP literature mapping is complete in
+  `docs/dp_text_privacy_literature_notes.md`; it supports selective cue
+  protection, privacy-pressure allocation, reranking/post-processing, and
+  empirical adversarial evaluation rather than direct DPMLM replacement.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
 - Current full tests should be `82 passed, 1 skipped`.
