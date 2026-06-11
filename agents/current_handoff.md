@@ -14,7 +14,7 @@ Branch and pushed HEAD:
 
 ```text
 main
-f98522a Record Dynahate experiment summaries
+fd3957e Refocus roadmap on authorship risk
 ```
 
 Untracked files:
@@ -174,9 +174,16 @@ Recommended next sequence:
 
 1. A17: author-attribution privacy evaluator using an `author` column.
 2. A18: style-scrubbing transformer for authorship cues.
-3. A19: candidate generation/reranking by privacy and HSD utility.
-4. A08/A22: final pitch/demo and human-rights judging narrative.
-5. A14/A20/A21: optional Presidio, DPMLM, and specialized LLM experiments.
+3. A24/A25: optional Hugging Face model registry and utility evaluator.
+4. A19: candidate generation/reranking by privacy and HSD utility.
+5. A27: DPMLM protected-cue spike on bounded samples only.
+6. A28: exact-format submission validator/creator.
+7. A08/A22: final pitch/demo and human-rights judging narrative.
+8. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+
+Do not start by training a new attention model. Use pretrained models to
+measure HSD utility and generate/rerank candidates, then keep anything that
+improves the measured privacy/HSD tradeoff.
 
 ## Constraints
 

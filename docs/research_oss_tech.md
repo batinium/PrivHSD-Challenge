@@ -33,6 +33,7 @@ Practical implications:
 | sentence-transformers | Optional semantic drift metric. | No | Similarity can also preserve private info, so pair with leakage metrics. |
 | GLiNER | Optional flexible entity detector experiment. | No | Compare against synthetic fixture and residual leakage. |
 | DPMLM / DP-BART style methods | Advanced rewriting spike. | No | Run only as bounded experiment with epsilon/runtime reporting. |
+| Local LLMs | Optional schema-constrained candidate generator. | No | Use LM Studio or llama.cpp only behind validators and reranking. |
 | External LLM APIs | Avoid required path. | No | Data egress, reproducibility, and audit risks. |
 
 ## Research Claims To Carry Forward
@@ -53,13 +54,15 @@ Practical implications:
    measure accuracy/F1 drop on privatized text.
 2. Style scrubber: normalize punctuation, casing, emojis, elongations,
    signatures, and formatting habits.
-3. Candidate reranker: choose among balanced, style-scrubbed, privacy,
+3. HF utility evaluator: compare HSD/toxicity score drift on original vs
+   privatized text using approved local Transformers models.
+4. Candidate reranker: choose among balanced, style-scrubbed, privacy,
    Presidio-augmented, DP, or LLM candidates using privacy/HSD scores.
-4. Presidio comparison: report overlap, unique spans, misses, false positives,
+5. Presidio comparison: report overlap, unique spans, misses, false positives,
    and runtime.
-5. DPMLM spike: small sample only; report epsilon, runtime, determinism,
+6. DPMLM spike: small sample only; report epsilon, runtime, determinism,
    author-risk drop, and HSD utility.
-6. Specialized LLM rewrite: schema-constrained, cue-preserving, locally checked,
+7. Specialized LLM rewrite: schema-constrained, cue-preserving, locally checked,
    and optional.
 
 ## Source Links
@@ -70,10 +73,13 @@ Practical implications:
 - [scikit-learn](https://scikit-learn.org/)
 - [Transformers](https://github.com/huggingface/transformers)
 - [facebook/roberta-hate-speech-dynabench-r4-target](https://huggingface.co/facebook/roberta-hate-speech-dynabench-r4-target)
+- [cardiffnlp/twitter-roberta-base-hate-latest](https://huggingface.co/cardiffnlp/twitter-roberta-base-hate-latest)
 - [HateXplain model](https://huggingface.co/Hate-speech-CNERG/bert-base-uncased-hatexplain)
+- [HateXplain rationale model](https://huggingface.co/Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two)
 - [Detoxify](https://github.com/unitaryai/detoxify)
 - [sentence-transformers](https://github.com/huggingface/sentence-transformers)
 - [GLiNER](https://github.com/urchade/GLiNER)
+- [DPMLM](https://github.com/sjmeis/DPMLM)
 - [OpenDP](https://github.com/opendp/opendp)
 - [diffprivlib](https://github.com/IBM/differential-privacy-library)
 - [Opacus](https://github.com/meta-pytorch/opacus)

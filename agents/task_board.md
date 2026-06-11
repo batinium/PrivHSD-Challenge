@@ -29,6 +29,12 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A21 | todo | unassigned | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
 | A22 | todo | unassigned | Add human-rights and judging narrative: leaderboard score is only one criterion. |
 | A23 | todo | unassigned | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
+| A24 | todo | unassigned | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
+| A25 | todo | unassigned | Add optional `evaluate-hf-utility` command for original-vs-privatized HSD/toxicity score drift on small samples and full runs. |
+| A26 | todo | unassigned | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
+| A27 | todo | unassigned | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
+| A28 | todo | unassigned | Add exact-format submission validator/creator for leaderboard uploads with text columns privatized in place when required. |
+| A29 | todo | unassigned | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
 
 ## Current Priority
 
@@ -39,13 +45,20 @@ useful as a comparison baseline but fails as a complete solution. DPMLM-style
 methods are promising but complex. LLMs may help only if specialized,
 constrained, and evaluated against privacy/utility metrics.
 
+Do not start by training a new attention model. Use existing models as optional
+evaluators and candidate generators, then measure whether they improve the
+privacy/HSD tradeoff over the deterministic baseline.
+
 Recommended next sequence:
 
 1. A17: author-attribution privacy evaluator.
 2. A18: style-scrubbing transformer for authorship cues.
-3. A19: candidate reranking using privacy and HSD utility scores.
-4. A08/A22: final pitch/demo narrative and human-rights framing.
-5. A14/A20/A21: optional Presidio, DPMLM, and specialized LLM experiments.
+3. A24/A25: approved Hugging Face model registry and utility evaluator.
+4. A19: candidate reranking using privacy and HSD utility scores.
+5. A27: DPMLM protected-cue spike on bounded samples only.
+6. A28: exact-format submission validator/creator.
+7. A08/A22: final pitch/demo narrative and human-rights framing.
+8. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 ## Non-Negotiables
 
@@ -53,4 +66,6 @@ Recommended next sequence:
 - Preserve row count, row order, IDs, labels, and metadata.
 - Do not commit official/raw challenge examples or downloaded datasets.
 - Optimize the privacy/HSD tradeoff, not privacy alone.
+- Treat pretrained HF models, DPMLM, LM Studio, and llama.cpp as optional
+  support paths, not required runtime dependencies.
 - Treat leaderboard score as evidence, not the whole hackathon result.

@@ -48,6 +48,35 @@ Latest local Dynahate summary:
 | Character retention | 0.9953 |
 | Local classifier macro-F1 delta | -0.0008 |
 
+## Model-Backed Plan
+
+Do not train a new attention mechanism first. The available data is better used
+for evaluation, reranking, and small calibration tests. The practical plan is:
+
+| Component | Role | Default? |
+| --- | --- | --- |
+| Local TF-IDF classifiers | HSD utility proxy and author-risk adversary. | Optional, lightweight |
+| `facebook/roberta-hate-speech-dynabench-r4-target` | Dynabench-aligned HSD utility evaluator. | Optional |
+| `cardiffnlp/twitter-roberta-base-hate-latest` | Social-media hate/offensive utility evaluator. | Optional |
+| HateXplain models | Target/rationale cue checks and explainability support. | Optional |
+| `unitary/toxic-bert` or Detoxify | Toxicity proxy for weak-signal comparison only. | Optional |
+| DPMLM | Bounded rewrite spike with epsilon/runtime/utility reports. | No |
+| Local LLM through LM Studio or llama.cpp | Schema-constrained candidate generation only. | No |
+
+External models should support measurement and candidate generation. They should
+not become required for `privhsd anonymize`, and their weights, raw downloaded
+datasets, and generated official examples must not be committed.
+
+Near-term implementation order:
+
+1. Add author-risk evaluation when an `author` column exists.
+2. Add deterministic style scrubbing for non-lexical author signals.
+3. Add a Hugging Face utility evaluator behind an optional extra.
+4. Add candidate reranking that balances HSD utility against privacy risk.
+5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
+   reporting.
+6. Add exact-format submission validation and final judging narrative.
+
 ## Strategic Gap
 
 The current system is strong at identifier masking, but the challenge is broader
@@ -105,15 +134,33 @@ score:
 - privacy mode
 - balanced with target generalization
 - optional Presidio-augmented spans
-- optional specialized rewrite
+- optional DPMLM or local-LLM rewrite
 
 Candidate score should penalize author-classifier confidence and residual
 identifiers while preserving HSD classifier confidence and target/action cues.
+When Hugging Face evaluators are available, include their HSD score deltas as
+utility signals. Keep all candidate text row-local; do not use neighboring rows
+as context.
 
-### 4. DPMLM Spike
+### 4. Hugging Face Utility Evaluator
 
-Run a small, optional DPMLM-style experiment only after the official dev schema
-is known.
+Add `privhsd evaluate-hf-utility` behind an optional dependency extra. It should
+accept original and privatized columns, run one or more approved local
+Transformers classifiers, and write JSON with:
+
+- model name, revision if available, device, runtime, and sample size
+- original vs privatized HSD/toxicity probabilities
+- label agreement and confidence drift
+- rows with large utility drops by row ID only
+- skipped/model-load failures without failing the core package
+
+Start with small samples. Full-dataset runs are useful only after memory,
+runtime, and license checks are documented.
+
+### 5. DPMLM Spike
+
+Run a small, optional DPMLM-style experiment after the author-risk and HF
+evaluators exist. Use only bounded samples at first.
 
 Questions to answer before integration:
 
@@ -122,10 +169,12 @@ Questions to answer before integration:
 - Does it preserve HSD labels better than style scrubbing?
 - Does it reduce author-classifier accuracy?
 - Can outputs be reproduced enough for audit?
+- Can HSD cue tokens, target groups, negation, and threat/action terms be
+  protected from rewriting?
 
 Do not make DPMLM part of the core pipeline until these are answered.
 
-### 5. Specialized LLM Rewrite
+### 6. Specialized LLM Rewrite
 
 If using an LLM, avoid generic "anonymize this" prompting. Use a structured
 pipeline:
@@ -138,7 +187,22 @@ pipeline:
 5. Run residual privacy, author-risk, and HSD utility checks.
 6. Reject or rerank weak candidates.
 
-Keep this optional and local where possible.
+Keep this optional and local where possible. LM Studio or llama.cpp can be used
+through an OpenAI-compatible local endpoint, but the candidate must still pass
+the same validators as deterministic candidates.
+
+### 7. Exact-Format Submission Validator
+
+Add a final command that verifies official upload files:
+
+- same columns and row count as the provided dataset unless `--replace-text` is
+  explicitly required
+- text columns privatized in place when required by the leaderboard
+- no extra helper columns in submission mode
+- stable row order and IDs
+- no raw example leakage into reports, docs, or logs
+- machine-readable manifest with command, git commit, dataset path hash, and
+  metric summary
 
 ## Presidio Role
 
