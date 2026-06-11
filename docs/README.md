@@ -6,12 +6,16 @@ Use it before changing code.
 ## Reading Order
 
 1. `challenge_requirements.md` - what the hackathon expects.
-2. `pipeline_design.md` - current implementation contract and module map.
-3. `dataset_plan.md` - public dataset plan before official data arrives.
-4. `quickstart.md` - commands for running the current pipeline.
-5. `packaging.md` - pip install and wheel build notes.
-6. `research_oss_tech.md` - OSS and academic research behind the next tasks.
-7. `score_log_template.md` - reproducible official-submission score log.
+2. `roadmap.md` - current strategy and next technical bets.
+3. `pipeline_design.md` - implementation contract and module map.
+4. `quickstart.md` - commands for running the pipeline.
+5. `score_log_template.md` - reproducible official-submission score log.
+
+Reference docs:
+
+- `dataset_plan.md` - public and official dataset plan.
+- `packaging.md` - pip install and wheel build notes.
+- `research_oss_tech.md` - research appendix and OSS links.
 
 ## Source Of Truth
 
@@ -23,3 +27,5 @@ The implementation should stay aligned with these points:
 - Add `privatized_text` by default instead of overwriting source text.
 - Produce audit JSON for explainability.
 - Optimize the privacy/utility tradeoff, not privacy alone.
+- Reduce author-identifying signals, not only obvious PII.
+- Preserve hate-speech cues needed by downstream classifiers.

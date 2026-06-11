@@ -7,14 +7,18 @@ before making changes.
 
 1. `current_handoff.md`
 2. `../docs/challenge_requirements.md`
-3. `../docs/pipeline_design.md`
-4. `coding_rules.md`
-5. `task_board.md`
+3. `../docs/roadmap.md`
+4. `../docs/pipeline_design.md`
+5. `coding_rules.md`
+6. `task_board.md`
 
 ## Current Objective
 
 Build a reliable privacy-preserving text transformation pipeline for the
 PrivHSD challenge.
+
+The privacy target is broader than PII masking: reduce author-identifying
+signals while preserving hate-speech detection cues.
 
 Do not turn the project back into the old disability-only dashboard. The old
 `ContextSafe-HSD` sibling repo can be used as reference, but this repository is
@@ -37,3 +41,5 @@ a fresh challenge-specific implementation.
 - Add `privatized_text` by default.
 - Keep audit output machine-readable.
 - Avoid raw hateful examples in docs unless absolutely necessary.
+- Treat external OSS/LLM/DP tools as optional support unless the project
+  explicitly changes direction.

@@ -22,6 +22,10 @@ dates, context names, context locations, schools/organizations, common ID
 formats, and explicit aliases such as `alias`, `aka`, `known as`, and
 `goes by`.
 
+The next roadmap step is broader authorship-risk reduction. PII masking is only
+one part of privacy; author style, syntax, formatting, repeated expressions, and
+contextual habits can also identify an author.
+
 ## CLI Contract
 
 Privatize a CSV:
@@ -241,3 +245,8 @@ submission.
 
 The base install remains dependency-free. Optional evaluator extras such as
 `privhsd[benchmark]` must not become required for `anonymize`.
+
+Optional Presidio, DPMLM, Hugging Face, or LLM-backed methods should be
+evaluated as candidate generators or comparison baselines. They should not
+replace the auditable deterministic default unless they improve measured
+author-risk reduction and preserve HSD utility.

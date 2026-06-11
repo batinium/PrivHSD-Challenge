@@ -23,6 +23,10 @@ We are building a preprocessing layer:
 - Audit: JSON file explaining every transformation.
 - Metrics: local proxy metrics for privacy gain and utility retention.
 
+The real privacy adversary is broader than PII lookup. The method should reduce
+signals useful for authorship identification while preserving cues useful for
+hate-speech detection.
+
 ## What We Are Not Building First
 
 - A production hate speech classifier.
@@ -43,6 +47,23 @@ The project should demonstrate:
 - Rights-aware framing: privacy, free expression, non-discrimination, and human
   oversight.
 
+The public leaderboard is only one signal. A strong submission must also show:
+
+- problem understanding and tradeoff reasoning
+- human-rights-centered design
+- working, reusable, packaged code
+- transparent limitations and follow-up plan
+- practical deployability, not just a report
+
+## Webinar Method Notes
+
+- Presidio-style entity redaction is not enough on its own.
+- DPMLM-style rewriting is promising but complex and parameter-sensitive.
+- Generic LLM prompting is weak; any LLM use should be specialized, constrained,
+  and evaluated.
+- Useful privacy evaluation should include authorship-risk reduction when an
+  author column is available.
+
 ## Timeline From Webinar
 
 - 2026-06-15: starter kit and official development dataset expected.
@@ -50,4 +71,3 @@ The project should demonstrate:
 - 2026-06-18 afternoon: second dataset expected.
 - 2026-06-18 end of day: final code/system due.
 - 2026-06-19: final pitches and winners.
-

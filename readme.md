@@ -7,6 +7,9 @@ goal is not to build the main hate speech classifier. The goal is to transform
 text so privacy-sensitive details are reduced while hate-speech detection cues
 remain useful.
 
+The webinar framing is stricter than simple PII removal: reduce
+author-identifying signals while preserving hate-speech detection signal.
+
 ```text
 CSV with text
   -> privacy-preserving transformation
@@ -18,6 +21,7 @@ CSV with text
 
 - [docs/README.md](docs/README.md) - documentation index.
 - [docs/challenge_requirements.md](docs/challenge_requirements.md) - what the challenge expects.
+- [docs/roadmap.md](docs/roadmap.md) - current strategy and next technical bets.
 - [docs/pipeline_design.md](docs/pipeline_design.md) - active implementation contract.
 - [docs/dataset_plan.md](docs/dataset_plan.md) - public and official dataset plan.
 - [docs/quickstart.md](docs/quickstart.md) - commands for running the pipeline.
@@ -160,6 +164,17 @@ is unavailable.
 - `privacy`: more aggressive; can generalize known target-group mentions.
 
 Use `balanced` first for official evaluator submissions.
+
+## Current Roadmap
+
+Next work should focus on authorship-risk evaluation and style scrubbing:
+
+- train an author classifier when official data includes an author column
+- normalize style cues such as casing, punctuation, repeated characters,
+  emojis, spacing, and signatures
+- rerank candidate privatizations by author-risk reduction and HSD utility
+- treat Presidio, DPMLM, and specialized LLM rewriting as optional experiments
+  rather than default dependencies
 
 ## Agent Rule
 

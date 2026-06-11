@@ -10,6 +10,10 @@ The committed synthetic PII stress fixtures live under `tests/fixtures/` and
 exercise anonymizer masking, residual-warning metrics, metadata preservation,
 and ablation behavior without using official or raw challenge examples.
 
+For strategy and next tasks, read `docs/roadmap.md`. The current roadmap
+prioritizes authorship-risk evaluation and style scrubbing over adding more
+PII-only rules.
+
 ## Prepare Public Data
 
 ```bash
