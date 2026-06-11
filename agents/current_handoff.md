@@ -70,6 +70,7 @@ privhsd predict-classifier
 privhsd evaluate-author-risk
 privhsd hf-model-registry
 privhsd evaluate-hf-utility
+privhsd rerank-candidates
 privhsd prepare-dynahate
 ```
 
@@ -121,6 +122,9 @@ Important slide takeaways:
 - A24/A25: optional Hugging Face model registry and utility evaluator with
   small-sample defaults, score-drift/agreement metrics, large-drop row IDs, and
   structured skips for missing dependencies or failed model loading.
+- A19: row-local candidate reranker for balanced, style-scrubbed, privacy,
+  target-generalized, and optional rewrite-column candidates, with audit-only
+  per-candidate scores and optional author-risk confidence when available.
 
 Recent commits:
 
@@ -138,14 +142,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-37 passed, 1 skipped
+41 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-37 passed, 1 skipped
+41 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -184,11 +188,10 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence:
 
-1. A19: candidate generation/reranking by privacy and HSD utility.
-2. A27: DPMLM protected-cue spike on bounded samples only.
-3. A28: exact-format submission validator/creator.
-4. A08/A22: final pitch/demo and human-rights judging narrative.
-5. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A27: DPMLM protected-cue spike on bounded samples only.
+2. A28: exact-format submission validator/creator.
+3. A08/A22: final pitch/demo and human-rights judging narrative.
+4. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that

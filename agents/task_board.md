@@ -24,7 +24,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A16 | done | Codex | Add local baseline classifier train/evaluate/predict workflows. |
 | A17 | done | Codex | Add authorship-risk evaluator: train an author classifier when an `author` column exists and report accuracy/F1 drop after privatization. |
 | A18 | done | Codex | Add style-scrubbing transformer for authorship cues: casing, punctuation bursts, emojis, repeated chars, spacing, signatures, and idiolect markers. |
-| A19 | todo | unassigned | Add candidate reranking: compare deterministic, style-scrubbed, target-generalized, and optional rewrite outputs by privacy/HSD utility score. |
+| A19 | done | Codex | Add candidate reranking: compare deterministic, style-scrubbed, target-generalized, and optional rewrite outputs by privacy/HSD utility score. |
 | A20 | todo | unassigned | Spike DPMLM-style rewriting on a tiny sample; document epsilon/runtime/utility tradeoffs before any integration. |
 | A21 | todo | unassigned | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
 | A22 | todo | unassigned | Add human-rights and judging narrative: leaderboard score is only one criterion. |
@@ -51,11 +51,10 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A19: candidate reranking using privacy and HSD utility scores.
-2. A27: DPMLM protected-cue spike on bounded samples only.
-3. A28: exact-format submission validator/creator.
-4. A08/A22: final pitch/demo narrative and human-rights framing.
-5. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A27: DPMLM protected-cue spike on bounded samples only.
+2. A28: exact-format submission validator/creator.
+3. A08/A22: final pitch/demo narrative and human-rights framing.
+4. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 ## Non-Negotiables
 

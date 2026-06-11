@@ -28,6 +28,7 @@ from .hf_utility import (
     run_hf_utility_evaluation,
     write_model_registry,
 )
+from .rerank import RerankError, run_candidate_reranking
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
@@ -140,6 +141,26 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_DROP_THRESHOLD,
     )
     hf_utility.add_argument("--decision-threshold", type=float, default=0.5)
+
+    rerank = subparsers.add_parser(
+        "rerank-candidates",
+        help="Generate row-local privatization candidates and choose the best tradeoff.",
+    )
+    rerank.add_argument("--input", type=Path, required=True)
+    rerank.add_argument("--output", type=Path, required=True)
+    rerank.add_argument("--text-col", required=True)
+    rerank.add_argument("--id-col")
+    rerank.add_argument("--output-col", default="privatized_text")
+    rerank.add_argument("--replace-text", action="store_true")
+    rerank.add_argument("--author-col")
+    rerank.add_argument(
+        "--candidate-col",
+        dest="candidate_cols",
+        action="append",
+        default=[],
+        help="Existing column containing an optional rewrite candidate. Repeatable.",
+    )
+    rerank.add_argument("--audit", type=Path)
 
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
@@ -278,6 +299,18 @@ def main(argv: list[str] | None = None) -> int:
                 drop_threshold=args.drop_threshold,
                 decision_threshold=args.decision_threshold,
             )
+        elif args.command == "rerank-candidates":
+            result = run_candidate_reranking(
+                args.input,
+                args.output,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                output_col=args.output_col,
+                replace_text=args.replace_text,
+                author_col=args.author_col,
+                candidate_cols=args.candidate_cols,
+                audit_path=args.audit,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -332,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         CsvPipelineError,
         HfUtilityError,
         OSError,
+        RerankError,
         ValueError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)

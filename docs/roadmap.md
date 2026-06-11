@@ -73,6 +73,7 @@ Near-term implementation order:
 2. Add deterministic style scrubbing for non-lexical author signals. **Done.**
 3. Add a Hugging Face utility evaluator behind an optional extra. **Done.**
 4. Add candidate reranking that balances HSD utility against privacy risk.
+   **Done.**
 5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
    reporting.
 6. Add exact-format submission validation and final judging narrative.
@@ -137,6 +138,13 @@ preserving hate-speech content:
 This is likely cheaper and more auditable than full neural rewriting.
 
 ### 3. Candidate Generation and Reranking
+
+Status: implemented as `privhsd rerank-candidates`. The command generates
+row-local deterministic candidates (`balanced`, `style_scrubbed`, `privacy`,
+and `target_generalized`), accepts optional rewrite candidate columns, scores
+privacy/style risk against target/action cue retention and drift, and uses an
+optional local author scorer only when an author column and scikit-learn are
+available.
 
 Generate multiple privatized candidates per row, then pick the best by a local
 score:

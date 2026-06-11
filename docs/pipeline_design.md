@@ -15,6 +15,7 @@ privhsd/
   hf_utility.py    optional Hugging Face utility model registry/evaluator
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
+  rerank.py        row-local candidate generation and reranking
   style.py         deterministic style scrubbing for author cues
   utility_benchmark.py  optional scikit-learn utility-delta benchmark
 ```
@@ -202,6 +203,26 @@ row IDs with large utility drops. Missing dependencies, model-load failures, and
 inference failures are recorded as structured skips rather than making
 `privhsd anonymize` depend on Hugging Face.
 
+Generate row-local candidates and choose the best privacy/HSD tradeoff:
+
+```bash
+python -m privhsd.cli rerank-candidates \
+  --input data/public_dev/dynahate.csv \
+  --output data/outputs/dynahate.reranked.csv \
+  --text-col text \
+  --id-col id \
+  --audit data/outputs/dynahate.rerank.audit.json
+```
+
+`rerank-candidates` generates deterministic `balanced`, `style_scrubbed`,
+`privacy`, and `target_generalized` candidates per row. Optional rewrite
+candidate columns can be supplied with repeatable `--candidate-col` arguments.
+The scorer penalizes residual identifiers, residual style signals, optional
+author-risk confidence when an author column and scikit-learn are available,
+target/action cue loss, and length/character drift. It writes only the chosen
+text column by default; per-candidate scores go to the audit JSON without raw
+text.
+
 ## Local Metrics
 
 `privhsd evaluate`, anonymize audit summaries, and ablation reports use the same
@@ -245,6 +266,8 @@ Output CSV must:
 - add `privatized_text` unless `--replace-text` is explicitly used
 - optionally normalize author style with `--style-scrub` while preserving the
   same row and metadata contract
+- optionally use `rerank-candidates` to choose among row-local deterministic
+  and supplied rewrite candidates without adding helper columns by default
 
 ## Modes
 
