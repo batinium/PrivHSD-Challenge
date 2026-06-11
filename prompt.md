@@ -32,6 +32,8 @@ Current status:
 
 - Core priority implementation through A29 is complete.
 - A26 HSD cue checks are complete.
+- Metadata leakage checks are implemented with `check-metadata-leakage`; local
+  Dynahate has 0 exact/normalized `id` leaks in original and protected text.
 - A14 Presidio comparison harness is complete.
 - A23 official submission checklist is complete.
 - A30 bounded Hugging Face utility runs are complete on
@@ -52,7 +54,7 @@ Current status:
   Full Dynahate reranking selected `presidio_augmented` for 6,085 rows.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
-- Current full tests should be `79 passed, 1 skipped`.
+- Current full tests should be `82 passed, 1 skipped`.
 - Local Dynahate is expected at `data/public_dev/dynahate.csv`; it is ignored by
   git and has columns `id,text,label,source,split,target,type`.
 - Generated outputs belong under ignored `data/outputs/`.
@@ -68,6 +70,9 @@ Constraints:
   tokenizer caches, spaCy model files, DPMLM artifacts, local LLM outputs with
   raw text, `data/outputs/`, or official/raw examples.
 - Preserve row count, row order, IDs, labels, and metadata in every CSV path.
+- For official `id,author,text,HS`-style files, run metadata leakage checks on
+  `id` and `author`, then run `evaluate-author-risk --author-col author` if
+  author labels have repeated rows.
 - Use the metric framing: high Utility_protected / Utility_original and low
   Privacy_protected / Privacy_original.
 - Any model/LLM/DP output is evidence or a candidate for reranking, not a direct

@@ -128,16 +128,26 @@ Local evidence:
 
 ## Authorship Identification Test
 
-The repo has `evaluate-author-risk`, which trains a local author adversary on
-clean/original text and compares author identification on privatized text.
-That is the correct minimum test when an `author`, `user`, or equivalent column
-exists.
+There are two different tests:
+
+1. `check-metadata-leakage`: direct leakage check for whether values like
+   `id` or `author` literally appear in original or privatized text.
+2. `evaluate-author-risk`: stylometric adversary check for whether writing
+   style still predicts an `author`, `user`, or equivalent label.
+
+Using `id` as `author` is only valid if the ID actually groups multiple texts
+from the same person. If each `id` is unique per row, it is not an author label;
+the author classifier should skip because it cannot learn an author profile.
 
 Current Dynahate limitation:
 
 - local file columns are `id,text,label,source,split,target,type`;
 - `source` has only one value, `dynahate`;
 - there is no author/user label;
+- each `id` occurs once, so `--author-col id` skips with
+  `insufficient_author_rows`;
+- direct metadata leakage scan found 0 exact/normalized `id` leaks in both
+  original `text` and reranked `privatized_text`;
 - a clean-text author-risk run therefore skips with
   `insufficient_author_labels`.
 

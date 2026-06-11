@@ -393,6 +393,26 @@ python -m privhsd.cli check-hsd-cues \
 negation/modality retention by row ID. It is a conservative local fallback when
 HateXplain-style rationale models are unavailable.
 
+Check whether metadata values leak into text columns:
+
+```bash
+python -m privhsd.cli check-metadata-leakage \
+  --input data/outputs/dynahate.reranked_presidio.full.csv \
+  --text-col text \
+  --text-col privatized_text \
+  --metadata-col id \
+  --id-col id \
+  --output data/outputs/dynahate.metadata_leakage.json
+```
+
+`check-metadata-leakage` scans metadata values such as `id` or `author` against
+one or more text columns using exact and alphanumeric-normalized matching. It
+reports counts and row IDs only; raw metadata values are represented by short
+hashes. This is a direct leakage check, not a stylometric author-risk test. For
+official files shaped like `id,author,text,HS`, run this command for `id` and
+`author`, then run `evaluate-author-risk --author-col author` if each author
+has enough rows for train/dev splits.
+
 ## Local Metrics
 
 `privhsd evaluate`, anonymize audit summaries, and ablation reports use the same

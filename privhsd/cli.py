@@ -54,6 +54,7 @@ from .local_llm import (
     LocalLlmError,
     run_local_llm_candidates,
 )
+from .metadata_leakage import MetadataLeakageError, scan_metadata_leakage
 from .presidio_compare import PresidioCompareError, run_presidio_comparison
 from .presidio_augment import PresidioAugmentError
 from .rerank import RerankError, run_candidate_reranking
@@ -377,6 +378,33 @@ def build_parser() -> argparse.ArgumentParser:
     cue_checks.add_argument("--output", type=Path)
     cue_checks.add_argument("--retention-threshold", type=float, default=1.0)
 
+    metadata_leakage = subparsers.add_parser(
+        "check-metadata-leakage",
+        help="Check whether metadata values such as id/author appear in text columns.",
+    )
+    metadata_leakage.add_argument("--input", type=Path, required=True)
+    metadata_leakage.add_argument(
+        "--text-col",
+        dest="text_cols",
+        action="append",
+        required=True,
+        help="Text column to scan. Repeat for original and privatized columns.",
+    )
+    metadata_leakage.add_argument(
+        "--metadata-col",
+        dest="metadata_cols",
+        action="append",
+        help="Metadata value column to search for. Defaults to present id/author columns.",
+    )
+    metadata_leakage.add_argument("--id-col")
+    metadata_leakage.add_argument("--output", type=Path)
+    metadata_leakage.add_argument("--min-value-length", type=int, default=3)
+    metadata_leakage.add_argument(
+        "--no-normalized",
+        action="store_true",
+        help="Disable alphanumeric-normalized matching.",
+    )
+
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
         help="Train a local baseline hate-speech classifier on a labeled CSV.",
@@ -649,6 +677,16 @@ def main(argv: list[str] | None = None) -> int:
                 output_path=args.output,
                 retention_threshold=args.retention_threshold,
             )
+        elif args.command == "check-metadata-leakage":
+            result = scan_metadata_leakage(
+                args.input,
+                text_cols=args.text_cols,
+                metadata_cols=args.metadata_cols,
+                id_col=args.id_col,
+                output_path=args.output,
+                min_value_length=args.min_value_length,
+                normalized=not args.no_normalized,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -717,6 +755,7 @@ def main(argv: list[str] | None = None) -> int:
         DpmlmSpikeError,
         HfUtilityError,
         LocalLlmError,
+        MetadataLeakageError,
         OSError,
         PresidioAugmentError,
         PresidioCompareError,

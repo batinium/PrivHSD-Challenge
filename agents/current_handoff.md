@@ -82,6 +82,7 @@ privhsd validate-submission
 privhsd compare-presidio
 privhsd generate-llm-candidates
 privhsd check-hsd-cues
+privhsd check-metadata-leakage
 privhsd prepare-dynahate
 ```
 
@@ -163,6 +164,8 @@ Important slide takeaways:
   running.
 - A26: conservative HSD cue retention checker for target terms, utility cues,
   action terms, and negation/modality terms by row ID.
+- Metadata leakage checker: `check-metadata-leakage` scans values such as `id`
+  and `author` against text columns with exact and normalized matching.
 - A23: official submission checklist in
   `docs/official_submission_checklist.md`.
 - A30: bounded Hugging Face utility evaluator runs on
@@ -202,14 +205,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-79 passed, 1 skipped
+82 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-79 passed, 1 skipped
+82 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -350,6 +353,22 @@ DPMLM bounded evidence:
   candidates
 - verdict: adapter works as an optional candidate source, but current evidence
   says not to submit or scale DPMLM.
+
+Metadata/author leakage evidence:
+
+- `evaluate-author-risk --author-col id` on Dynahate skips with
+  `insufficient_author_rows` because each `id` occurs once; this is expected and
+  means `id` is not a valid author surrogate.
+- `evaluate-author-risk --author-col source` skips with
+  `insufficient_author_labels` because `source` is always `dynahate`.
+- `check-metadata-leakage` found 0 exact/normalized `id` leaks in
+  `data/public_dev/dynahate.csv` `text`.
+- `check-metadata-leakage` found 0 exact/normalized `id` leaks in
+  `data/outputs/dynahate.reranked_presidio.full.csv` for both `text` and
+  `privatized_text`.
+- If official files have `id,author,text,HS`, run direct leakage checks on
+  `id` and `author`, then run `evaluate-author-risk --author-col author` if
+  each author has at least two rows and enough train/dev support.
 
 Local LLM bounded evidence:
 
