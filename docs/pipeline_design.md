@@ -18,6 +18,7 @@ privhsd/
   pipeline.py      single-text privatization API
   rerank.py        row-local candidate generation and reranking
   style.py         deterministic style scrubbing for author cues
+  submission.py    exact-format submission creator/validator
   utility_benchmark.py  optional scikit-learn utility-delta benchmark
 ```
 
@@ -244,6 +245,38 @@ backend detection, runtime, existing privatized-column baseline metrics when
 provided, and structured blockers when no supported local DPMLM backend or
 audited adapter is available.
 
+Create an exact-format upload CSV and manifest:
+
+```bash
+python -m privhsd.cli create-submission \
+  --input data/public_dev/dynahate.csv \
+  --output data/outputs/dynahate.submission.csv \
+  --text-col text \
+  --id-col id \
+  --replace-text \
+  --mode balanced \
+  --manifest data/outputs/dynahate.submission.manifest.json
+```
+
+Validate an exact-format upload CSV:
+
+```bash
+python -m privhsd.cli validate-submission \
+  --source data/public_dev/dynahate.csv \
+  --submission data/outputs/dynahate.submission.csv \
+  --text-col text \
+  --id-col id \
+  --output data/outputs/dynahate.submission.validation.json
+```
+
+`create-submission` requires `--replace-text` and writes the same columns in the
+same order as the source dataset. It supports repeatable `--text-col` for
+official formats with multiple text fields. The manifest records the command,
+git commit, input/output paths and SHA-256 hashes, mode, text columns,
+row-preservation validation, and local aggregate metrics. `validate-submission`
+checks row count, column set/order, ID order, metadata preservation, and helper
+columns; helper columns are rejected by default for upload mode.
+
 ## Local Metrics
 
 `privhsd evaluate`, anonymize audit summaries, and ablation reports use the same
@@ -289,6 +322,8 @@ Output CSV must:
   same row and metadata contract
 - optionally use `rerank-candidates` to choose among row-local deterministic
   and supplied rewrite candidates without adding helper columns by default
+- official upload creation should use `create-submission --replace-text` so the
+  provided text columns are privatized in place and no helper columns are added
 
 ## Modes
 

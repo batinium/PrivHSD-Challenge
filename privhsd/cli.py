@@ -35,6 +35,7 @@ from .hf_utility import (
     write_model_registry,
 )
 from .rerank import RerankError, run_candidate_reranking
+from .submission import SubmissionError, create_submission, validate_submission
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
@@ -192,6 +193,52 @@ def build_parser() -> argparse.ArgumentParser:
     dpmlm.add_argument("--backend", default="auto")
     dpmlm.add_argument("--random-seed", type=int, default=0)
 
+    create_submission_parser = subparsers.add_parser(
+        "create-submission",
+        help="Create an exact-format upload CSV by privatizing text columns in place.",
+    )
+    create_submission_parser.add_argument("--input", type=Path, required=True)
+    create_submission_parser.add_argument("--output", type=Path, required=True)
+    create_submission_parser.add_argument(
+        "--text-col",
+        dest="text_cols",
+        action="append",
+        required=True,
+        help="Text column to privatize in place. Repeatable.",
+    )
+    create_submission_parser.add_argument("--id-col")
+    create_submission_parser.add_argument("--manifest", type=Path)
+    create_submission_parser.add_argument("--replace-text", action="store_true")
+    create_submission_parser.add_argument(
+        "--mode",
+        choices=["utility", "balanced", "privacy"],
+        default="balanced",
+    )
+    create_submission_parser.add_argument("--style-scrub", action="store_true")
+    create_submission_targets = create_submission_parser.add_mutually_exclusive_group()
+    create_submission_targets.add_argument("--generalize-targets", action="store_true")
+    create_submission_targets.add_argument("--preserve-targets", action="store_true")
+
+    validate_submission_parser = subparsers.add_parser(
+        "validate-submission",
+        help="Validate row/order/ID/metadata shape for an exact-format upload CSV.",
+    )
+    validate_submission_parser.add_argument("--source", type=Path, required=True)
+    validate_submission_parser.add_argument("--submission", type=Path, required=True)
+    validate_submission_parser.add_argument(
+        "--text-col",
+        dest="text_cols",
+        action="append",
+        required=True,
+        help="Text column privatized in place. Repeatable.",
+    )
+    validate_submission_parser.add_argument("--id-col")
+    validate_submission_parser.add_argument("--output", type=Path)
+    validate_submission_parser.add_argument(
+        "--allow-helper-columns",
+        action="store_true",
+    )
+
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
         help="Train a local baseline hate-speech classifier on a labeled CSV.",
@@ -251,7 +298,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(argv) if argv is not None else sys.argv[1:]
+    args = parser.parse_args(raw_argv)
     try:
         if args.command == "anonymize":
             generalize_targets = None
@@ -353,6 +401,33 @@ def main(argv: list[str] | None = None) -> int:
                 backend=args.backend,
                 random_seed=args.random_seed,
             )
+        elif args.command == "create-submission":
+            generalize_targets = None
+            if args.generalize_targets:
+                generalize_targets = True
+            elif args.preserve_targets:
+                generalize_targets = False
+            result = create_submission(
+                args.input,
+                args.output,
+                text_cols=args.text_cols,
+                id_col=args.id_col,
+                manifest_path=args.manifest,
+                command=["privhsd", *raw_argv],
+                mode=args.mode,
+                generalize_targets=generalize_targets,
+                style_scrub=args.style_scrub,
+                replace_text=args.replace_text,
+            )
+        elif args.command == "validate-submission":
+            result = validate_submission(
+                args.source,
+                args.submission,
+                text_cols=args.text_cols,
+                id_col=args.id_col,
+                output_path=args.output,
+                allow_helper_columns=args.allow_helper_columns,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -409,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
         HfUtilityError,
         OSError,
         RerankError,
+        SubmissionError,
         ValueError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)

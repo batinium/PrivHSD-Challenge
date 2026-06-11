@@ -77,6 +77,7 @@ Near-term implementation order:
 5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
    reporting. **Done as a bounded blocker/report harness.**
 6. Add exact-format submission validation and final judging narrative.
+   **Submission validation done; judging narrative remains next.**
 
 ## Strategic Gap
 
@@ -225,6 +226,13 @@ through an OpenAI-compatible local endpoint, but the candidate must still pass
 the same validators as deterministic candidates.
 
 ### 7. Exact-Format Submission Validator
+
+Status: implemented as `privhsd create-submission` and
+`privhsd validate-submission`. The creator requires `--replace-text`, supports
+repeatable text columns privatized in place, preserves exact source columns,
+and writes a manifest with command, git commit, file hashes, mode, validation,
+and aggregate metrics. The validator checks row count, column set/order, ID
+order, metadata preservation, and helper-column rejection for upload mode.
 
 Add a final command that verifies official upload files:
 

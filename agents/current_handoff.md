@@ -72,6 +72,8 @@ privhsd hf-model-registry
 privhsd evaluate-hf-utility
 privhsd rerank-candidates
 privhsd dpmlm-spike
+privhsd create-submission
+privhsd validate-submission
 privhsd prepare-dynahate
 ```
 
@@ -129,6 +131,10 @@ Important slide takeaways:
 - A27: bounded DPMLM spike harness with epsilon sweep, protected-cue manifest,
   runtime/blocker reporting, and no core dependency. Current local environment
   has no supported DPMLM backend installed.
+- A28: exact-format submission creator/validator with in-place text-column
+  privatization via `--replace-text`, helper-column rejection, row/order/ID
+  validation, metadata preservation checks, file hashes, git commit, command,
+  mode, and metrics in the manifest.
 
 Recent commits:
 
@@ -146,14 +152,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-44 passed, 1 skipped
+49 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-44 passed, 1 skipped
+49 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -192,9 +198,8 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence:
 
-1. A28: exact-format submission validator/creator.
-2. A08/A22: final pitch/demo and human-rights judging narrative.
-3. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A08/A22: final pitch/demo and human-rights judging narrative.
+2. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that
