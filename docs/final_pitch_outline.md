@@ -28,8 +28,10 @@ python -m privhsd.cli create-submission \
    row count, column preservation, validation, and aggregate metrics.
 4. Show local privacy/utility evidence and reranking results without raw text.
 5. Show optional evaluator behavior: author-risk skips when no author column is
-   present, HF utility skips cleanly when dependencies are absent, and DPMLM is
-   reported as a blocked spike rather than silently entering the core pipeline.
+   present, HF utility gives bounded model-backed drift evidence when installed,
+   Presidio is useful but dependency-heavy and false-positive-prone on HSD cues,
+   and DPMLM is reported as a blocked spike rather than silently entering the
+   core pipeline.
 
 ## Evidence Table
 
@@ -41,6 +43,19 @@ python -m privhsd.cli create-submission \
 
 Exact-format balanced submission validation passed on local Dynahate: 41,144
 rows, same columns/order, no helper columns.
+
+## Model-Backed Evidence
+
+- HF utility on reranked sample 100: Dynabench and CardiffNLP probes both had
+  1.0 agreement, negligible mean score drift, and no large utility-drop rows.
+- Toxic-BERT sample 25 also had 1.0 agreement and no large utility-drop rows,
+  but remains a toxicity proxy rather than an HSD-specific evaluator.
+- HateXplain classifier variants produced structured inference skips in the
+  current Transformers stack, so conservative local cue checks remain the
+  reliable fallback.
+- Presidio sample 100 found more spans than PrivHSD, but 9 of 27 Presidio spans
+  were flagged as false-positive risk on HSD cues/targets and setup pulled a
+  400.7 MB spaCy model.
 
 ## Rights Framing
 
@@ -61,8 +76,10 @@ rows, same columns/order, no helper columns.
 - Local metrics are proxies, not official leaderboard scores.
 - Style scrubbing reduces visible author style but cannot prove anonymity.
 - Author-risk evaluation requires an author column and optional scikit-learn.
-- Hugging Face utility probes require optional model dependencies and license
-  review before full runs.
+- Hugging Face utility probes require optional model dependencies, large local
+  caches, and license review before full runs.
+- Presidio is a detector comparison baseline, not the product; it can over-mask
+  HSD cues and carries a substantial spaCy model dependency.
 - DPMLM is not integrated because no supported local backend is available and no
   audited adapter has proven cue protection, determinism, and runtime quality.
 - Exact-format validation proves shape and metadata preservation; it does not

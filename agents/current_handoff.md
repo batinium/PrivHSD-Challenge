@@ -22,8 +22,8 @@ Untracked files:
 Webinar.txt
 ```
 
-`Webinar.txt` is currently empty. The webinar slide screenshots are outside the
-repo at:
+`Webinar.txt` is untracked and 45,675 bytes; do not commit it unless explicitly
+requested. The webinar slide screenshots are outside the repo at:
 
 ```text
 /mnt/c/Users/noutr/Downloads/Ss
@@ -87,6 +87,8 @@ scikit-learn, external LLM APIs, Presidio, or Hugging Face models.
 `--style-scrub` is available as an optional deterministic author-style
 normalization pass after privacy masking.
 Hugging Face utility probes are optional through `privhsd[hf-utility]`.
+The local `.venv` now has optional HF and Presidio/spaCy dependencies installed
+for experiment runs; these remain outside core runtime requirements.
 
 ## Webinar Correction
 
@@ -156,15 +158,22 @@ Important slide takeaways:
   action terms, and negation/modality terms by row ID.
 - A23: official submission checklist in
   `docs/official_submission_checklist.md`.
+- A30: bounded Hugging Face utility evaluator runs on
+  `data/outputs/dynahate.reranked.csv`; default probes passed sample 25 and
+  sample 100, Toxic-BERT passed sample 25, and HateXplain variants produced
+  structured inference skips.
+- A31: bounded Presidio/spaCy detector comparison on the first 100 Dynahate
+  rows; comparison passed but documented false-positive risk and dependency
+  cost.
 
 Recent commits:
 
 ```text
-f98522a Record Dynahate experiment summaries
-75eaf8d Add official score log template
-dff8fb2 Improve target group generalization policy
-b9254c7 Add local classifier workflows
-1e29e3a Add synthetic PII stress fixtures
+9d69910 Add continuation prompt for model experiments
+f6198f6 Add official submission checklist
+9625803 Add HSD cue retention checks
+9fb1d41 Add local LLM candidate harness
+8412b81 Add Presidio comparison baseline
 ```
 
 ## Verification
@@ -214,6 +223,42 @@ Reranked cue check:
 - action-term retention mean: 0.9995
 - negation/modality retention mean: 1.0001
 
+HF utility on `data/outputs/dynahate.reranked.csv`:
+
+- `.venv` environment: `torch` 2.12.0+cpu, `transformers` 5.11.0, CUDA not
+  available.
+- sample 100 default probes:
+  - `facebook/roberta-hate-speech-dynabench-r4-target`: revision
+    `391c99ab8b3f65beb77746a2cf6ddf1ddf9817e6`, CPU runtime 36.637s,
+    mean delta -0.0005, mean absolute drift 0.0005, agreement 1.0, no large
+    utility-drop rows.
+  - `cardiffnlp/twitter-roberta-base-hate-latest`: revision
+    `cc56585908cbda6d04ba2e1234d911fd1578c9ab`, CPU runtime 41.2954s,
+    mean delta -0.0016, mean absolute drift 0.0019, agreement 1.0, no large
+    utility-drop rows.
+- sample 25 toxicity proxy:
+  - `unitary/toxic-bert`: revision
+    `4d6c22e74ba2fdd26bc4f7238f50766b045a0d94`, CPU runtime 20.6408s,
+    mean delta -0.0, agreement 1.0, no large utility-drop rows.
+- HateXplain classifier variants loaded but skipped during inference with
+  `tuple index out of range`; rely on `check-hsd-cues` as the local cue
+  fallback.
+
+Presidio comparison on `data/public_dev/dynahate.csv` sample 100:
+
+- status: ok
+- runtime after setup: 0.4389s
+- aggregate: PrivHSD spans 1, Presidio spans 27, overlap 1, Presidio-only 26,
+  PrivHSD-only 0, false-positive-risk count 9
+- dependency note: Presidio default initialization downloaded
+  `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, after `en_core_web_sm` was
+  installed.
+
+Local LLM endpoint check:
+
+- `curl --max-time 2 http://127.0.0.1:1234/v1/models` failed with connection
+  refused, so A33 remains blocked until LM Studio or llama.cpp is running.
+
 Generated outputs are under ignored `data/outputs/`.
 
 ## Next Work
@@ -222,18 +267,16 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence while official files are unavailable:
 
-1. A30: install optional HF dependencies in an isolated environment and run
-   bounded `evaluate-hf-utility` model evaluations on Dynahate.
-2. A31: install optional Presidio/spaCy dependencies and run
-   `compare-presidio` on bounded Dynahate samples.
-3. A33: if LM Studio or llama.cpp endpoint is available, run
+1. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+   model-card review, and cache size are acceptable.
+2. A33: if LM Studio or llama.cpp endpoint is available, run
    `generate-llm-candidates`, then rerank with `rerank-candidates`.
-4. A32: investigate a real DPMLM backend/adapter only if cue-token protection
+3. A32: investigate a real DPMLM backend/adapter only if cue-token protection
    and determinism can be audited.
-5. A34/A35: run transformer fine-tuning or attention experiments only as
+4. A34/A35: run transformer fine-tuning or attention experiments only as
    optional evaluators/rerankers/candidate scorers, then document whether they
    improve measured privacy/HSD tradeoff enough to justify complexity.
-6. When official files arrive, return to `create-submission`,
+5. When official files arrive, return to `create-submission`,
    `validate-submission`, upload, and leaderboard-driven iteration.
 
 Do not start by training a new attention model. Use pretrained models to

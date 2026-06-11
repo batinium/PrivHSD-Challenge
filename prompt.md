@@ -33,6 +33,12 @@ Current status:
 - A26 HSD cue checks are complete.
 - A14 Presidio comparison harness is complete.
 - A23 official submission checklist is complete.
+- A30 bounded Hugging Face utility runs are complete on
+  `data/outputs/dynahate.reranked.csv`.
+- A31 bounded Presidio/spaCy comparison is complete on the first 100 local
+  Dynahate rows.
+- A33 is locally blocked unless an LM Studio or llama.cpp OpenAI-compatible
+  endpoint is started.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
 - Current full tests should be `59 passed, 1 skipped`.
@@ -57,89 +63,67 @@ Constraints:
   product replacement unless it clearly improves the measured privacy/HSD
   tradeoff and remains auditable.
 
-## Next Priority: Model-Backed Experiment Runs
+## Next Priority: Remaining Model-Backed Experiment Work
 
-### A30: Hugging Face Utility Evaluator Runs
+### Optional A30 Extension: Hugging Face Utility Evaluator Runs
 
-Install optional dependencies in an isolated environment if practical:
+The local `.venv` has `torch` 2.12.0+cpu and `transformers` 5.11.0 installed.
+Default HF probes passed sample 25 and sample 100 on reranked Dynahate with
+negligible drift, 1.0 agreement, and no large utility-drop rows:
+
+- `facebook/roberta-hate-speech-dynabench-r4-target`: sample 100, revision
+  `391c99ab8b3f65beb77746a2cf6ddf1ddf9817e6`, CPU runtime 36.637s, mean delta
+  -0.0005.
+- `cardiffnlp/twitter-roberta-base-hate-latest`: sample 100, revision
+  `cc56585908cbda6d04ba2e1234d911fd1578c9ab`, CPU runtime 41.2954s, mean
+  delta -0.0016.
+- `unitary/toxic-bert`: sample 25, revision
+  `4d6c22e74ba2fdd26bc4f7238f50766b045a0d94`, CPU runtime 20.6408s, mean delta
+  -0.0.
+
+The two HateXplain classifier variants loaded but produced structured
+`model_inference_failed` skips with `tuple index out of range`; keep
+`check-hsd-cues` as the reliable cue-retention fallback.
+
+Only scale to sample 500 or full runs if CPU runtime, model-card review, cache
+size, and disk budget are acceptable. Reuse the existing command shape:
 
 ```bash
-python -m pip install '.[hf-utility]'
-```
-
-Then run bounded samples first:
-
-```bash
-python -m privhsd.cli hf-model-registry \
-  --output data/outputs/hf_model_registry.json
-
 python -m privhsd.cli evaluate-hf-utility \
   --input data/outputs/dynahate.reranked.csv \
   --text-col text \
   --privatized-col privatized_text \
   --id-col id \
   --label-col label \
-  --sample-size 25 \
-  --output data/outputs/dynahate.reranked.hf_utility.sample25.json
+  --sample-size 500 \
+  --output data/outputs/dynahate.reranked.hf_utility.sample500.json
 ```
-
-Models to try, one at a time first:
-
-- `facebook/roberta-hate-speech-dynabench-r4-target`
-- `cardiffnlp/twitter-roberta-base-hate-latest`
-- `Hate-speech-CNERG/bert-base-uncased-hatexplain`
-- `Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two`
-- `unitary/toxic-bert`
-
-Record:
-
-- model ID and revision if available
-- device
-- runtime
-- sample size
-- score drift
-- agreement
-- large utility-drop row IDs
-- memory/runtime blockers
-
-Scale to sample sizes 100, 500, then full only if runtime and memory are
-reasonable. If model loading fails, keep the structured skip report.
 
 ### A31: Presidio/spaCy Comparison Runs
 
-Install optional dependencies only for this comparison:
+Sample 100 is complete in `.venv` using Presidio/spaCy. Results:
 
-```bash
-python -m pip install '.[presidio]'
-python -m spacy download en_core_web_lg || python -m spacy download en_core_web_sm
-```
+- PrivHSD spans: 1
+- Presidio spans: 27
+- overlap: 1
+- Presidio-only: 26
+- PrivHSD-only: 0
+- false-positive-risk count on HSD cues/targets: 9
+- runtime after setup: 0.4389s
+- dependency cost: Presidio default initialization downloaded
+  `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, even after
+  `en_core_web_sm` was installed
 
-Run bounded comparisons:
-
-```bash
-python -m privhsd.cli compare-presidio \
-  --input data/public_dev/dynahate.csv \
-  --text-col text \
-  --id-col id \
-  --sample-size 100 \
-  --output data/outputs/dynahate.presidio_compare.sample100.json
-```
-
-Record:
-
-- Presidio-only count
-- PrivHSD-only count
-- overlap count
-- false-positive risk on target/action cues
-- runtime
-- dependency and model-size costs
-
-Presidio remains a comparison baseline, not the product.
+Presidio remains a comparison baseline, not the product. Do not integrate it
+into core anonymization unless measured privacy/HSD tradeoff gains justify the
+false-positive and dependency costs.
 
 ### A33: Local LLM Candidate Generation
 
 Only run if a local LM Studio or llama.cpp OpenAI-compatible endpoint is
 available. Do not use remote paid APIs unless explicitly authorized.
+Current local check against `http://127.0.0.1:1234/v1/models` failed with
+connection refused.
 
 Example:
 
@@ -221,6 +205,10 @@ Full Dynahate aggregate evidence already recorded in docs:
   columns/order, no helper columns.
 - reranked cue check: 59 rows with any conservative cue loss; utility-cue
   retention mean 1.0.
+- HF utility sample 100 on reranked output: Dynabench/CardiffNLP agreement 1.0,
+  negligible mean drift, and no large utility-drop rows.
+- Presidio sample 100: 27 Presidio spans, 1 PrivHSD span, 1 overlap,
+  9 false-positive-risk spans, and 400.7 MB `en_core_web_lg` dependency cost.
 
 ## Required Updates Before Stopping
 

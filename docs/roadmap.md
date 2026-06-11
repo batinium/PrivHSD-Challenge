@@ -50,6 +50,22 @@ Additional reranked cue check: 59 rows with any conservative cue loss;
 target-term retention mean 0.9971, utility-cue retention mean 1.0, action-term
 retention mean 0.9995, and negation/modality retention mean 1.0001.
 
+Bounded model-backed evidence added on 2026-06-11:
+
+| Probe | Sample | Status | Mean delta | Agreement | Runtime | Notes |
+| --- | ---: | --- | ---: | ---: | ---: | --- |
+| `facebook/roberta-hate-speech-dynabench-r4-target` | 100 | ok | -0.0005 | 1.0 | 36.637s | CPU, revision `391c99ab8b3f65beb77746a2cf6ddf1ddf9817e6`, no large utility-drop rows. |
+| `cardiffnlp/twitter-roberta-base-hate-latest` | 100 | ok | -0.0016 | 1.0 | 41.2954s | CPU, revision `cc56585908cbda6d04ba2e1234d911fd1578c9ab`, no large utility-drop rows. |
+| `unitary/toxic-bert` | 25 | ok | -0.0 | 1.0 | 20.6408s | CPU toxicity proxy, revision `4d6c22e74ba2fdd26bc4f7238f50766b045a0d94`, no large utility-drop rows. |
+| HateXplain classifier variants | 25 | skipped | n/a | n/a | n/a | Both approved HateXplain probes loaded but failed pipeline inference with `tuple index out of range`; keep conservative cue checks as fallback. |
+
+Presidio/spaCy sample-100 comparison: Presidio found 27 spans, PrivHSD found
+1 span, overlap was 1, Presidio-only spans were 26, PrivHSD-only spans were 0,
+and 9 Presidio detections were flagged as false-positive risk on HSD
+cues/targets. Runtime after model setup was 0.4389s, but Presidio's default
+initialization downloaded `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, after
+the smaller `en_core_web_sm` had already been installed.
+
 ## Model-Backed Plan
 
 Do not train a new attention mechanism first. The available data is better used
@@ -90,17 +106,20 @@ keeping core `privhsd anonymize` deterministic and dependency-light.
 Recommended order:
 
 1. Hugging Face utility model runs:
-   - install optional dependencies in an isolated environment
-   - start with `--sample-size 25` or `100`
-   - run approved models from `hf-model-registry`
-   - record model revisions, device, runtime, score drift, agreement, and
-     utility-drop row IDs
-   - scale only if memory/runtime are acceptable
+   - status: bounded runs complete in `.venv` with CPU Torch and Transformers
+   - default probes passed on sample 25 and 100 with negligible score drift,
+     1.0 agreement, and no large utility-drop rows
+   - `unitary/toxic-bert` passed on sample 25 as a toxicity proxy
+   - HateXplain classifier variants currently produce structured inference
+     skips; use conservative HSD cue checks as the reliable fallback
+   - sample 500 or full runs are optional longer CPU jobs after license and
+     cache-size review
 2. Presidio comparison:
-   - install `privhsd[presidio]` and an English spaCy model
-   - run bounded `compare-presidio`
-   - report overlap, PrivHSD-only spans, Presidio-only spans, false-positive
-     risk on target/action cues, runtime, and dependency cost
+   - status: bounded sample-100 comparison complete
+   - Presidio produced many detector-only spans, but a third of those spans
+     carried false-positive risk on HSD cues/targets in the first 100 rows
+   - dependency cost is high for a comparison baseline because default
+     initialization pulled `en_core_web_lg` 3.8.0
 3. Local LLM candidate generation:
    - use LM Studio or llama.cpp OpenAI-compatible local endpoint only
    - generate schema-checked candidates on bounded samples
@@ -212,7 +231,10 @@ Status: implemented as `privhsd hf-model-registry` and
 The evaluator samples rows by default, records structured skip JSON for missing
 dependencies or model failures, and reports model ID, revision when available,
 device, runtime, sample size, score drift, threshold agreement, and row IDs with
-large utility drops.
+large utility drops. Bounded Dynahate reranked runs now pass for the Dynabench,
+CardiffNLP, and Toxic-BERT probes with negligible score drift and no large
+utility-drop rows; HateXplain classifier variants currently load but fail
+pipeline inference and should remain optional skips.
 
 Add `privhsd evaluate-hf-utility` behind an optional dependency extra. It should
 accept original and privatized columns, run one or more approved local
@@ -305,8 +327,11 @@ Add a final command that verifies official upload files:
 Presidio should be integrated as a comparison backend, not as the product.
 
 Status: implemented as `privhsd compare-presidio` behind the optional
-`privhsd[presidio]` extra. The current local environment lacks Presidio/spaCy,
-so local sample runs write structured dependency skip reports.
+`privhsd[presidio]` extra. The current local `.venv` has Presidio/spaCy
+installed for comparison runs. On the first 100 Dynahate rows, Presidio found
+27 spans versus 1 PrivHSD span, with 1 overlap and 9 false-positive-risk spans
+on HSD cues/targets. Treat this as evidence that Presidio is useful for
+comparison but risky as a direct anonymization backend.
 
 Useful outputs:
 
