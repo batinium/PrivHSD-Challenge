@@ -66,6 +66,31 @@ def test_cue_checks_report_rows_with_loss(tmp_path):
     assert "text" not in result["rows_with_loss"][0]
 
 
+def test_cue_checks_track_historical_victim_group_terms(tmp_path):
+    source = tmp_path / "historical_groups.csv"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["id", "text", "privatized_text"])
+        writer.writerow(
+            [
+                "1",
+                "Holocaust survivors should be attacked.",
+                "Survivors should be attacked.",
+            ]
+        )
+
+    result = run_cue_checks(
+        source,
+        text_col="text",
+        privatized_col="privatized_text",
+        id_col="id",
+    )
+
+    row = result["rows"][0]
+    assert "target_terms" in result["rows_with_loss"][0]["loss_groups"]
+    assert row["groups"]["target_terms"]["lost_terms"] == ["holocaust survivors"]
+
+
 def test_cue_checks_validate_threshold(tmp_path):
     source = tmp_path / "cues.csv"
     write_rows(source)

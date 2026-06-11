@@ -51,6 +51,21 @@ Additional reranked cue check: 59 rows with any conservative cue loss;
 target-term retention mean 0.9971, utility-cue retention mean 1.0, action-term
 retention mean 0.9995, and negation/modality retention mean 1.0001.
 
+Merged public bundle baseline added on 2026-06-11:
+
+| Dataset | Rows | Output | Validation | Changed text cells | Identifier before/after | Target cue retention | Utility cue retention | Character retention |
+| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `data/public_dev/recommended_merged.csv` | 159,668 | `data/outputs/recommended_merged.balanced.csv` | exact format valid | 26,941 | 40,304 -> 5 | 0.9999 | 0.9999 | 0.9721 |
+
+The merged balanced manifest is
+`data/outputs/recommended_merged.balanced.manifest.json`. It reduced direct
+identifier detections from 33,032 to 4 and quasi-identifier detections from
+7,272 to 1. Remaining warning counts: 5 residual privacy rows, 17 target-cue
+loss rows, 1,324 low character-retention rows, 221 high-placeholder-density
+rows, and 210 high-mask-density rows. This makes the merged bundle the new
+default public regression benchmark, while Dynahate remains the cleanest
+single-source comparison to older results.
+
 Bounded model-backed evidence added on 2026-06-11:
 
 | Probe | Sample | Status | Mean delta | Agreement | Runtime | Notes |
@@ -97,6 +112,74 @@ protected HSD/style signals. A looser `min_eligible_score=4` sample accepted
 deterministic alternatives. DPMLM remains optional evidence, not a submission
 path.
 
+## Recommended Merged Dataset Inspection
+
+Path: `data/public_dev/recommended_merged.csv`
+
+Schema:
+
+```text
+id,text,label,source,split,target,type,platform,source_id,severity,target_categories,rationale_spans,meta
+```
+
+Aggregate inspection:
+
+- rows: 159,668
+- file size: 58 MB
+- no blank `text` values
+- no duplicate merged `id` values
+- text length: p25 46, p50 86, p75 154, p95 340, p99 602, max 2,374
+- normalized duplicate text: 519 duplicate groups, 2,343 rows
+- cross-source duplicate text: 64 groups, 245 rows
+- `source_id` is unique within every source, so it is not an author label
+- `rationale_spans` is present for 26,912 rows, mainly HateXplain and Toxic
+  Spans
+- `severity` is present for 39,565 Measuring Hate Speech rows
+- `target_categories` is present for 70,198 rows
+
+Source composition:
+
+| Source | Rows | Labels | Useful metadata |
+| --- | ---: | --- | --- |
+| `dynahate` | 41,144 | hate/not_hate | target/type, train/dev/test split |
+| `measuring_hate_speech` | 39,565 | hate/not_hate/ambiguous | continuous severity, target categories, harm-score metadata |
+| `davidson` | 24,783 | hate/offensive/not_hate | noisy Twitter offensive-vs-hate contrast |
+| `hatexplain` | 20,148 | hate/offensive/not_hate | targets and rationale spans for 56.65% of rows |
+| `toxic_spans` | 16,100 | toxic/not_abusive | toxic-span preservation for 96.27% of rows |
+| `hatemoji_build` | 5,912 | hate/not_hate | emoji/leetspeak adversarial construction |
+| `convabuse` | 4,185 | abuse/not_abuse/ambiguous_abuse | conversational-AI platform, directness/bot metadata |
+| `hatemoji_check` | 3,930 | hate/not_hate | compact emoji functional tests |
+| `hatecheck` | 3,901 | hate/not_hate | compact protected-group and functionality tests |
+
+Global label distribution:
+
+| Label | Rows |
+| --- | ---: |
+| `not_hate` | 57,442 |
+| `hate` | 50,775 |
+| `offensive` | 24,951 |
+| `toxic` | 16,019 |
+| `ambiguous` | 6,215 |
+| `not_abuse` | 3,544 |
+| `abuse` | 580 |
+| `not_abusive` | 81 |
+| `ambiguous_abuse` | 61 |
+
+Important interpretation:
+
+- The bundle is strong for utility, cue-retention, robustness, and legal
+  over-restriction testing.
+- It is still weak for true authorship-risk evaluation because there is no
+  repeated author/user column.
+- `source_id` should not be used as an author adversary target; every source
+  has unique nonblank source IDs.
+- `offensive`, `toxic`, `ambiguous`, and `abuse` labels should not be collapsed
+  blindly into binary hate. They are valuable because they test the legal
+  distinction between offensive speech, toxicity, abuse, and hate speech.
+- The rationale/span fields create a new measurable target: privatization
+  should preserve the words/spans that explain HSD or toxicity labels unless
+  they are true identifiers.
+
 ## Model-Backed Plan
 
 Do not train a new attention mechanism first. The available data is better used
@@ -136,13 +219,71 @@ Near-term implementation order:
 6. Add exact-format submission validation and final judging narrative.
    **Done.**
 
-## Next Experiment Phase Without Official Files
+## Next Experiment Phase With The Merged Public Bundle
 
-Official challenge files are not available yet. Continue by stress-testing the
-optional model-backed paths on local Dynahate and synthetic fixtures, while
-keeping core `privhsd anonymize` deterministic and dependency-light.
+Official challenge files are not available yet, but the merged public bundle is
+now large and diverse enough to become the main local regression suite. Continue
+keeping core `privhsd anonymize` deterministic and dependency-light, but use
+`recommended_merged.csv` to measure behavior by source, label, target category,
+severity band, and rationale/span availability.
 
 Recommended order:
+
+1. Source-aware regression report:
+   - add or script a report over original/protected CSV pairs grouped by
+     `source`, `label`, `split`, `platform`, and `target_categories`
+   - report privacy warnings, target-cue loss, utility-cue retention,
+     character retention, and changed-cell rate per group
+   - start from the completed balanced exact-format output:
+     `data/outputs/recommended_merged.balanced.csv`
+   - use this before tuning, because one global average can hide failures on
+     HateCheck, Hatemoji, HateXplain, or vulnerable-group slices
+2. Rationale/span preservation:
+   - parse `rationale_spans` for HateXplain and Toxic Spans rows
+   - measure whether privatization preserves rationale-bearing tokens/spans
+     after identifier masking
+   - flag cases where a rationale span is replaced by `[PERSON]`,
+     `[LOCATION]`, or another placeholder, because those are either true
+     privacy wins or dangerous utility losses
+   - add this as a stronger utility check than dictionary cue retention alone
+3. Measuring Hate Speech severity drift:
+   - use the `severity` column as a continuous utility target
+   - compare original/protected classifier score drift by severity band, not
+     just binary agreement
+   - explicitly track ambiguous and supportive/counterspeech regions instead
+     of forcing them into hate/not_hate
+4. Legal over-restriction stress tests:
+   - use Davidson `offensive` rows, Toxic Spans `toxic` rows, ConvAbuse
+     ambiguous rows, HateCheck contrastive cases, and Hatemoji perturbations
+     to test that the tool does not equate offense or toxicity with hate
+   - record false-positive-sensitive slices in the final pitch as Article 10
+     evidence
+5. Functional cue regression:
+   - run `check-hsd-cues` on balanced and style-scrubbed outputs grouped by
+     HateCheck functionality and Hatemoji subset
+   - treat any systematic target/action/negation loss in these compact suites
+     as a blocker before official submission
+6. Reranking on the merged bundle:
+   - run bounded source-stratified samples first, then full merged reranking if
+     runtime is acceptable
+   - compare `balanced`, `style_scrubbed`, `privacy`, `target_generalized`,
+     and `presidio_augmented` by source and label
+   - do not select a global alternate unless it improves hard slices without
+     harming Article 10-sensitive offensive/counterspeech slices
+7. HF utility model runs:
+   - status on Dynahate: bounded runs complete in `.venv` with CPU Torch and
+     Transformers
+   - next: run stratified samples from `recommended_merged.csv`, not only the
+     first N rows
+   - keep model results source-aware because toxicity, offensive language,
+     abuse, and hate labels are not interchangeable
+8. Author-risk search remains open:
+   - this merged bundle does not provide repeated author IDs
+   - keep `evaluate-author-risk` ready for official data or a later dataset
+     with stable repeated user labels
+   - do not misuse unique `source_id` as an author label
+
+Longer-running optional paths:
 
 1. Hugging Face utility model runs:
    - status: bounded runs complete in `.venv` with CPU Torch and Transformers
@@ -205,6 +346,12 @@ Recommended order:
 For every experiment, write outputs under ignored `data/outputs/`, avoid raw
 official examples, keep downloaded weights/caches out of git, and update
 `agents/current_handoff.md` with concise aggregate results.
+
+Scaling note from the first full merged run: `create-submission` completed and
+validated exact format on 159,668 rows, but it performs all row transformations
+and aggregate metrics before writing the output file. If merged-bundle
+experiments become iterative, add streaming output plus optional metric
+sampling/grouped summaries so full-dataset runs are not the bottleneck.
 
 ## Strategic Gap
 

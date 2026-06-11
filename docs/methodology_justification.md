@@ -12,6 +12,12 @@ For the mentor-adjacent DP NLP literature map, see
 DPMLM, word-level metric DP, privacy-budget allocation, LLM prompting,
 post-processing, and privacy evaluation papers map to the current pipeline.
 
+For the human-rights and legal test framing, see
+`docs/human_rights_legal_test_plan.md`. That note maps ECtHR Article 10,
+Articles 8/13/14, Delfi, Google LLC v. Russia, the Council of Europe Framework
+Convention on AI, and HUDERIA into concrete acceptance criteria for this proof
+of concept.
+
 ## Core Principle
 
 The task is not generic redaction. The privacy target is reducing
@@ -19,6 +25,14 @@ author-identifying signal, while the utility target is preserving hate-speech
 detection signal. Hate speech is often defined by a target group plus hostile
 action, dehumanization, threat, exclusion, or modality. Preserving those cues is
 therefore intentional, not accidental.
+
+This is also a legal safeguard. The project must not over-restrict expression:
+offensive, insulting, vulgar, shocking, political, satirical, or public-interest
+speech is not hate speech merely because the words are unpleasant. At the same
+time, erasing target-group and hostile-action evidence can cause the opposite
+failure: under-detection of hatred directed at vulnerable or historically
+targeted groups. The default method therefore preserves legally relevant context
+and leaves legal classification to human review.
 
 Academic support:
 

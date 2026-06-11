@@ -55,6 +55,29 @@ The public leaderboard is only one signal. A strong submission must also show:
 - transparent limitations and follow-up plan
 - practical deployability, not just a report
 
+## Human-Rights Acceptance Criteria
+
+The tool must be framed and tested as a privacy-preserving preprocessing layer,
+not an automated takedown or legal classification system.
+
+It should pass these legal-design checks:
+
+- It does not equate offensive, insulting, vulgar, shocking, political,
+  satirical, or public-interest speech with hate speech by default.
+- It preserves target/action/negation/modality cues so downstream HSD systems do
+  not miss threats, exclusion, dehumanisation, or vilification aimed at
+  vulnerable or historically targeted groups.
+- It treats missing speaker, recipient, audience, and social-context data as
+  uncertainty, not as permission to make a definitive legal conclusion.
+- It keeps row-level reasons, typed placeholders, manifests, hashes, and metrics
+  available for audit.
+- It identifies where human reviewers must step in: high-risk protected-group
+  targeting, threats, large semantic drift, uncertain context, and any
+  moderation consequence beyond dataset anonymisation.
+
+See `docs/human_rights_legal_test_plan.md` for the detailed ECtHR,
+Framework Convention, and HUDERIA mapping.
+
 ## Webinar Method Notes
 
 - Presidio-style entity redaction is not enough on its own.

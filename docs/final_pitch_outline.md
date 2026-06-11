@@ -81,15 +81,21 @@ rows, same columns/order, no helper columns.
 
 - Privacy: protect people from author attribution and direct/quasi identifiers,
   not just obvious names or handles.
-- Free expression: preserve target/action/negation/modality cues so protective
-  moderation tools can still detect hate speech.
+- Free expression: the tool does not treat offense, insult, vulgarity,
+  political disagreement, satire, counterspeech, or public-interest reporting as
+  hate speech on its own.
 - Non-discrimination: preserve target-group evidence for HSD utility by default
-  and generalize targets only in explicit privacy modes.
+  and generalize targets only in explicit privacy modes, because under-detection
+  against vulnerable or historically targeted groups can itself be a rights
+  failure.
 - Transparency: deterministic default, typed placeholders, audit JSON, manifests,
   hashes, and row-level warning categories.
-- Human oversight: reports identify residual risks and utility drops by row ID
-  without exposing raw text, so reviewers can inspect sensitive failures in a
-  controlled environment.
+- Proportionality: preserve target/action/negation/modality cues so any
+  downstream review can distinguish hate, counterspeech, quotation, satire, and
+  lawful criticism before imposing consequences.
+- Human oversight: reports identify residual risks, missing context, high-risk
+  protected-group targeting, and utility drops by row ID without exposing raw
+  text, so reviewers can inspect sensitive failures in a controlled environment.
 
 ## Limitations
 

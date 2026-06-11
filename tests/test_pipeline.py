@@ -43,6 +43,16 @@ def test_context_person_masks_single_token_self_identification():
     assert "Muslims should leave" in result.text
 
 
+def test_balanced_preserves_historical_victim_group_terms():
+    text = "Alex Vale wrote that Holocaust survivors should be attacked."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Alex Vale" not in result.text
+    assert "[PERSON]" in result.text
+    assert "Holocaust survivors" in result.text
+    assert "attacked" in result.text
+
+
 def test_context_location_does_not_mask_target_terms():
     text = "I live in Muslim neighborhoods and they should leave."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))
@@ -71,6 +81,14 @@ def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():
 
 def test_privacy_mode_generalizes_broad_gender_terms_in_hostile_context():
     text = "Women do not belong in the public meeting."
+    result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert "Women" not in result.text
+    assert "[TARGET_GROUP:gender]" in result.text
+
+
+def test_privacy_mode_generalizes_contextual_gender_terms_for_violence():
+    text = "Women should be killed."
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))
 
     assert "Women" not in result.text
