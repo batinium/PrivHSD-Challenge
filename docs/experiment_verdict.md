@@ -9,6 +9,7 @@ LLM outputs and row-level reports remain under ignored `data/outputs/`.
 | --- | --- | --- | --- | --- | --- |
 | `balanced` exact-format | Full Dynahate submission validation passed: 41,144 rows, same columns/order, no helper columns. | Strong local utility; target retention 0.9994. | Residual IDs 3, residual quasi IDs 0. | Local deterministic, dependency-light. | First official submission candidate. |
 | `rerank-candidates` | Full Dynahate rerank chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. | Local macro-F1 delta +0.0019; cue checks stable. | Residual IDs 3, residual quasi IDs 0; extra style pressure on selected rows. | Local deterministic, slower than `balanced` but practical. | Strongest alternate if official scores reward style pressure. |
+| `rerank-candidates --presidio-augment` | Full Dynahate rerank chose `presidio_augmented` for 6,085 rows, `balanced` for 31,821, `style_scrubbed` for 3,219, `privacy` for 19. | Local macro-F1 delta +0.0048; utility-cue retention 1.0; target-term retention 0.9974. | Masks extra names/locations/dates while preserving `NRP` target cues; residual IDs 3, residual quasi IDs 0. | Optional Presidio/spaCy dependency; full run is CPU-heavy but practical. | Strongest experimental alternate; submit after `balanced` if official scoring rewards stronger masking. |
 | HF utility probes | Dynabench/Cardiff sample 100; Toxic-BERT sample 25. | Agreement 1.0, negligible drift, no large utility-drop rows. | Evaluation only, not anonymization. | Optional heavy dependencies and HF cache. | Supports utility-retention story; do not make core. |
 | Weak token-action tagger | Sample 5,000 rows, 67,415 tokens; weak labels from local detectors/cue protectors; dev macro-F1 0.8556. | Learns `PROTECT_HSD` well on weak labels; `PROTECT_TARGET` F1 0.7810; context generalization F1 0.5823. | Not official privacy supervision; only imitates current rules plus cue protectors. | Optional `scikit-learn`, 18.0s, 1.4 MB model. | Useful next detector/reranker feature, not a replacement anonymizer. |
 | Presidio comparison | Sample 500: Presidio spans 174, PrivHSD spans 8, overlap 6. | 52 of 174 Presidio spans flagged as HSD cue/target false-positive risk. | Catches extra entity-like spans but risks overmasking. | Pulled `en_core_web_lg` 3.8.0, 400.7 MB; sample 500 runtime 1.4907s after setup. | Keep as baseline evidence, not product. |
@@ -21,9 +22,7 @@ LLM outputs and row-level reports remain under ignored `data/outputs/`.
 ## Next Step
 
 When official files arrive, create and validate `balanced` exact-format output
-first. If there is time after an official score, submit or compare
-`rerank-candidates` as the alternate. Do not spend more compute on local LLM
-generation unless a model produces a much higher accepted-and-selected rate on
-a bounded sample. The next implementation bet is to use the weak token-action
-tagger as a reranker/scorer feature, then test whether protected-token DPMLM can
-beat deterministic reranking on a tiny audited sample.
+first. If there is time after an official score, compare or submit
+`rerank-candidates --presidio-augment` as the stronger alternate. Keep DPMLM out
+of the submission path until a protected-cue adapter with a real model beats
+this reranked Presidio result.

@@ -43,6 +43,7 @@ from .local_llm import (
     run_local_llm_candidates,
 )
 from .presidio_compare import PresidioCompareError, run_presidio_comparison
+from .presidio_augment import PresidioAugmentError
 from .rerank import RerankError, run_candidate_reranking
 from .submission import SubmissionError, create_submission, validate_submission
 from .token_actions import (
@@ -73,6 +74,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--style-scrub",
         action="store_true",
         help="Normalize style-bearing author cues after privacy masking.",
+    )
+    anonymize.add_argument(
+        "--presidio-augment",
+        action="store_true",
+        help="Add filtered optional Presidio PERSON/LOCATION/DATE spans.",
     )
     anonymize.add_argument(
         "--mode",
@@ -174,6 +180,11 @@ def build_parser() -> argparse.ArgumentParser:
     rerank.add_argument("--id-col")
     rerank.add_argument("--output-col", default="privatized_text")
     rerank.add_argument("--replace-text", action="store_true")
+    rerank.add_argument(
+        "--presidio-augment",
+        action="store_true",
+        help="Add a filtered Presidio candidate when optional dependencies exist.",
+    )
     rerank.add_argument("--author-col")
     rerank.add_argument(
         "--candidate-col",
@@ -230,6 +241,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="balanced",
     )
     create_submission_parser.add_argument("--style-scrub", action="store_true")
+    create_submission_parser.add_argument(
+        "--presidio-augment",
+        action="store_true",
+        help="Add filtered optional Presidio PERSON/LOCATION/DATE spans.",
+    )
     create_submission_targets = create_submission_parser.add_mutually_exclusive_group()
     create_submission_targets.add_argument("--generalize-targets", action="store_true")
     create_submission_targets.add_argument("--preserve-targets", action="store_true")
@@ -398,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
                 mode=args.mode,
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
+                presidio_augment=args.presidio_augment,
             )
         elif args.command == "evaluate":
             result = evaluate_csv(
@@ -468,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
                 author_col=args.author_col,
                 candidate_cols=args.candidate_cols,
                 audit_path=args.audit,
+                presidio_augment=args.presidio_augment,
             )
         elif args.command == "dpmlm-spike":
             result = run_dpmlm_spike(
@@ -498,6 +516,7 @@ def main(argv: list[str] | None = None) -> int:
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
                 replace_text=args.replace_text,
+                presidio_augment=args.presidio_augment,
             )
         elif args.command == "validate-submission":
             result = validate_submission(
@@ -610,6 +629,7 @@ def main(argv: list[str] | None = None) -> int:
         HfUtilityError,
         LocalLlmError,
         OSError,
+        PresidioAugmentError,
         PresidioCompareError,
         RerankError,
         SubmissionError,

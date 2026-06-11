@@ -5,10 +5,12 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from collections import Counter
 from typing import Any
 
 from .metrics import aggregate_metrics, row_metric
 from .pipeline import PrivatizerConfig, privatize_text
+from .presidio_augment import filtered_presidio_spans, load_presidio_analyzer
 
 
 class CsvPipelineError(ValueError):
@@ -50,6 +52,8 @@ def process_csv(
     mode: str = "balanced",
     generalize_targets: bool | None = None,
     style_scrub: bool = False,
+    presidio_augment: bool = False,
+    presidio_language: str = "en",
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
     if text_col not in fieldnames:
@@ -69,12 +73,27 @@ def process_csv(
     audit_rows: list[dict[str, Any]] = []
     metric_rows: list[dict[str, Any]] = []
     output_rows: list[dict[str, Any]] = []
+    presidio_analyzer = load_presidio_analyzer() if presidio_augment else None
+    presidio_counts: Counter[str] = Counter()
+    presidio_rejected_counts: Counter[str] = Counter()
 
     for index, row in enumerate(rows, start=1):
         original = row.get(text_col, "")
         if original is None:
             original = ""
-        result = privatize_text(str(original), config)
+        extra_spans = []
+        presidio_report = None
+        if presidio_analyzer:
+            extra_spans, presidio_report = filtered_presidio_spans(
+                str(original),
+                presidio_analyzer,
+                language=presidio_language,
+            )
+            presidio_counts.update(presidio_report["accepted_counts_by_type"])
+            presidio_rejected_counts.update(
+                presidio_report["rejected_counts_by_reason"]
+            )
+        result = privatize_text(str(original), config, extra_spans=extra_spans)
         out_row = dict(row)
         if replace_text:
             out_row[text_col] = result.text
@@ -86,16 +105,17 @@ def process_csv(
         row_metrics = row_metric(str(original), result.text)
         row_metrics.update(result.metrics)
         metric_rows.append(row_metrics)
-        audit_rows.append(
-            {
-                "row_id": row_id,
-                "row_index": index,
-                "mode": mode,
-                "changed": result.metrics["changed"],
-                "metrics": row_metrics,
-                "transformations": list(result.transformations),
-            }
-        )
+        audit_row = {
+            "row_id": row_id,
+            "row_index": index,
+            "mode": mode,
+            "changed": result.metrics["changed"],
+            "metrics": row_metrics,
+            "transformations": list(result.transformations),
+        }
+        if presidio_report:
+            audit_row["presidio_augment"] = presidio_report
+        audit_rows.append(audit_row)
 
     write_csv(output_path, output_rows, output_fieldnames)
     summary = {
@@ -108,6 +128,12 @@ def process_csv(
         "mode": mode,
         "generalize_targets": config.target_generalization_enabled,
         "style_scrub": style_scrub,
+        "presidio_augment": {
+            "enabled": presidio_augment,
+            "language": presidio_language if presidio_augment else None,
+            "accepted_counts_by_type": dict(sorted(presidio_counts.items())),
+            "rejected_counts_by_reason": dict(sorted(presidio_rejected_counts.items())),
+        },
         "metrics": aggregate_metrics(metric_rows),
     }
     if audit_path:

@@ -29,9 +29,9 @@ python -m privhsd.cli create-submission \
 4. Show local privacy/utility evidence and reranking results without raw text.
 5. Show optional evaluator behavior: author-risk skips when no author column is
    present, HF utility gives bounded model-backed drift evidence when installed,
-   Presidio is useful but dependency-heavy and false-positive-prone on HSD cues,
-   and DPMLM is reported as a blocked spike rather than silently entering the
-   core pipeline.
+   raw Presidio is dependency-heavy and false-positive-prone on HSD cues, but
+   filtered Presidio can safely feed reranking, and DPMLM is reported as a
+   blocked spike rather than silently entering the core pipeline.
 
 ## Evidence Table
 
@@ -40,6 +40,7 @@ python -m privhsd.cli create-submission \
 | `balanced` | 3 | 0 | 0.9994 | 0.9953 | -0.0008 |
 | `balanced --style-scrub` | 3 | 0 | 0.9994 | 0.9434 | +0.0017 |
 | `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 |
+| `rerank-candidates --presidio-augment` | 3 | 0 | 0.9997 | 0.9755 | +0.0048 |
 
 Exact-format balanced submission validation passed on local Dynahate: 41,144
 rows, same columns/order, no helper columns.
@@ -56,6 +57,10 @@ rows, same columns/order, no helper columns.
 - Presidio sample 100 found more spans than PrivHSD, but 9 of 27 Presidio spans
   were flagged as false-positive risk on HSD cues/targets and setup pulled a
   400.7 MB spaCy model.
+- Filtered Presidio augmentation rejects `NRP`/protected-cue overlaps and feeds
+  only likely names, locations, and durable dates into reranking. Full Dynahate
+  reranking selected the Presidio candidate for 6,085 rows and improved local
+  macro-F1 delta to +0.0048.
 - Local LLM candidate generation works through LM Studio after JSON-schema
   compatibility hardening, but `openai/gpt-oss-20b` accepted only 3/10 sample
   candidates and reranking selected none of them over deterministic candidates.
@@ -81,18 +86,18 @@ rows, same columns/order, no helper columns.
 - Author-risk evaluation requires an author column and optional scikit-learn.
 - Hugging Face utility probes require optional model dependencies, large local
   caches, and license review before full runs.
-- Presidio is a detector comparison baseline, not the product; it can over-mask
-  HSD cues and carries a substantial spaCy model dependency.
+- Raw Presidio is not the product; filtered Presidio is optional and carries a
+  substantial spaCy model dependency.
 - Local LLM output is candidate-only; current bounded runs are too low-yield to
   justify scaling or direct submission.
-- DPMLM is not integrated because no supported local backend is available and no
-  audited adapter has proven cue protection, determinism, and runtime quality.
+- DPMLM is not integrated because the installed backend still needs an audited
+  adapter that proves cue protection, determinism, and runtime quality.
 - Exact-format validation proves shape and metadata preservation; it does not
   certify privacy or fairness by itself.
 
 ## Recommended Submission Path
 
 Use `balanced` exact-format output first unless official scores show a better
-tradeoff. Keep `rerank-candidates` as the strongest local tradeoff candidate for
-additional author-style pressure, then submit only after exact-format validation
-and manifest review pass.
+tradeoff. Keep `rerank-candidates --presidio-augment` as the strongest local
+alternate, then submit only after exact-format validation and manifest review
+pass.

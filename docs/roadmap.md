@@ -44,6 +44,7 @@ Latest local Dynahate summary:
 | `balanced` | 3 | 0 | 0.9994 | 0.9953 | -0.0008 | Prior full Dynahate run. |
 | `balanced --style-scrub` | 3 | 0 | 0.9994 | 0.9434 | +0.0017 | Stronger style normalization; 77 changed local predictions. |
 | `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 | Chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. |
+| `rerank-candidates --presidio-augment` | 3 | 0 | 0.9997 | 0.9755 | +0.0048 | Chose `presidio_augmented` for 6,085 rows; utility-cue retention 1.0. |
 | `create-submission --replace-text --mode balanced` | 3 | 0 | 0.9994 | 0.9953 | n/a | Exact-format validation passed: 41,144 rows, same columns/order, no helper columns. |
 
 Additional reranked cue check: 59 rows with any conservative cue loss;
@@ -71,6 +72,15 @@ Presidio/spaCy sample-500 comparison: Presidio found 174 spans, PrivHSD found
 2, and 52 Presidio detections were flagged as false-positive risk on HSD
 cues/targets. Runtime after setup was 1.4907s.
 
+Filtered Presidio augmentation full run: raw Presidio `NRP` spans and
+target/action cue overlaps are rejected, while likely `PERSON`, `LOCATION`, and
+durable `DATE_TIME` spans are added as optional masks. Full Dynahate reranking
+selected `presidio_augmented` for 6,085 rows, with local macro-F1 delta
++0.0048, utility-cue retention 1.0, target-term retention 0.9974, and
+character retention 0.9755. Concrete fixed misses include `Amy`, `Steven`,
+`Mustafa`, `Britain`, `Caribbean`, and `the 1950s`; concrete rejected false
+positives include `Muslims`/`Hindus` target terms, `ngl`, and `sl33p`.
+
 Weak token-action tagger sample-5,000 training: 67,415 weakly labeled tokens,
 dev accuracy 0.9888, macro-F1 0.8556, `PROTECT_HSD` F1 0.9890,
 `PROTECT_TARGET` F1 0.7810, `MASK_IDENTIFIER` F1 0.8000 on only two dev
@@ -96,6 +106,7 @@ for evaluation, reranking, and small calibration tests. The practical plan is:
 | HateXplain models | Target/rationale cue checks and explainability support. | Optional |
 | `unitary/toxic-bert` or Detoxify | Toxicity proxy for weak-signal comparison only. | Optional |
 | Weak token-action tagger | Optional detector/reranker feature trained from weak local labels. | No |
+| Filtered Presidio augmentation | Optional high-recall entity candidate for reranking/submission alternates. | No |
 | DPMLM | Bounded rewrite spike with epsilon/runtime/utility reports. | No |
 | Local LLM through LM Studio or llama.cpp | Schema-constrained candidate generation only. | No |
 
@@ -140,6 +151,9 @@ Recommended order:
      false-positive-risk spans
    - dependency cost is high for a comparison baseline because default
      initialization pulled `en_core_web_lg` 3.8.0
+   - filtered augmentation is implemented behind `--presidio-augment`; full
+     reranking selected it for 6,085 rows and improved local macro-F1 delta to
+     +0.0048 while preserving utility cues
 3. Local LLM candidate generation:
    - status: bounded LM Studio run complete against
      `http://100.120.207.64:1234`
@@ -384,6 +398,12 @@ On the first 500 Dynahate rows, Presidio found 174 spans versus 8 PrivHSD
 spans, with 6 overlaps and 52 false-positive-risk spans on HSD cues/targets.
 The larger sample strengthens the same conclusion: Presidio is useful evidence,
 but direct replacement would likely overmask utility-bearing content.
+
+Status update: filtered Presidio augmentation is now implemented on
+`anonymize`, `rerank-candidates`, and `create-submission` via
+`--presidio-augment`. It rejects `NRP`, protected cue overlaps, transient dates,
+and common shape false positives, then allows reranking to decide whether the
+augmented candidate is worth the utility drift.
 
 Useful outputs:
 

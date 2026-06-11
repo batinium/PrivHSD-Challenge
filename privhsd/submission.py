@@ -6,11 +6,13 @@ from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 import subprocess
+from collections import Counter
 from typing import Any
 
 from .csv_pipeline import read_csv, write_csv, write_json
 from .metrics import aggregate_metrics, row_metric
 from .pipeline import PrivatizerConfig, privatize_text
+from .presidio_augment import filtered_presidio_spans, load_presidio_analyzer
 
 
 class SubmissionError(ValueError):
@@ -193,6 +195,8 @@ def create_submission(
     generalize_targets: bool | None = None,
     style_scrub: bool = False,
     replace_text: bool = False,
+    presidio_augment: bool = False,
+    presidio_language: str = "en",
 ) -> dict[str, Any]:
     if not replace_text:
         raise SubmissionError("create-submission requires --replace-text")
@@ -209,11 +213,25 @@ def create_submission(
     output_rows: list[dict[str, Any]] = []
     metric_rows: list[dict[str, Any]] = []
     changed_text_cells = 0
+    presidio_analyzer = load_presidio_analyzer() if presidio_augment else None
+    presidio_counts: Counter[str] = Counter()
+    presidio_rejected_counts: Counter[str] = Counter()
     for row in rows:
         output_row = dict(row)
         for column in text_cols:
             original = str(row.get(column, "") or "")
-            result = privatize_text(original, config)
+            extra_spans = []
+            if presidio_analyzer:
+                extra_spans, presidio_report = filtered_presidio_spans(
+                    original,
+                    presidio_analyzer,
+                    language=presidio_language,
+                )
+                presidio_counts.update(presidio_report["accepted_counts_by_type"])
+                presidio_rejected_counts.update(
+                    presidio_report["rejected_counts_by_reason"]
+                )
+            result = privatize_text(original, config, extra_spans=extra_spans)
             output_row[column] = result.text
             metric_rows.append(row_metric(original, result.text))
             if original != result.text:
@@ -252,6 +270,12 @@ def create_submission(
         "mode": mode,
         "generalize_targets": config.target_generalization_enabled,
         "style_scrub": style_scrub,
+        "presidio_augment": {
+            "enabled": presidio_augment,
+            "language": presidio_language if presidio_augment else None,
+            "accepted_counts_by_type": dict(sorted(presidio_counts.items())),
+            "rejected_counts_by_reason": dict(sorted(presidio_rejected_counts.items())),
+        },
         "replace_text": replace_text,
         "changed_text_cells": changed_text_cells,
         "metrics": aggregate_metrics(metric_rows),

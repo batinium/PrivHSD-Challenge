@@ -57,6 +57,12 @@ repeated letters, emoji/symbol bursts, self-tags, signatures, and common
 idiolect markers while preserving placeholders, target-group terms, negation,
 modality, and hate/action cues.
 
+`--presidio-augment` is also optional and requires `privhsd[presidio]`. It adds
+filtered Presidio `PERSON`, `LOCATION`, and durable `DATE_TIME` spans while
+preserving Presidio `NRP` spans and target/action cue overlaps. Use it for an
+augmented run or as a reranker candidate, not as an unconditional raw Presidio
+replacement.
+
 Evaluate a privatized CSV:
 
 ```bash
@@ -238,12 +244,15 @@ python -m privhsd.cli rerank-candidates \
   --output data/outputs/dynahate.reranked.csv \
   --text-col text \
   --id-col id \
+  --presidio-augment \
   --audit data/outputs/dynahate.rerank.audit.json
 ```
 
 `rerank-candidates` generates deterministic `balanced`, `style_scrubbed`,
 `privacy`, and `target_generalized` candidates per row. Optional rewrite
 candidate columns can be supplied with repeatable `--candidate-col` arguments.
+If `--presidio-augment` is set, it also generates a filtered
+`presidio_augmented` candidate using accepted Presidio spans only.
 The scorer penalizes residual identifiers, residual style signals, optional
 author-risk confidence when an author column and scikit-learn are available,
 target/action cue loss, and length/character drift. It writes only the chosen

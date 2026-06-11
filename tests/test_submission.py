@@ -1,4 +1,5 @@
 import csv
+from dataclasses import dataclass
 import json
 
 import pytest
@@ -9,6 +10,22 @@ from privhsd.submission import (
     create_submission,
     validate_submission,
 )
+
+
+@dataclass(frozen=True)
+class FakePresidioResult:
+    start: int
+    end: int
+    entity_type: str
+    score: float = 0.85
+
+
+class FakePresidioAnalyzer:
+    def analyze(self, *, text, language):
+        if "Amy" not in text:
+            return []
+        start = text.index("Amy")
+        return [FakePresidioResult(start, start + len("Amy"), "PERSON")]
 
 
 def write_source(path):
@@ -51,6 +68,7 @@ def test_submission_commands_are_registered():
             "--text-col",
             "text",
             "--replace-text",
+            "--presidio-augment",
         ]
     )
     validate_args = parser.parse_args(
@@ -67,6 +85,7 @@ def test_submission_commands_are_registered():
 
     assert create_args.command == "create-submission"
     assert create_args.text_cols == ["text"]
+    assert create_args.presidio_augment is True
     assert validate_args.command == "validate-submission"
 
 
@@ -109,6 +128,45 @@ def test_create_submission_privatizes_in_place_and_writes_manifest(tmp_path):
     assert manifest["output"]["sha256"]
     assert manifest["validation"]["valid"] is True
     assert manifest["metrics"]["row_count"] == 2
+
+
+def test_create_submission_can_use_filtered_presidio_augmentation(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "source.csv"
+    output = tmp_path / "submission.csv"
+    manifest_path = tmp_path / "manifest.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label", "meta"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "id": "1",
+                "text": "i'm going to kill Amy",
+                "label": "nothate",
+                "meta": "keep",
+            }
+        )
+    monkeypatch.setattr(
+        "privhsd.submission.load_presidio_analyzer",
+        lambda: FakePresidioAnalyzer(),
+    )
+
+    manifest = create_submission(
+        source,
+        output,
+        text_cols=["text"],
+        id_col="id",
+        manifest_path=manifest_path,
+        replace_text=True,
+        presidio_augment=True,
+    )
+
+    rows = read_rows(output)
+    assert rows[0]["text"] == "i'm going to kill [PERSON]"
+    assert manifest["presidio_augment"]["accepted_counts_by_type"] == {"PERSON": 1}
+    assert manifest["validation"]["valid"] is True
 
 
 def test_create_submission_requires_replace_text(tmp_path):

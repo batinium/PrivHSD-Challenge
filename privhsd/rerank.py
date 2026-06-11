@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from pathlib import Path
 import re
@@ -14,6 +14,10 @@ from .author_risk import AuthorRiskError, build_author_classifier, load_sklearn
 from .csv_pipeline import read_csv, write_csv, write_json
 from .metrics import aggregate_metrics, row_metric
 from .pipeline import PrivatizerConfig, privatize_text
+from .presidio_augment import (
+    filtered_presidio_spans,
+    load_presidio_analyzer,
+)
 from .style import (
     EMOJI_PATTERN,
     HASHTAG_PATTERN,
@@ -34,6 +38,7 @@ class Candidate:
     name: str
     text: str
     source: str
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -103,6 +108,8 @@ def generate_candidates(
     text: str,
     *,
     rewrite_candidates: dict[str, str] | None = None,
+    presidio_analyzer: Any | None = None,
+    presidio_language: str = "en",
 ) -> list[Candidate]:
     generated = [
         Candidate(
@@ -132,6 +139,25 @@ def generate_candidates(
             source="deterministic",
         ),
     ]
+    if presidio_analyzer:
+        extra_spans, presidio_report = filtered_presidio_spans(
+            text,
+            presidio_analyzer,
+            language=presidio_language,
+        )
+        if extra_spans:
+            generated.append(
+                Candidate(
+                    name="presidio_augmented",
+                    text=privatize_text(
+                        text,
+                        PrivatizerConfig(mode="balanced"),
+                        extra_spans=extra_spans,
+                    ).text,
+                    source="presidio",
+                    metadata=presidio_report,
+                )
+            )
     seen = {(candidate.name, candidate.text) for candidate in generated}
     for column, value in (rewrite_candidates or {}).items():
         candidate = Candidate(
@@ -159,6 +185,7 @@ def score_candidate(
 ) -> dict[str, Any]:
     metrics = row_metric(original, candidate.text)
     style_count = style_risk_count(candidate.text)
+    presidio_accepted_count = int(candidate.metadata.get("accepted_span_count", 0))
     author_confidence = None
     if author and author_scorer:
         author_confidence = author_scorer.true_author_confidence(candidate.text, author)
@@ -178,8 +205,10 @@ def score_candidate(
         + metrics["utility_cue_retention"] * 2.0
         + metrics["character_utility_retention"] * 0.75
     )
+    privacy_bonus = min(presidio_accepted_count, 4) * 0.55
     score = (
         utility_reward
+        + privacy_bonus
         - privacy_penalty
         - target_loss_penalty
         - cue_loss_penalty
@@ -205,6 +234,11 @@ def score_candidate(
             "length_drift": rounded(length_drift(original, candidate.text)),
             "style_risk_count": style_count,
             "style_risk_counts": style_risk_counts(candidate.text),
+            "presidio_accepted_span_count": presidio_accepted_count,
+            "presidio_rejected_counts_by_reason": candidate.metadata.get(
+                "rejected_counts_by_reason",
+                {},
+            ),
             "author_risk_confidence": (
                 rounded(author_confidence) if author_confidence is not None else None
             ),
@@ -294,6 +328,8 @@ def run_candidate_reranking(
     author_col: str | None = None,
     candidate_cols: list[str] | None = None,
     audit_path: Path | None = None,
+    presidio_augment: bool = False,
+    presidio_language: str = "en",
 ) -> dict[str, Any]:
     candidate_cols = candidate_cols or []
     rows, fieldnames = read_csv(input_path)
@@ -310,6 +346,7 @@ def run_candidate_reranking(
         text_col=text_col,
         author_col=author_col,
     )
+    presidio_analyzer = load_presidio_analyzer() if presidio_augment else None
     output_fieldnames = list(fieldnames)
     if not replace_text and output_col not in output_fieldnames:
         output_fieldnames.append(output_col)
@@ -328,6 +365,8 @@ def run_candidate_reranking(
         candidates = generate_candidates(
             original,
             rewrite_candidates=rewrite_candidates,
+            presidio_analyzer=presidio_analyzer,
+            presidio_language=presidio_language,
         )
         author = str(row.get(author_col, "") or "") if author_col else None
         chosen, scored = choose_candidate(
@@ -365,12 +404,21 @@ def run_candidate_reranking(
         "replace_text": replace_text,
         "candidate_cols": candidate_cols,
         "candidate_generation": [
-            "balanced",
-            "style_scrubbed",
-            "privacy",
-            "target_generalized",
-            "rewrite:<candidate_col>",
+            name
+            for name in [
+                "balanced",
+                "style_scrubbed",
+                "privacy",
+                "target_generalized",
+                "presidio_augmented" if presidio_augment else None,
+                "rewrite:<candidate_col>",
+            ]
+            if name
         ],
+        "presidio_augment": {
+            "enabled": presidio_augment,
+            "language": presidio_language if presidio_augment else None,
+        },
         "author_scorer": author_scorer_report,
         "row_count": len(rows),
         "chosen_counts": dict(sorted(chosen_counts.items())),

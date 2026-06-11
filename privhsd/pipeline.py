@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, Iterable
 
-from .detectors import Span, detect_spans
+from .detectors import Span, detect_spans, merge_spans
 from .style import scrub_style
 
 
@@ -96,6 +96,7 @@ def text_metrics(original: str, privatized: str, spans: list[Span]) -> dict[str,
 def privatize_text(
     text: str,
     config: PrivatizerConfig | None = None,
+    extra_spans: Iterable[Span] | None = None,
 ) -> PrivatizationResult:
     config = config or PrivatizerConfig()
     spans = detect_spans(
@@ -103,6 +104,8 @@ def privatize_text(
         include_context=config.include_context_detectors,
         include_targets=config.target_generalization_enabled,
     )
+    if extra_spans:
+        spans = merge_spans([*spans, *extra_spans])
     privatized, transformations = apply_replacements(text, spans, config)
     style_metrics: dict[str, Any] = {
         "style_scrub_enabled": config.style_scrub,

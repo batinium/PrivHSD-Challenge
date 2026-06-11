@@ -179,6 +179,9 @@ Important slide takeaways:
 - A36: optional weak token-action tagger training experiment with
   `train-token-action-tagger`, scikit-learn extra, tests, and a sample-5,000
   Dynahate report.
+- A37: filtered Presidio augmentation on `anonymize`, `rerank-candidates`, and
+  `create-submission` via `--presidio-augment`; full Dynahate reranking selected
+  `presidio_augmented` for 6,085 rows.
 
 Recent commits:
 
@@ -196,14 +199,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-67 passed, 1 skipped
+74 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-67 passed, 1 skipped
+74 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -227,6 +230,7 @@ Latest aggregate experiment results:
 | `balanced` | 3 | 0 | 0.9994 | 0.9953 | -0.0008 | Prior full Dynahate run. |
 | `balanced --style-scrub` | 3 | 0 | 0.9994 | 0.9434 | +0.0017 | Stronger style normalization; 77 changed local predictions. |
 | `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 | Chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. |
+| `rerank-candidates --presidio-augment` | 3 | 0 | 0.9997 | 0.9755 | +0.0048 | Chose `presidio_augmented` for 6,085 rows, `balanced` for 31,821, `style_scrubbed` for 3,219, `privacy` for 19. |
 | `create-submission --replace-text --mode balanced` | 3 | 0 | 0.9994 | 0.9953 | n/a | Exact-format validation passed: 41,144 rows, same columns/order, no helper columns. |
 
 Reranked cue check:
@@ -276,6 +280,36 @@ Presidio comparison on `data/public_dev/dynahate.csv` sample 500:
   Presidio-only 168, PrivHSD-only 2, false-positive-risk count 52
 - verdict: useful detector baseline, too much HSD-cue/target overmasking risk
   for core use.
+
+Filtered Presidio augmentation full Dynahate run:
+
+- commands:
+  - `anonymize --presidio-augment`
+  - `rerank-candidates --presidio-augment`
+- outputs:
+  - `data/outputs/dynahate.presidio_augmented.full.csv`
+  - `data/outputs/dynahate.presidio_augmented.full.audit.json`
+  - `data/outputs/dynahate.reranked_presidio.full.csv`
+  - `data/outputs/dynahate.reranked_presidio.full.audit.json`
+  - `data/outputs/dynahate.reranked_presidio.full.utility_benchmark.json`
+  - `data/outputs/dynahate.reranked_presidio.full.cue_checks.json`
+- accepted filtered Presidio spans in direct augmented run: DATE 1,400,
+  LOCATION 5,185, PERSON 3,834
+- rejected raw Presidio spans: NRP preserved 14,021, transient date 2,315,
+  location shape 935, person shape 611, protected cue overlap 148,
+  unsupported type 705
+- rerank chosen counts: balanced 31,821, presidio_augmented 6,085,
+  style_scrubbed 3,219, privacy 19
+- local utility benchmark: macro-F1 delta +0.0048, accuracy delta +0.0046,
+  prediction agreement 0.9838
+- cue check: rows with loss 58, target-term retention 0.9974,
+  utility-cue retention 1.0, action-term retention 0.9995,
+  negation/modality retention 1.0
+- concrete behavior: masks `Amy`, `Steven`, `Mustafa`, `Britain`,
+  `Caribbean`, and `the 1950s`; preserves target terms like `Muslims` and
+  `Hindus`; rejects false positives like `ngl` and `sl33p`.
+- verdict: strongest experimental alternate after `balanced`; still optional
+  because Presidio/spaCy is a heavy dependency.
 
 Weak token-action training on `data/public_dev/dynahate.csv` sample 5,000:
 
@@ -343,16 +377,18 @@ Follow `docs/roadmap.md`.
 Recommended next sequence while official files are unavailable:
 
 1. Review `docs/experiment_verdict.md` for the compact decision table.
-2. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
+2. Use `rerank-candidates --presidio-augment` as the strongest alternate after
+   the first `balanced` official submission.
+3. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
    or uncertainty detector, not as a direct anonymizer.
-3. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+4. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    model-card review, and cache size are acceptable.
-4. DPMLM follow-up: build a real adapter only if protected-token freezing,
+5. DPMLM follow-up: build a real adapter only if protected-token freezing,
    determinism, and utility metrics can be audited with a real model.
-5. A34/A35: run transformer fine-tuning or attention experiments only as
+6. A34/A35: run transformer fine-tuning or attention experiments only as
    optional evaluators/rerankers/candidate scorers, then document whether they
    improve measured privacy/HSD tradeoff enough to justify complexity.
-6. When official files arrive, return to `create-submission`,
+7. When official files arrive, return to `create-submission`,
    `validate-submission`, upload, and leaderboard-driven iteration.
 
 Do not start by training a new attention model. Use pretrained models to

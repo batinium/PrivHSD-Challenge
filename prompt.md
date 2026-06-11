@@ -45,9 +45,12 @@ Current status:
   and did not beat deterministic reranking.
 - A36 weak token-action tagger training is complete on a sample-5,000 Dynahate
   run with macro-F1 0.8556 against weak local labels.
+- A37 filtered Presidio augmentation is implemented on `anonymize`,
+  `rerank-candidates`, and `create-submission` with `--presidio-augment`.
+  Full Dynahate reranking selected `presidio_augmented` for 6,085 rows.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
-- Current full tests should be `67 passed, 1 skipped`.
+- Current full tests should be `74 passed, 1 skipped`.
 - Local Dynahate is expected at `data/public_dev/dynahate.csv`; it is ignored by
   git and has columns `id,text,label,source,split,target,type`.
 - Generated outputs belong under ignored `data/outputs/`.
@@ -134,6 +137,21 @@ Sample 500 results:
 - PrivHSD-only: 2
 - false-positive-risk count on HSD cues/targets: 52
 - runtime after setup: 1.4907s
+
+Filtered Presidio augmentation is now implemented:
+
+- flags: `--presidio-augment` on `anonymize`, `rerank-candidates`, and
+  `create-submission`
+- direct augmented full run accepted DATE 1,400, LOCATION 5,185, PERSON 3,834
+  and rejected NRP 14,021 plus other risky/noisy spans
+- full rerank chose `presidio_augmented` for 6,085 rows, `balanced` for 31,821,
+  `style_scrubbed` for 3,219, and `privacy` for 19
+- local utility benchmark: macro-F1 delta +0.0048, prediction agreement 0.9838
+- cue checks: target-term retention 0.9974, utility-cue retention 1.0,
+  58 rows with any conservative cue loss
+- concrete behavior: masks `Amy`, `Steven`, `Mustafa`, `Britain`, `Caribbean`,
+  and `the 1950s`; preserves target terms like `Muslims` and `Hindus`; rejects
+  false positives like `ngl` and `sl33p`
 
 ### A33: Local LLM Candidate Generation
 
@@ -277,6 +295,9 @@ Full Dynahate aggregate evidence already recorded in docs:
   52 false-positive-risk spans.
 - Weak token-action tagger sample 5,000: dev macro-F1 0.8556 against weak
   local labels.
+- Filtered Presidio rerank full run: 6,085 Presidio candidates selected,
+  macro-F1 delta +0.0048, target-term retention 0.9974, utility-cue retention
+  1.0.
 - DPMLM: `dpmlm` installed/importable, direct tiny probe unsafe for HSD cues,
   protected-token probe plausible but not submission-ready.
 - Local LLM sample 10: `openai/gpt-oss-20b` accepted 3 candidates, rejected 7,

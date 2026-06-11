@@ -1,4 +1,5 @@
 import csv
+from dataclasses import dataclass
 import json
 
 from privhsd.csv_pipeline import evaluate_csv, process_csv
@@ -9,6 +10,22 @@ def write_rows(path, rows):
         writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
         writer.writeheader()
         writer.writerows(rows)
+
+
+@dataclass(frozen=True)
+class FakePresidioResult:
+    start: int
+    end: int
+    entity_type: str
+    score: float = 0.85
+
+
+class FakePresidioAnalyzer:
+    def analyze(self, *, text, language):
+        if "Amy" not in text:
+            return []
+        start = text.index("Amy")
+        return [FakePresidioResult(start, start + len("Amy"), "PERSON")]
 
 
 def test_process_csv_writes_privatized_text_and_audit(tmp_path):
@@ -51,6 +68,36 @@ def test_process_csv_writes_privatized_text_and_audit(tmp_path):
     assert audit_data["rows"][0]["transformations"]
 
 
+def test_process_csv_can_use_filtered_presidio_augmentation(monkeypatch, tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    audit = tmp_path / "audit.json"
+    write_rows(
+        source,
+        [{"id": "1", "text": "i'm going to kill Amy", "label": "nothate"}],
+    )
+    monkeypatch.setattr(
+        "privhsd.csv_pipeline.load_presidio_analyzer",
+        lambda: FakePresidioAnalyzer(),
+    )
+
+    summary = process_csv(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        audit_path=audit,
+        presidio_augment=True,
+    )
+
+    with output.open("r", encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    audit_data = json.loads(audit.read_text(encoding="utf-8"))
+    assert rows[0]["privatized_text"] == "i'm going to kill [PERSON]"
+    assert summary["presidio_augment"]["accepted_counts_by_type"] == {"PERSON": 1}
+    assert audit_data["rows"][0]["presidio_augment"]["accepted_span_count"] == 1
+
+
 def test_evaluate_csv_returns_proxy_metrics(tmp_path):
     source = tmp_path / "output.csv"
     with source.open("w", encoding="utf-8", newline="") as handle:
@@ -72,4 +119,3 @@ def test_evaluate_csv_returns_proxy_metrics(tmp_path):
     assert result["metrics"]["row_count"] == 1
     assert result["metrics"]["identifier_counts"]["before"] >= 1
     assert result["metrics"]["identifier_counts"]["after"] == 0
-

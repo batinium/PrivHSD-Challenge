@@ -1,4 +1,5 @@
 import csv
+from dataclasses import dataclass
 import json
 
 from privhsd.cli import build_parser
@@ -38,6 +39,22 @@ def write_rerank_rows(path):
     return rows
 
 
+@dataclass(frozen=True)
+class FakePresidioResult:
+    start: int
+    end: int
+    entity_type: str
+    score: float = 0.85
+
+
+class FakePresidioAnalyzer:
+    def analyze(self, *, text, language):
+        if "Amy" not in text:
+            return []
+        start = text.index("Amy")
+        return [FakePresidioResult(start, start + len("Amy"), "PERSON")]
+
+
 def test_rerank_command_is_registered():
     parser = build_parser()
 
@@ -50,6 +67,7 @@ def test_rerank_command_is_registered():
             "output.csv",
             "--text-col",
             "text",
+            "--presidio-augment",
             "--candidate-col",
             "manual_candidate",
         ]
@@ -58,6 +76,7 @@ def test_rerank_command_is_registered():
     assert args.command == "rerank-candidates"
     assert args.output_col == "privatized_text"
     assert args.candidate_cols == ["manual_candidate"]
+    assert args.presidio_augment is True
 
 
 def test_generate_candidates_includes_deterministic_and_rewrite_options():
@@ -73,6 +92,18 @@ def test_generate_candidates_includes_deterministic_and_rewrite_options():
         "target_generalized",
         "rewrite:manual_candidate",
     ]
+
+
+def test_generate_candidates_can_include_filtered_presidio_candidate():
+    candidates = generate_candidates(
+        "i'm going to kill Amy",
+        presidio_analyzer=FakePresidioAnalyzer(),
+    )
+
+    presidio = [candidate for candidate in candidates if candidate.name == "presidio_augmented"]
+    assert len(presidio) == 1
+    assert presidio[0].text == "i'm going to kill [PERSON]"
+    assert presidio[0].metadata["accepted_span_count"] == 1
 
 
 def test_candidate_reranking_preserves_rows_and_writes_audit(tmp_path):
@@ -124,3 +155,35 @@ def test_candidate_reranking_can_replace_text_in_place(tmp_path):
     assert "privatized_text" not in rows[0]
     assert rows[0]["text"] != original_rows[0]["text"]
     assert [row["id"] for row in rows] == [row["id"] for row in original_rows]
+
+
+def test_candidate_reranking_can_choose_presidio_augmented_candidate(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    audit = tmp_path / "audit.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
+        writer.writeheader()
+        writer.writerow({"id": "1", "text": "i'm going to kill Amy", "label": "nothate"})
+    monkeypatch.setattr(
+        "privhsd.rerank.load_presidio_analyzer",
+        lambda: FakePresidioAnalyzer(),
+    )
+
+    summary = run_candidate_reranking(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        audit_path=audit,
+        presidio_augment=True,
+    )
+
+    rows = read_rows(output)
+    audit_data = json.loads(audit.read_text(encoding="utf-8"))
+    assert rows[0]["privatized_text"] == "i'm going to kill [PERSON]"
+    assert audit_data["rows"][0]["chosen"] == "presidio_augmented"
+    assert summary["chosen_counts"] == {"presidio_augmented": 1}

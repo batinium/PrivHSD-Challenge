@@ -42,6 +42,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A34 | todo | unassigned | Run transformer fine-tuning or adapter-training experiment only as an evaluator/candidate scorer, not core anonymization; compare against local TF-IDF utility and HF utility probes. |
 | A35 | todo | unassigned | Document whether any attention/fine-tuning approach improves the measured privacy/HSD tradeoff enough to justify complexity, dependencies, and rights/audit risks. |
 | A36 | done | Codex | Add weak token-action tagger training experiment with optional scikit-learn extra, CLI, tests, and sample-5,000 Dynahate report. |
+| A37 | done | Codex | Add filtered Presidio augmentation to anonymize, rerank, and submission paths; full Dynahate rerank selected Presidio candidate for 6,085 rows with macro-F1 delta +0.0048. |
 
 ## Current Priority
 
@@ -58,15 +59,17 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
+1. Use `rerank-candidates --presidio-augment` as the strongest alternate after
+   the first `balanced` official submission.
+2. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
    or uncertainty detector, not as a direct anonymizer.
-2. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+3. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    cache size, and model-card review are acceptable.
-3. DPMLM follow-up: only build an adapter if protected-token freezing,
+4. DPMLM follow-up: only build an adapter if protected-token freezing,
    determinism, and utility metrics can be audited with a real model.
-4. A34/A35: run transformer fine-tuning/attention experiments only as optional
+5. A34/A35: run transformer fine-tuning/attention experiments only as optional
    evidence, then document whether they improve the tradeoff.
-5. When official files arrive, return to exact-format submission and
+6. When official files arrive, return to exact-format submission and
    leaderboard-driven iterations.
 
 ## Non-Negotiables
