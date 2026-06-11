@@ -142,12 +142,18 @@ Important slide takeaways:
   `docs/final_pitch_outline.md`.
 - A14: optional Presidio comparison baseline with overlap, detector-only counts,
   false-positive risk on HSD cues, runtime, and structured dependency skips.
+- A15: optional neural utility evaluator path via the Hugging Face registry and
+  `evaluate-hf-utility` command.
+- A20: blocked by no supported local DPMLM backend. The A27 spike harness
+  records this blocker with epsilon/report structure.
 - A21/A29: optional local LLM candidate generator for LM Studio/llama.cpp
   OpenAI-compatible endpoints with JSON schema prompting, cue/length checks, and
   reranking-only output. Current local sample run skipped because no endpoint is
   running.
 - A26: conservative HSD cue retention checker for target terms, utility cues,
   action terms, and negation/modality terms by row ID.
+- A23: official submission checklist in
+  `docs/official_submission_checklist.md`.
 
 Recent commits:
 

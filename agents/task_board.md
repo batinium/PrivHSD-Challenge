@@ -20,15 +20,15 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A12 | done | Copernicus | Add richer privacy/utility metrics and warnings. |
 | A13 | done | Codex | Add synthetic PII stress fixtures and tests. |
 | A14 | done | Codex | Add optional Presidio/spaCy comparison as a detector baseline, not a replacement. |
-| A15 | todo | unassigned | Add optional neural utility evaluators after model-license checks. |
+| A15 | done | Codex | Add optional neural utility evaluators after model-license checks. |
 | A16 | done | Codex | Add local baseline classifier train/evaluate/predict workflows. |
 | A17 | done | Codex | Add authorship-risk evaluator: train an author classifier when an `author` column exists and report accuracy/F1 drop after privatization. |
 | A18 | done | Codex | Add style-scrubbing transformer for authorship cues: casing, punctuation bursts, emojis, repeated chars, spacing, signatures, and idiolect markers. |
 | A19 | done | Codex | Add candidate reranking: compare deterministic, style-scrubbed, target-generalized, and optional rewrite outputs by privacy/HSD utility score. |
-| A20 | todo | unassigned | Spike DPMLM-style rewriting on a tiny sample; document epsilon/runtime/utility tradeoffs before any integration. |
+| A20 | blocked | Codex | Spike DPMLM-style rewriting on a tiny sample; document epsilon/runtime/utility tradeoffs before any integration. Blocked by no supported local DPMLM backend; A27 records the blocker. |
 | A21 | done | Codex | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
 | A22 | done | Codex | Add human-rights and judging narrative: leaderboard score is only one criterion. |
-| A23 | todo | unassigned | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
+| A23 | done | Codex | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
 | A24 | done | Codex | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
 | A25 | done | Codex | Add optional `evaluate-hf-utility` command for original-vs-privatized HSD/toxicity score drift on small samples and full runs. |
 | A26 | done | Codex | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
