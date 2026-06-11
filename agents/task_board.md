@@ -35,6 +35,12 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A27 | done | Codex | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
 | A28 | done | Codex | Add exact-format submission validator/creator for leaderboard uploads with text columns privatized in place when required. |
 | A29 | done | Codex | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
+| A30 | todo | unassigned | Run optional Hugging Face utility evaluators with installed `transformers`/`torch` on bounded Dynahate samples, then larger samples if feasible; record runtime, revisions, score drift, agreement, and utility-drop rows. |
+| A31 | todo | unassigned | Run Presidio/spaCy comparison with optional dependencies installed on bounded Dynahate samples; record overlap, detector-only spans, false-positive risk on HSD cues, runtime, and blockers. |
+| A32 | todo | unassigned | Investigate a real DPMLM backend or reproducible adapter; run tiny epsilon 25/50 rewrites only if protected-cue freezing and row-local determinism can be audited. |
+| A33 | todo | unassigned | Run local LLM candidate generation through LM Studio or llama.cpp OpenAI-compatible endpoint, then rerank accepted candidates and compare against deterministic reranking. |
+| A34 | todo | unassigned | Run transformer fine-tuning or adapter-training experiment only as an evaluator/candidate scorer, not core anonymization; compare against local TF-IDF utility and HF utility probes. |
+| A35 | todo | unassigned | Document whether any attention/fine-tuning approach improves the measured privacy/HSD tradeoff enough to justify complexity, dependencies, and rights/audit risks. |
 
 ## Current Priority
 
@@ -51,7 +57,12 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. Run additional official-score-informed iterations when leaderboard feedback is available.
+1. A30: install optional HF dependencies in an isolated environment and run bounded HF utility model evaluations.
+2. A31: install optional Presidio/spaCy dependencies and run detector comparison.
+3. A33: if LM Studio or llama.cpp endpoint is available, generate local LLM candidates and rerank them.
+4. A32: research or install a DPMLM backend only if it can protect HSD cues and stay out of core anonymization.
+5. A34/A35: run transformer fine-tuning/attention experiments only as optional evidence, then document whether they improve the tradeoff.
+6. When official files arrive, return to exact-format submission and leaderboard-driven iterations.
 
 ## Non-Negotiables
 

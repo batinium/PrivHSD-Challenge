@@ -79,7 +79,47 @@ Near-term implementation order:
 5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
    reporting. **Done as a bounded blocker/report harness.**
 6. Add exact-format submission validation and final judging narrative.
-   **Submission validation done; judging narrative remains next.**
+   **Done.**
+
+## Next Experiment Phase Without Official Files
+
+Official challenge files are not available yet. Continue by stress-testing the
+optional model-backed paths on local Dynahate and synthetic fixtures, while
+keeping core `privhsd anonymize` deterministic and dependency-light.
+
+Recommended order:
+
+1. Hugging Face utility model runs:
+   - install optional dependencies in an isolated environment
+   - start with `--sample-size 25` or `100`
+   - run approved models from `hf-model-registry`
+   - record model revisions, device, runtime, score drift, agreement, and
+     utility-drop row IDs
+   - scale only if memory/runtime are acceptable
+2. Presidio comparison:
+   - install `privhsd[presidio]` and an English spaCy model
+   - run bounded `compare-presidio`
+   - report overlap, PrivHSD-only spans, Presidio-only spans, false-positive
+     risk on target/action cues, runtime, and dependency cost
+3. Local LLM candidate generation:
+   - use LM Studio or llama.cpp OpenAI-compatible local endpoint only
+   - generate schema-checked candidates on bounded samples
+   - rerank with `rerank-candidates --candidate-col`
+   - compare privacy/HSD metrics against deterministic reranking
+4. DPMLM rewrite spike:
+   - find a maintained backend or reproducible adapter
+   - run tiny epsilon 25/50 sweeps only if cue-token protection and determinism
+     can be audited
+   - do not integrate into core unless it beats deterministic/reranked outputs
+5. Transformer fine-tuning or attention experiments:
+   - use them only as optional evaluators, rerankers, or candidate scorers
+   - do not train a new attention mechanism as the first-line solution
+   - compare against local TF-IDF utility, HF utility probes, author-risk
+     metrics when author labels exist, cue checks, runtime, and auditability
+
+For every experiment, write outputs under ignored `data/outputs/`, avoid raw
+official examples, keep downloaded weights/caches out of git, and update
+`agents/current_handoff.md` with concise aggregate results.
 
 ## Strategic Gap
 

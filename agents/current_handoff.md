@@ -20,7 +20,6 @@ Untracked files:
 
 ```text
 Webinar.txt
-prompt.md
 ```
 
 `Webinar.txt` is currently empty. The webinar slide screenshots are outside the
@@ -32,6 +31,9 @@ repo at:
 
 Do not commit downloaded datasets, official challenge data, or generated
 `data/outputs/` artifacts.
+
+`prompt.md` contains the self-contained continuation prompt for the next model
+run/testing phase and is intended to be tracked.
 
 ## Read First
 
@@ -218,9 +220,21 @@ Generated outputs are under ignored `data/outputs/`.
 
 Follow `docs/roadmap.md`.
 
-Recommended next sequence:
+Recommended next sequence while official files are unavailable:
 
-1. Run additional official-score-informed iterations when leaderboard feedback is available.
+1. A30: install optional HF dependencies in an isolated environment and run
+   bounded `evaluate-hf-utility` model evaluations on Dynahate.
+2. A31: install optional Presidio/spaCy dependencies and run
+   `compare-presidio` on bounded Dynahate samples.
+3. A33: if LM Studio or llama.cpp endpoint is available, run
+   `generate-llm-candidates`, then rerank with `rerank-candidates`.
+4. A32: investigate a real DPMLM backend/adapter only if cue-token protection
+   and determinism can be audited.
+5. A34/A35: run transformer fine-tuning or attention experiments only as
+   optional evaluators/rerankers/candidate scorers, then document whether they
+   improve measured privacy/HSD tradeoff enough to justify complexity.
+6. When official files arrive, return to `create-submission`,
+   `validate-submission`, upload, and leaderboard-driven iteration.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that
