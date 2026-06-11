@@ -15,11 +15,10 @@ Start by reading:
 3. `agents/current_handoff.md`
 4. `docs/pipeline_design.md`
 5. `docs/methodology_justification.md`
-6. `docs/privhsd_system_design_paper.md`
-7. `docs/dp_text_privacy_literature_notes.md`
-8. `agents/coding_rules.md`
-9. `docs/official_submission_checklist.md`
-10. `docs/final_pitch_outline.md`
+6. `docs/dp_text_privacy_literature_notes.md`
+7. `agents/coding_rules.md`
+8. `docs/official_submission_checklist.md`
+9. `docs/final_pitch_outline.md`
 
 Initial commands:
 
@@ -58,9 +57,9 @@ Current status:
   `docs/dp_text_privacy_literature_notes.md`; it supports selective cue
   protection, privacy-pressure allocation, reranking/post-processing, and
   empirical adversarial evaluation rather than direct DPMLM replacement.
-- A40 shareable architecture paper is complete in
-  `docs/privhsd_system_design_paper.md`, with PDF copy at
-  `docs/privhsd_system_design_paper.pdf`.
+- The shareable architecture paper/PDF was removed to declutter; use
+  `docs/pipeline_design.md`, `docs/methodology_justification.md`, and
+  `docs/roadmap.md` as the canonical design docs until a new paper is drafted.
 - A41 audit hardening is complete: detector context rules now mask
   single-token self-identifying names while preserving target-group cues, and
   reranking/DPMLM share external rewrite validation for cue loss, residual

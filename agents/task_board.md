@@ -45,7 +45,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A37 | done | Codex | Add filtered Presidio augmentation to anonymize, rerank, and submission paths; full Dynahate rerank selected Presidio candidate for 6,085 rows with macro-F1 delta +0.0048. |
 | A38 | done | Codex | Map mentor-adjacent DP NLP papers from Consensus and primary paper pages to concrete PrivHSD design choices in `docs/dp_text_privacy_literature_notes.md`. |
 | A39 | todo | unassigned | Add optional adversarial LLM reconstruction/privacy-judge report only as secondary evidence after deterministic leakage, author-risk, cue, and official metrics. |
-| A40 | done | Codex | Add a decluttered shareable system design paper and PDF with input/output schema, masking inventory, dictionary usage, candidate generation, examples, next-step gate, and codebase audit prompt. |
+| A40 | removed | Codex | Shareable system design paper and PDF were removed to declutter; use the canonical pipeline, methodology, and roadmap docs until a new paper is drafted. |
 
 ## Current Priority
 

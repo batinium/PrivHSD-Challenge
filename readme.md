@@ -23,7 +23,6 @@ CSV with text
 - [docs/challenge_requirements.md](docs/challenge_requirements.md) - what the challenge expects.
 - [docs/roadmap.md](docs/roadmap.md) - current strategy and next technical bets.
 - [docs/pipeline_design.md](docs/pipeline_design.md) - active implementation contract.
-- [docs/privhsd_system_design_paper.md](docs/privhsd_system_design_paper.md) - concise shareable pipeline architecture and audit prompt; PDF copy at [docs/privhsd_system_design_paper.pdf](docs/privhsd_system_design_paper.pdf).
 - [docs/dataset_plan.md](docs/dataset_plan.md) - public and official dataset plan.
 - [docs/quickstart.md](docs/quickstart.md) - commands for running the pipeline.
 - [docs/score_log_template.md](docs/score_log_template.md) - official submission score log template.
