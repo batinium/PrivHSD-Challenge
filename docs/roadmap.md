@@ -247,6 +247,10 @@ Add a final command that verifies official upload files:
 
 Presidio should be integrated as a comparison backend, not as the product.
 
+Status: implemented as `privhsd compare-presidio` behind the optional
+`privhsd[presidio]` extra. The current local environment lacks Presidio/spaCy,
+so local sample runs write structured dependency skip reports.
+
 Useful outputs:
 
 - spans only Presidio catches

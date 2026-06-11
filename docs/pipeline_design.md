@@ -16,6 +16,7 @@ privhsd/
   hf_utility.py    optional Hugging Face utility model registry/evaluator
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
+  presidio_compare.py optional Presidio detector comparison baseline
   rerank.py        row-local candidate generation and reranking
   style.py         deterministic style scrubbing for author cues
   submission.py    exact-format submission creator/validator
@@ -276,6 +277,22 @@ git commit, input/output paths and SHA-256 hashes, mode, text columns,
 row-preservation validation, and local aggregate metrics. `validate-submission`
 checks row count, column set/order, ID order, metadata preservation, and helper
 columns; helper columns are rejected by default for upload mode.
+
+Compare Presidio as an optional detector baseline:
+
+```bash
+python -m privhsd.cli compare-presidio \
+  --input INPUT.csv \
+  --text-col text \
+  --id-col id \
+  --sample-size 100 \
+  --output data/outputs/presidio_compare.json
+```
+
+`compare-presidio` is optional through `privhsd[presidio]`. It reports overlap,
+PrivHSD-only counts, Presidio-only counts, false-positive risk on target/action
+cues, runtime, and dependency skips. It does not make Presidio part of core
+anonymization.
 
 ## Local Metrics
 

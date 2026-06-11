@@ -34,6 +34,7 @@ from .hf_utility import (
     run_hf_utility_evaluation,
     write_model_registry,
 )
+from .presidio_compare import PresidioCompareError, run_presidio_comparison
 from .rerank import RerankError, run_candidate_reranking
 from .submission import SubmissionError, create_submission, validate_submission
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
@@ -239,6 +240,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
     )
 
+    presidio = subparsers.add_parser(
+        "compare-presidio",
+        help="Run optional Presidio detector comparison as a baseline report.",
+    )
+    presidio.add_argument("--input", type=Path, required=True)
+    presidio.add_argument("--text-col", required=True)
+    presidio.add_argument("--id-col")
+    presidio.add_argument("--output", type=Path)
+    presidio.add_argument("--sample-size", type=int, default=100)
+    presidio.add_argument("--language", default="en")
+
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
         help="Train a local baseline hate-speech classifier on a labeled CSV.",
@@ -428,6 +440,15 @@ def main(argv: list[str] | None = None) -> int:
                 output_path=args.output,
                 allow_helper_columns=args.allow_helper_columns,
             )
+        elif args.command == "compare-presidio":
+            result = run_presidio_comparison(
+                args.input,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                output_path=args.output,
+                sample_size=args.sample_size,
+                language=args.language,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -483,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
         DpmlmSpikeError,
         HfUtilityError,
         OSError,
+        PresidioCompareError,
         RerankError,
         SubmissionError,
         ValueError,

@@ -19,7 +19,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A11 | done | Codex | Add ablation runner for identity, regex-only, balanced, privacy, and target-generalized variants. |
 | A12 | done | Copernicus | Add richer privacy/utility metrics and warnings. |
 | A13 | done | Codex | Add synthetic PII stress fixtures and tests. |
-| A14 | todo | unassigned | Add optional Presidio/spaCy comparison as a detector baseline, not a replacement. |
+| A14 | done | Codex | Add optional Presidio/spaCy comparison as a detector baseline, not a replacement. |
 | A15 | todo | unassigned | Add optional neural utility evaluators after model-license checks. |
 | A16 | done | Codex | Add local baseline classifier train/evaluate/predict workflows. |
 | A17 | done | Codex | Add authorship-risk evaluator: train an author classifier when an `author` column exists and report accuracy/F1 drop after privatization. |
@@ -51,7 +51,7 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A21/A29: optional specialized local LLM experiments.
 2. A26: HSD cue/rationale checks if time and dependencies allow.
 
 ## Non-Negotiables
