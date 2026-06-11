@@ -12,6 +12,7 @@ privhsd/
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   cue_checks.py    conservative HSD cue retention checks
+  dpmlm_candidates.py optional protected-token DPMLM candidate generator
   detectors.py     deterministic span detectors
   dpmlm_spike.py   bounded optional DPMLM spike/blocker report
   hf_utility.py    optional Hugging Face utility model registry/evaluator
@@ -259,7 +260,34 @@ target/action cue loss, and length/character drift. It writes only the chosen
 text column by default; per-candidate scores go to the audit JSON without raw
 text.
 
-Run a bounded DPMLM protected-cue spike or blocker report:
+Generate protected-token DPMLM rewrite candidates for reranking only:
+
+```bash
+python -m privhsd.cli generate-dpmlm-candidates \
+  --input data/public_dev/dynahate.csv \
+  --output data/outputs/dynahate.dpmlm_candidates.csv \
+  --text-col text \
+  --id-col id \
+  --model FacebookAI/roberta-base \
+  --epsilon 100 \
+  --sample-size 25 \
+  --report data/outputs/dynahate.dpmlm_candidates.report.json
+```
+
+`generate-dpmlm-candidates` uses the low-level DPMLM token API instead of raw
+sentence rewriting. It freezes target terms, utility/action cues,
+negation/modality terms, stopwords, capitalized tokens, repeated-letter tokens,
+placeholders, and punctuation. It caps rewrites per row, seeds NumPy/Torch per
+row for reproducibility, rejects candidates with cue loss, length/character
+drift, new identifier signals, style-risk increases, or no actual token
+replacement, and writes accepted text into a helper candidate column. The
+default `--min-eligible-score 5` is intentionally strict; on current Dynahate it
+produces no candidates because likely rewrite targets overlap HSD/style signals.
+A looser `--min-eligible-score 4` sample with `FacebookAI/roberta-base` accepted
+11/12 candidates, but reranking selected zero DPMLM candidates over
+deterministic alternatives.
+
+Run a bounded DPMLM backend spike or blocker report:
 
 ```bash
 python -m privhsd.cli dpmlm-spike \
@@ -273,14 +301,9 @@ python -m privhsd.cli dpmlm-spike \
   --output data/outputs/dynahate.dpmlm_spike.json
 ```
 
-`dpmlm-spike` is an experiment harness, not core anonymization. It records the
-epsilon sweep, sample IDs, protected target/action/negation cue manifest,
-backend detection, runtime, existing privatized-column baseline metrics when
-provided, and structured blockers when no supported local DPMLM backend or
-audited adapter is available. Backend details include whether a package is
-installed, importable, and any import error. Current local evidence detects
-`dpmlm` after installing optional resources, but reports
-`adapter_not_implemented` until cue-freezing and determinism tests are audited.
+`dpmlm-spike` is retained as the backend/blocker harness. The audited candidate
+path is `generate-dpmlm-candidates`; both remain outside core anonymization and
+must feed `rerank-candidates` before any submission consideration.
 
 Create an exact-format upload CSV and manifest:
 

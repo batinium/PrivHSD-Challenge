@@ -37,9 +37,10 @@ Current status:
   `data/outputs/dynahate.reranked.csv`.
 - A31 bounded Presidio/spaCy comparison is complete on the first 100 local
   Dynahate rows and a sample-500 extension.
-- A32 DPMLM backend investigation is complete for this pass: `dpmlm` 1.1.2 is
-  installed/importable after NLTK resources, but integration remains blocked by
-  no audited protected-cue adapter and poor tiny-model rewrite quality.
+- A32 DPMLM backend investigation and protected-token candidate adapter are
+  complete for this pass: `dpmlm` 1.1.2 is installed/importable after NLTK
+  resources, `generate-dpmlm-candidates` runs `FacebookAI/roberta-base`, but
+  bounded reranking selected 0 DPMLM candidates.
 - A33 bounded local LLM candidate generation/reranking is complete against LM
   Studio at `http://100.120.207.64:1234`; current LLM candidates are low-yield
   and did not beat deterministic reranking.
@@ -50,7 +51,7 @@ Current status:
   Full Dynahate reranking selected `presidio_augmented` for 6,085 rows.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
-- Current full tests should be `74 passed, 1 skipped`.
+- Current full tests should be `79 passed, 1 skipped`.
 - Local Dynahate is expected at `data/public_dev/dynahate.csv`; it is ignored by
   git and has columns `id,text,label,source,split,target,type`.
 - Generated outputs belong under ignored `data/outputs/`.
@@ -203,32 +204,29 @@ risk.
 
 ### A32: Real DPMLM Rewrite Spike
 
-Current `dpmlm-spike` is a blocker/report harness. `dpmlm` 1.1.2 is installed
-and importable after NLTK resources, and the spike now reports backend details.
-The current blocker is `adapter_not_implemented`, not missing package.
+`dpmlm-spike` remains a backend/blocker harness. The implemented rewrite path is
+`generate-dpmlm-candidates`, which uses the low-level DPMLM token API rather
+than raw sentence rewriting.
 
-Evidence:
+Current evidence:
 
-- `data/outputs/dynahate.dpmlm_spike.reranked.sample25.after_resources.json`
-  detects `dpmlm` and records the blocked epsilon 25/50 sweep.
-- `data/outputs/dynahate.dpmlm_direct_probe.tiny.json` shows direct tiny-model
-  DPMLM rewriting can change protected HSD cues.
-- `data/outputs/dynahate.dpmlm_protected_adapter_probe.tiny.json` shows a
-  low-level protected-token probe can preserve `immigrants should leave`, but
-  tiny-model text quality is poor.
-
-Only run actual rewrites if all are true:
-
-- bounded sample first, such as 10 or 25 rows
-- epsilon sweep includes 25 and 50
-- HSD cue tokens, target groups, negation, and threat/action terms can be
-  protected/frozen or reliably restored
-- output is row-local
-- determinism/reproducibility is documented
-- runtime is recorded
+- `dpmlm` 1.1.2 is installed/importable after NLTK resources.
+- Raw direct tiny-model DPMLM can change protected HSD cues, so raw sentence
+  rewrite is unsafe.
+- `generate-dpmlm-candidates` freezes target terms, utility/action cues,
+  negation/modality terms, stopwords, capitalized tokens, repeated-letter
+  tokens, placeholders, and punctuation.
+- Safe default run:
+  `data/outputs/dynahate.dpmlm_candidates.roberta.sample8.eps100.safe2.report.json`
+  accepted 0/8 candidates in 3.9847s.
+- Looser min-score-4 run:
+  `data/outputs/dynahate.dpmlm_candidates.roberta.min4.sample12.eps100.final.report.json`
+  accepted 11/12 candidates in 4.9143s.
+- Reranking those looser candidates selected `balanced` for 10 rows,
+  `style_scrubbed` for 2 rows, and 0 DPMLM candidates.
 
 Do **not** integrate DPMLM into core anonymization unless it beats deterministic
-style/reranked outputs on privacy/HSD tradeoff and auditability.
+or Presidio-reranked outputs on privacy/HSD tradeoff and auditability.
 
 ### A36: Weak Token-Action Tagger
 
@@ -298,8 +296,8 @@ Full Dynahate aggregate evidence already recorded in docs:
 - Filtered Presidio rerank full run: 6,085 Presidio candidates selected,
   macro-F1 delta +0.0048, target-term retention 0.9974, utility-cue retention
   1.0.
-- DPMLM: `dpmlm` installed/importable, direct tiny probe unsafe for HSD cues,
-  protected-token probe plausible but not submission-ready.
+- DPMLM: protected-token `FacebookAI/roberta-base` candidate adapter works, but
+  safe default accepted 0/8 and looser reranking selected 0 DPMLM candidates.
 - Local LLM sample 10: `openai/gpt-oss-20b` accepted 3 candidates, rejected 7,
   but reranking selected no LLM candidates; deterministic reranked remains
   stronger.

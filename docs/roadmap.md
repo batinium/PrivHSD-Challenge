@@ -88,10 +88,14 @@ examples, and `GENERALIZE_CONTEXT` F1 0.5823. Treat this as detector/reranker
 evidence, not supervised privacy truth.
 
 DPMLM local probe: `dpmlm` 1.1.2 installs and imports after NLTK resources are
-downloaded. The repository spike detects it but still reports
-`adapter_not_implemented` because no audited adapter exists. A tiny direct probe
-rewrote protected cues, while a protected-token low-level probe preserved
-`immigrants should leave` but produced poor tiny-model text quality.
+downloaded. A protected-token candidate generator now uses the low-level DPMLM
+API with `FacebookAI/roberta-base`, per-row seeding, strict frozen-token policy,
+and reranking-only output. Safe default eligibility (`min_eligible_score=5`)
+accepted 0/8 first-row candidates because likely rewrite targets overlapped
+protected HSD/style signals. A looser `min_eligible_score=4` sample accepted
+11/12 candidates in 4.9143s, but reranking selected 0 DPMLM candidates over
+deterministic alternatives. DPMLM remains optional evidence, not a submission
+path.
 
 ## Model-Backed Plan
 
@@ -107,7 +111,7 @@ for evaluation, reranking, and small calibration tests. The practical plan is:
 | `unitary/toxic-bert` or Detoxify | Toxicity proxy for weak-signal comparison only. | Optional |
 | Weak token-action tagger | Optional detector/reranker feature trained from weak local labels. | No |
 | Filtered Presidio augmentation | Optional high-recall entity candidate for reranking/submission alternates. | No |
-| DPMLM | Bounded rewrite spike with epsilon/runtime/utility reports. | No |
+| DPMLM | Protected-token candidate generator and bounded epsilon/runtime/utility reports. | No |
 | Local LLM through LM Studio or llama.cpp | Schema-constrained candidate generation only. | No |
 
 External models should support measurement and candidate generation. They should
@@ -171,11 +175,15 @@ Recommended order:
    - do not scale LLM generation unless accepted candidates start winning the
      reranker on bounded samples
 4. DPMLM rewrite spike:
-   - status: `dpmlm` 1.1.2 installed and importable after NLTK resources
-   - current spike detects the backend but blocks with `adapter_not_implemented`
-   - direct tiny-model DPMLM rewrote protected cues, so it cannot be used raw
-   - protected-token low-level probe preserved HSD cues but needs a real model,
-     determinism controls, and measured privacy/HSD gains before integration
+   - status: protected-token candidate generator implemented as
+     `generate-dpmlm-candidates`
+   - default policy freezes target terms, utility/action cues,
+     negation/modality, stopwords, capitalized tokens, repeated-letter tokens,
+     placeholders, and punctuation
+   - real `FacebookAI/roberta-base` safe-default sample accepted 0/8 because no
+     safe rewrite targets remained
+   - looser min-score-4 sample accepted 11/12 in 4.9143s, but reranking selected
+     0 DPMLM candidates
    - do not integrate into core unless it beats deterministic/reranked outputs
 5. Weak token-action training:
    - status: sample-5,000 training complete with macro-F1 0.8556 against weak
@@ -310,17 +318,18 @@ text.
 
 ### 5. DPMLM Spike
 
-Status: implemented as `privhsd dpmlm-spike`. In the current local environment
-`dpmlm` 1.1.2 is installed and importable after NLTK resources are present, but
-the command still writes a structured `adapter_not_implemented` blocker report
-with epsilon sweep configuration, protected cue manifest, runtime, sample IDs,
-and existing privatized-column baseline metrics when available. DPMLM remains
-outside core anonymization.
+Status: implemented as `privhsd dpmlm-spike` plus
+`privhsd generate-dpmlm-candidates`. In the current local environment `dpmlm`
+1.1.2 is installed and importable after NLTK resources are present. The spike
+keeps backend/blocker reporting; the candidate generator uses the low-level
+DPMLM token API with frozen HSD/privacy tokens, per-row deterministic seeding,
+candidate validation, CSV helper-column output, and report JSON.
 
-Direct library probes show why: the default sentence rewrite can modify
-protected HSD cues, while a low-level protected-token probe can freeze those
-cues but still needs real-model quality checks, determinism controls, and
-audited row-local integration.
+Direct library probes showed why this guard is needed: raw sentence rewrite can
+modify protected HSD cues. Real `FacebookAI/roberta-base` experiments showed
+the other half of the tradeoff: strict protection leaves no safe candidates in
+the first local sample, while looser eligibility produces fluent-looking but
+semantically risky rewrites that the reranker does not select.
 
 Run a small, optional DPMLM-style experiment after the author-risk and HF
 evaluators exist. Use only bounded samples at first.
@@ -335,7 +344,8 @@ Questions to answer before integration:
 - Can HSD cue tokens, target groups, negation, and threat/action terms be
   protected from rewriting?
 
-Do not make DPMLM part of the core pipeline until these are answered.
+Do not make DPMLM part of the core pipeline until it beats deterministic or
+Presidio-reranked outputs on official or stronger local privacy/HSD metrics.
 
 ### 6. Specialized LLM Rewrite
 

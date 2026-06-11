@@ -75,6 +75,7 @@ privhsd hf-model-registry
 privhsd evaluate-hf-utility
 privhsd rerank-candidates
 privhsd dpmlm-spike
+privhsd generate-dpmlm-candidates
 privhsd create-submission
 privhsd validate-submission
 privhsd compare-presidio
@@ -139,8 +140,10 @@ Important slide takeaways:
   per-candidate scores and optional author-risk confidence when available.
 - A27: bounded DPMLM spike harness with epsilon sweep, protected-cue manifest,
   runtime/blocker reporting, backend import details, and no core dependency.
-  Current local environment has `dpmlm` 1.1.2 installed/importable after NLTK
-  resources, but integration is blocked by no audited protected-cue adapter.
+- A32/A20: protected-token DPMLM candidate generator with
+  `FacebookAI/roberta-base`, frozen HSD/privacy/style-risk tokens, per-row
+  seeding, validation, and reranking-only output. Current bounded reranking
+  selected 0 DPMLM candidates.
 - A28: exact-format submission creator/validator with in-place text-column
   privatization via `--replace-text`, helper-column rejection, row/order/ID
   validation, metadata preservation checks, file hashes, git commit, command,
@@ -151,9 +154,8 @@ Important slide takeaways:
   false-positive risk on HSD cues, runtime, and structured dependency skips.
 - A15: optional neural utility evaluator path via the Hugging Face registry and
   `evaluate-hf-utility` command.
-- A20: blocked by no audited DPMLM protected-cue adapter and weak tiny-model
-  rewrite quality. The A27/A32 reports record this blocker with epsilon/report
-  structure.
+- A20: DPMLM spike completed; the adapter works but current real-model
+  candidates do not beat deterministic reranking.
 - A21/A29: optional local LLM candidate generator for LM Studio/llama.cpp
   OpenAI-compatible endpoints with JSON schema prompting, cue/length checks, and
   reranking-only output. Current local sample run skipped because no endpoint is
@@ -169,9 +171,9 @@ Important slide takeaways:
 - A31: bounded Presidio/spaCy detector comparison on the first 100 and 500
   Dynahate rows; comparison passed but documented false-positive risk and
   dependency cost.
-- A32: `dpmlm` 1.1.2 installed/imported after NLTK resources; direct tiny probe
-  rewrote protected cues, while a protected-token low-level probe preserved
-  `immigrants should leave` but produced poor tiny-model text quality.
+- A32: `dpmlm` 1.1.2 installed/imported after NLTK resources; raw direct
+  rewriting is unsafe, protected-token candidate generation is implemented,
+  and `FacebookAI/roberta-base` bounded reranking selected no DPMLM candidates.
 - A33: bounded local LLM candidate generation and reranking against LM Studio
   at `http://100.120.207.64:1234`; implementation hardened for JSON-schema
   response format/fallback and wrapped JSON parsing. Accepted LLM candidates
@@ -199,14 +201,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-74 passed, 1 skipped
+79 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-74 passed, 1 skipped
+79 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -329,20 +331,24 @@ DPMLM bounded evidence:
 
 - installed `dpmlm` 1.1.2 in `.venv`; downloaded NLTK resources to
   `/home/bati/nltk_data`
-- revised `dpmlm-spike` now reports backend `details` with installed/importable
-  status and uses `adapter_not_implemented` when a backend is present but not
-  audited
-- current report:
-  `data/outputs/dynahate.dpmlm_spike.reranked.sample25.after_resources.json`
-- backend detected: `dpmlm` true; `private_transformers` false; `opendp` false
-- direct tiny-model probe:
-  `data/outputs/dynahate.dpmlm_direct_probe.tiny.json`, output changed
-  protected cues, so raw DPMLM rewrite is unsafe
-- protected-token low-level probe:
-  `data/outputs/dynahate.dpmlm_protected_adapter_probe.tiny.json`, preserved
-  `immigrants`, `should`, and `leave`, but tiny-model replacement quality was
-  poor
-- verdict: plausible adapter research path, not submission-ready.
+- `dpmlm-spike` remains the backend/blocker report; raw direct tiny-model probe
+  changed protected cues, so raw DPMLM sentence rewrite is unsafe
+- new command: `generate-dpmlm-candidates`
+- adapter policy: low-level token API, `FacebookAI/roberta-base` by default,
+  per-row seeding, frozen target/utility/action/negation cues, stopwords,
+  capitalized tokens, repeated-letter tokens, placeholders, and punctuation
+- safe-default run:
+  `data/outputs/dynahate.dpmlm_candidates.roberta.sample8.eps100.safe2.report.json`
+  accepted 0/8 candidates in 3.9847s because no safe rewrite targets remained
+- looser min-score-4 run:
+  `data/outputs/dynahate.dpmlm_candidates.roberta.min4.sample12.eps100.final.report.json`
+  accepted 11/12 candidates in 4.9143s and rejected one no-token-change row
+- final rerank:
+  `data/outputs/dynahate.dpmlm_reranked.roberta.min4.sample12.eps100.final.audit.json`
+  selected `balanced` for 10 rows, `style_scrubbed` for 2 rows, and 0 DPMLM
+  candidates
+- verdict: adapter works as an optional candidate source, but current evidence
+  says not to submit or scale DPMLM.
 
 Local LLM bounded evidence:
 
@@ -383,8 +389,9 @@ Recommended next sequence while official files are unavailable:
    or uncertainty detector, not as a direct anonymizer.
 4. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    model-card review, and cache size are acceptable.
-5. DPMLM follow-up: build a real adapter only if protected-token freezing,
-   determinism, and utility metrics can be audited with a real model.
+5. DPMLM follow-up: keep it candidate-only; scale only if a better policy or
+   official metrics show protected-token DPMLM beating deterministic/reranked
+   outputs.
 6. A34/A35: run transformer fine-tuning or attention experiments only as
    optional evaluators/rerankers/candidate scorers, then document whether they
    improve measured privacy/HSD tradeoff enough to justify complexity.

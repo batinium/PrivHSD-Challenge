@@ -28,6 +28,18 @@ from .dpmlm_spike import (
     DpmlmSpikeError,
     run_dpmlm_spike,
 )
+from .dpmlm_candidates import (
+    DEFAULT_BATCH_SIZE as DEFAULT_DPMLM_BATCH_SIZE,
+    DEFAULT_EPSILON as DEFAULT_DPMLM_CANDIDATE_EPSILON,
+    DEFAULT_MAX_LENGTH_DRIFT as DEFAULT_DPMLM_MAX_LENGTH_DRIFT,
+    DEFAULT_MAX_REWRITE_TOKENS,
+    DEFAULT_MIN_ELIGIBLE_SCORE,
+    DEFAULT_MIN_CHARACTER_RETENTION,
+    DEFAULT_MODEL as DEFAULT_DPMLM_MODEL,
+    DEFAULT_SAMPLE_SIZE as DEFAULT_DPMLM_CANDIDATE_SAMPLE_SIZE,
+    DpmlmCandidateError,
+    run_dpmlm_candidates,
+)
 from .hf_utility import (
     DEFAULT_DROP_THRESHOLD,
     DEFAULT_SAMPLE_SIZE,
@@ -218,6 +230,61 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dpmlm.add_argument("--backend", default="auto")
     dpmlm.add_argument("--random-seed", type=int, default=0)
+
+    dpmlm_candidates = subparsers.add_parser(
+        "generate-dpmlm-candidates",
+        help="Generate protected-token DPMLM rewrite candidates for reranking only.",
+    )
+    dpmlm_candidates.add_argument("--input", type=Path, required=True)
+    dpmlm_candidates.add_argument("--output", type=Path, required=True)
+    dpmlm_candidates.add_argument("--text-col", required=True)
+    dpmlm_candidates.add_argument("--id-col")
+    dpmlm_candidates.add_argument("--candidate-col", default="dpmlm_candidate")
+    dpmlm_candidates.add_argument("--report", type=Path)
+    dpmlm_candidates.add_argument("--model", default=DEFAULT_DPMLM_MODEL)
+    dpmlm_candidates.add_argument(
+        "--sample-size",
+        type=int,
+        default=DEFAULT_DPMLM_CANDIDATE_SAMPLE_SIZE,
+    )
+    dpmlm_candidates.add_argument(
+        "--epsilon",
+        type=float,
+        default=DEFAULT_DPMLM_CANDIDATE_EPSILON,
+    )
+    dpmlm_candidates.add_argument(
+        "--batch-size",
+        type=int,
+        default=DEFAULT_DPMLM_BATCH_SIZE,
+    )
+    dpmlm_candidates.add_argument(
+        "--max-rewrite-tokens",
+        type=int,
+        default=DEFAULT_MAX_REWRITE_TOKENS,
+    )
+    dpmlm_candidates.add_argument(
+        "--min-eligible-score",
+        type=int,
+        default=DEFAULT_MIN_ELIGIBLE_SCORE,
+        help=(
+            "Minimum protected-token risk score for DPMLM rewrite eligibility. "
+            "Higher values rewrite fewer, riskier tokens."
+        ),
+    )
+    dpmlm_candidates.add_argument("--random-seed", type=int, default=0)
+    dpmlm_candidates.add_argument("--min-target-retention", type=float, default=1.0)
+    dpmlm_candidates.add_argument("--min-utility-retention", type=float, default=1.0)
+    dpmlm_candidates.add_argument(
+        "--min-character-retention",
+        type=float,
+        default=DEFAULT_MIN_CHARACTER_RETENTION,
+    )
+    dpmlm_candidates.add_argument(
+        "--max-length-drift",
+        type=float,
+        default=DEFAULT_DPMLM_MAX_LENGTH_DRIFT,
+    )
+    dpmlm_candidates.add_argument("--cue-retention-threshold", type=float, default=1.0)
 
     create_submission_parser = subparsers.add_parser(
         "create-submission",
@@ -499,6 +566,27 @@ def main(argv: list[str] | None = None) -> int:
                 backend=args.backend,
                 random_seed=args.random_seed,
             )
+        elif args.command == "generate-dpmlm-candidates":
+            result = run_dpmlm_candidates(
+                args.input,
+                args.output,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                candidate_col=args.candidate_col,
+                report_path=args.report,
+                model_name=args.model,
+                sample_size=args.sample_size,
+                epsilon=args.epsilon,
+                batch_size=args.batch_size,
+                max_rewrite_tokens=args.max_rewrite_tokens,
+                min_eligible_score=args.min_eligible_score,
+                random_seed=args.random_seed,
+                min_target_retention=args.min_target_retention,
+                min_utility_retention=args.min_utility_retention,
+                min_character_retention=args.min_character_retention,
+                max_length_drift=args.max_length_drift,
+                cue_retention_threshold=args.cue_retention_threshold,
+            )
         elif args.command == "create-submission":
             generalize_targets = None
             if args.generalize_targets:
@@ -625,6 +713,7 @@ def main(argv: list[str] | None = None) -> int:
         ClassifierError,
         CsvPipelineError,
         CueCheckError,
+        DpmlmCandidateError,
         DpmlmSpikeError,
         HfUtilityError,
         LocalLlmError,

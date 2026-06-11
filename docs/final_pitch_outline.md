@@ -29,9 +29,9 @@ python -m privhsd.cli create-submission \
 4. Show local privacy/utility evidence and reranking results without raw text.
 5. Show optional evaluator behavior: author-risk skips when no author column is
    present, HF utility gives bounded model-backed drift evidence when installed,
-   raw Presidio is dependency-heavy and false-positive-prone on HSD cues, but
-   filtered Presidio can safely feed reranking, and DPMLM is reported as a
-   blocked spike rather than silently entering the core pipeline.
+   raw Presidio is dependency-heavy and false-positive-prone on HSD cues,
+   filtered Presidio can safely feed reranking, and DPMLM is candidate-only
+   because bounded real-model reranking did not select it.
 
 ## Evidence Table
 
@@ -64,6 +64,10 @@ rows, same columns/order, no helper columns.
 - Local LLM candidate generation works through LM Studio after JSON-schema
   compatibility hardening, but `openai/gpt-oss-20b` accepted only 3/10 sample
   candidates and reranking selected none of them over deterministic candidates.
+- DPMLM now has a protected-token candidate generator with
+  `FacebookAI/roberta-base`; the safe default accepted 0/8 first-sample rows,
+  while a looser sample accepted 11/12 but reranking selected 0 DPMLM
+  candidates.
 
 ## Rights Framing
 
@@ -90,8 +94,9 @@ rows, same columns/order, no helper columns.
   substantial spaCy model dependency.
 - Local LLM output is candidate-only; current bounded runs are too low-yield to
   justify scaling or direct submission.
-- DPMLM is not integrated because the installed backend still needs an audited
-  adapter that proves cue protection, determinism, and runtime quality.
+- DPMLM is not integrated into the submission path because the audited
+  protected-token adapter did not beat deterministic reranking in bounded local
+  tests.
 - Exact-format validation proves shape and metadata preservation; it does not
   certify privacy or fairness by itself.
 

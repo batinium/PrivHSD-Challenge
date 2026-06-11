@@ -25,7 +25,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A17 | done | Codex | Add authorship-risk evaluator: train an author classifier when an `author` column exists and report accuracy/F1 drop after privatization. |
 | A18 | done | Codex | Add style-scrubbing transformer for authorship cues: casing, punctuation bursts, emojis, repeated chars, spacing, signatures, and idiolect markers. |
 | A19 | done | Codex | Add candidate reranking: compare deterministic, style-scrubbed, target-generalized, and optional rewrite outputs by privacy/HSD utility score. |
-| A20 | blocked | Codex | Spike DPMLM-style rewriting on a tiny sample; document epsilon/runtime/utility tradeoffs before any integration. Blocked by no audited protected-cue adapter and weak tiny-model rewrite quality; A32 records the probe. |
+| A20 | done | Codex | Spike DPMLM-style rewriting on tiny samples; protected-token real-model candidate generation works, but bounded reranking selected 0 DPMLM candidates. |
 | A21 | done | Codex | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
 | A22 | done | Codex | Add human-rights and judging narrative: leaderboard score is only one criterion. |
 | A23 | done | Codex | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
@@ -37,7 +37,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A29 | done | Codex | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
 | A30 | done | Codex | Run optional Hugging Face utility evaluators with installed `transformers`/CPU `torch` on bounded Dynahate reranked samples; default probes passed on sample 25 and 100, Toxic-BERT passed on sample 25, HateXplain variants produced structured inference skips. |
 | A31 | done | Codex | Run Presidio/spaCy comparison with optional dependencies installed on bounded Dynahate samples; sample 100 and 500 recorded overlap, detector-only spans, false-positive risk on HSD cues, runtime, and spaCy model-size cost. |
-| A32 | done | Codex | Investigate a real DPMLM backend or reproducible adapter; `dpmlm` 1.1.2 installed/imported after NLTK resources, direct tiny probe rewrote protected cues, protected-token low-level probe preserved cues but remains unaudited. |
+| A32 | done | Codex | Investigate a real DPMLM backend and reproducible adapter; `generate-dpmlm-candidates` uses protected-token DPMLM with `FacebookAI/roberta-base`, but current bounded reranking selected no DPMLM candidates. |
 | A33 | done | Codex | Run local LLM candidate generation through LM Studio/OpenAI-compatible endpoint, then rerank accepted candidates and compare against deterministic reranking. Bounded `openai/gpt-oss-20b` sample accepted 3/10 candidates, but reranking selected no LLM candidates. |
 | A34 | todo | unassigned | Run transformer fine-tuning or adapter-training experiment only as an evaluator/candidate scorer, not core anonymization; compare against local TF-IDF utility and HF utility probes. |
 | A35 | todo | unassigned | Document whether any attention/fine-tuning approach improves the measured privacy/HSD tradeoff enough to justify complexity, dependencies, and rights/audit risks. |
@@ -65,8 +65,9 @@ Recommended next sequence:
    or uncertainty detector, not as a direct anonymizer.
 3. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    cache size, and model-card review are acceptable.
-4. DPMLM follow-up: only build an adapter if protected-token freezing,
-   determinism, and utility metrics can be audited with a real model.
+4. DPMLM follow-up: keep it candidate-only; scale only if official metrics or a
+   better scorer show that protected-token DPMLM candidates can beat
+   deterministic/reranked outputs.
 5. A34/A35: run transformer fine-tuning/attention experiments only as optional
    evidence, then document whether they improve the tradeoff.
 6. When official files arrive, return to exact-format submission and

@@ -17,12 +17,12 @@ LLM outputs and row-level reports remain under ignored `data/outputs/`.
 | `mistralai/ministral-3-3b` local LLM | Sample 3 parsed JSON but accepted 0; all rejected by checks. | Too much length drift or cue loss. | Candidate-only; no accepted rows. | Fast, about 2s for 3 rows. | Not useful without stronger prompting/model config. |
 | `qwen/qwen3-4b-2507` local LLM | Sample 3 accepted 0; all rejected by checks. | Too much length drift or target cue loss. | Candidate-only; no accepted rows. | 5.3726s for 3 rows. | Not useful under current checks. |
 | `google/gemma-4-e4b` local LLM | Sample 3 accepted 0; all rejected by checks. | Too much length drift or target cue loss. | Candidate-only; no accepted rows. | 10.8857s for 3 rows. | Not useful under current checks. |
-| DPMLM | `dpmlm` 1.1.2 installed and importable after NLTK resources; spike detects backend but reports `adapter_not_implemented`. Tiny direct probe changed protected cues; protected-token probe preserved them. | Protected-token adapter concept can keep `immigrants should leave`, but tiny model output quality is poor. | Stochastic rewrite needs determinism, cue-freezing tests, and measured tradeoff gains before use. | Optional heavy deps; tiny probe 1.1-5.1s, real model would be slower/larger. | Promising research path, not submission-ready. |
+| DPMLM | Protected-token candidate generator implemented with `FacebookAI/roberta-base`. Safe default sample 8 accepted 0; looser min-score-4 sample 12 accepted 11 but reranking selected 0 DPMLM candidates. | Cue retention checks passed on accepted candidates, but loose rewrites changed semantics enough that reranker preferred deterministic outputs. | Freezes target/action/negation/utility cues, capitalized tokens, repeated spellings, placeholders, and stopwords; no measured privacy win on current samples. | Optional heavy deps; roberta sample 8 took 3.9847s, min-score-4 sample 12 took 4.9143s after cached model load. | Adapter works, but do not use for submission unless future official metrics show a gain. |
 
 ## Next Step
 
 When official files arrive, create and validate `balanced` exact-format output
 first. If there is time after an official score, compare or submit
 `rerank-candidates --presidio-augment` as the stronger alternate. Keep DPMLM out
-of the submission path until a protected-cue adapter with a real model beats
-this reranked Presidio result.
+of the submission path unless a protected-token candidate run is selected by
+reranking and improves official privacy/HSD scores.
