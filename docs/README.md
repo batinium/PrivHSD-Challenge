@@ -11,9 +11,12 @@ Use it before changing code.
 4. `quickstart.md` - commands for running the pipeline.
 5. `methodology_justification.md` - why rules, lexicons, reranking, and
    author-risk evaluation are defensible.
-6. `dp_text_privacy_literature_notes.md` - mentor-adjacent DP NLP papers mapped
+6. `privhsd_system_design_paper.md` - concise shareable pipeline architecture,
+   examples, inputs/outputs, dictionaries, and audit prompt. Rendered copy:
+   `privhsd_system_design_paper.pdf`.
+7. `dp_text_privacy_literature_notes.md` - mentor-adjacent DP NLP papers mapped
    to implementation choices.
-7. `score_log_template.md` - reproducible official-submission score log.
+8. `score_log_template.md` - reproducible official-submission score log.
 
 Reference docs:
 
