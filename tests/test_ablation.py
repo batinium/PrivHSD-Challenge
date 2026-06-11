@@ -1,4 +1,5 @@
 import csv
+import importlib.util
 import json
 
 import pytest
@@ -8,12 +9,7 @@ from privhsd.cli import main
 from privhsd.utility_benchmark import BenchmarkError, INSTALL_HINT
 
 
-try:
-    import sklearn  # noqa: F401
-except ModuleNotFoundError:
-    HAS_SKLEARN = False
-else:
-    HAS_SKLEARN = True
+HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None
 
 
 EXPECTED_VARIANTS = [variant.name for variant in ABLATION_VARIANTS]

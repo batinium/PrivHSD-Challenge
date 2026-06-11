@@ -1,5 +1,6 @@
 import builtins
 import csv
+import importlib.util
 
 import pytest
 
@@ -17,12 +18,7 @@ from privhsd.token_actions import (
 )
 
 
-try:
-    import sklearn  # noqa: F401
-except ModuleNotFoundError:
-    HAS_SKLEARN = False
-else:
-    HAS_SKLEARN = True
+HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None
 
 
 def write_rows(path):

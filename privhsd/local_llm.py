@@ -9,7 +9,8 @@ from typing import Any
 from urllib import error, request
 
 from .csv_pipeline import read_csv, write_csv, write_json
-from .metrics import UTILITY_CUES, row_metric, target_cue_counts
+from .metrics import UTILITY_CUES, target_cue_counts
+from .rerank import validate_rewrite_candidate
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions"
@@ -187,23 +188,14 @@ def validate_candidate(
     min_utility_retention: float,
     max_length_drift: float,
 ) -> tuple[bool, dict[str, Any]]:
-    metrics = row_metric(original, candidate)
-    length_drift = abs(len(candidate) - len(original)) / max(len(original), 1)
-    checks = {
-        "target_cue_retention": metrics["target_cue_retention"],
-        "utility_cue_retention": metrics["utility_cue_retention"],
-        "character_utility_retention": metrics["character_utility_retention"],
-        "length_drift": rounded(length_drift),
-        "min_target_retention": min_target_retention,
-        "min_utility_retention": min_utility_retention,
-        "max_length_drift": max_length_drift,
-    }
-    accepted = (
-        metrics["target_cue_retention"] >= min_target_retention
-        and metrics["utility_cue_retention"] >= min_utility_retention
-        and length_drift <= max_length_drift
+    return validate_rewrite_candidate(
+        original,
+        candidate,
+        min_target_retention=min_target_retention,
+        min_utility_retention=min_utility_retention,
+        max_length_drift=max_length_drift,
+        reject_unchanged=True,
     )
-    return accepted, checks
 
 
 def run_local_llm_candidates(

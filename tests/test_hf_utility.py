@@ -47,6 +47,7 @@ class FakeClassifier:
     model = FakeModel()
 
     def __call__(self, texts, batch_size=8, truncation=True):
+        _ = truncation
         outputs = []
         for text in texts:
             if "drop original" in text:
@@ -66,11 +67,11 @@ class FakeClassifier:
         return outputs
 
 
-def fake_pipeline(*args, **kwargs):
+def fake_pipeline(*_args, **_kwargs):
     return FakeClassifier()
 
 
-def failing_pipeline(*args, **kwargs):
+def failing_pipeline(*_args, **_kwargs):
     raise RuntimeError("model unavailable")
 
 

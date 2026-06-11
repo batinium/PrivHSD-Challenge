@@ -90,10 +90,6 @@ def cue_count(text: str) -> int:
     return count
 
 
-def direct_identifier_count(text: str) -> int:
-    return len(detect_spans(text, include_context=True, include_targets=False))
-
-
 def safe_ratio(numerator: float, denominator: float, *, default: float = 0.0) -> float:
     return numerator / denominator if denominator else default
 

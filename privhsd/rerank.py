@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
 from pathlib import Path
 import re
-from statistics import mean
 from typing import Any
 
 from .author_risk import AuthorRiskError, build_author_classifier, load_sklearn
