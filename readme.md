@@ -31,21 +31,10 @@ CSV with text
 
 ## Current Implementation
 
-The active package is `privhsd/`.
-
-```text
-privhsd/
-  ablation.py
-  classifier.py
-  cli.py
-  csv_pipeline.py
-  detectors.py
-  metrics.py
-  pipeline.py
-  utility_benchmark.py
-```
-
-The default path is deterministic and does not require LLM calls.
+The active package is `privhsd/`. The default path is deterministic and does
+not require LLM calls or optional ML dependencies. See
+[docs/pipeline_design.md](docs/pipeline_design.md) for the module map and
+[docs/packaging.md](docs/packaging.md) for wheel/install usage.
 
 ## Quick Run
 
@@ -72,6 +61,18 @@ python -m privhsd.cli anonymize \
   --text-col text \
   --id-col id \
   --audit data/outputs/dynahate.audit.json \
+  --mode balanced
+```
+
+After `python -m pip install .`, use the console command directly:
+
+```bash
+privhsd anonymize \
+  --input INPUT.csv \
+  --output OUTPUT.privatized.csv \
+  --text-col text \
+  --id-col id \
+  --audit OUTPUT.audit.json \
   --mode balanced
 ```
 

@@ -14,6 +14,24 @@ For strategy and next tasks, read `docs/roadmap.md`. The current roadmap
 prioritizes authorship-risk evaluation and style scrubbing over adding more
 PII-only rules.
 
+## Install As A Package
+
+From the repository root:
+
+```bash
+python -m pip install .
+privhsd --help
+```
+
+Build and test a wheel:
+
+```bash
+python -m pip wheel . -w dist --no-deps
+python -m venv /tmp/privhsd-smoke
+/tmp/privhsd-smoke/bin/python -m pip install dist/privhsd-*.whl
+/tmp/privhsd-smoke/bin/privhsd --help
+```
+
 ## Prepare Public Data
 
 ```bash
@@ -24,6 +42,8 @@ python -m privhsd.cli prepare-dynahate --download \
 
 ## Privatize
 
+With the source checkout:
+
 ```bash
 python -m privhsd.cli anonymize \
   --input data/public_dev/dynahate.csv \
@@ -32,6 +52,56 @@ python -m privhsd.cli anonymize \
   --id-col id \
   --audit data/outputs/dynahate.audit.json \
   --mode balanced
+```
+
+After package install, the same direct CSV input-to-output path is:
+
+```bash
+privhsd anonymize \
+  --input INPUT.csv \
+  --output OUTPUT.privatized.csv \
+  --text-col text \
+  --id-col id \
+  --audit OUTPUT.audit.json \
+  --mode balanced
+```
+
+This appends `privatized_text` and preserves the original columns. For an
+exact-format upload file, replace the text column in place and validate shape:
+
+```bash
+privhsd create-submission \
+  --input INPUT.csv \
+  --output SUBMISSION.csv \
+  --text-col text \
+  --id-col id \
+  --replace-text \
+  --mode balanced \
+  --manifest SUBMISSION.manifest.json
+
+privhsd validate-submission \
+  --source INPUT.csv \
+  --submission SUBMISSION.csv \
+  --text-col text \
+  --id-col id \
+  --output SUBMISSION.validation.json
+```
+
+Python API equivalent:
+
+```python
+from pathlib import Path
+
+from privhsd.csv_pipeline import process_csv
+
+process_csv(
+    Path("INPUT.csv"),
+    Path("OUTPUT.privatized.csv"),
+    text_col="text",
+    id_col="id",
+    audit_path=Path("OUTPUT.audit.json"),
+    mode="balanced",
+)
 ```
 
 ## Evaluate Locally

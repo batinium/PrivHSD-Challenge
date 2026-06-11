@@ -44,8 +44,9 @@ run/testing phase and is intended to be tracked.
 5. `agents/task_board.md`
 6. `agents/coding_rules.md`
 
-Use `overnight_report.md` for the detailed overnight history and experiment
-results. Keep this handoff short.
+Use `docs/experiment_verdict.md`, `docs/pipeline_design.md`, and
+`docs/roadmap.md` for current experiment results and implementation direction.
+Keep this handoff short.
 
 ## Current System
 
@@ -394,7 +395,10 @@ Local LLM bounded evidence:
 - Verdict: local LLM harness is functional, but current model outputs are
   low-yield and should not be scaled or submitted directly.
 
-Generated outputs are under ignored `data/outputs/`.
+Generated outputs are under ignored `data/outputs/`. Current baseline,
+reranked, Presidio-reranked, and submission artifacts stay at the top level.
+Older LLM, DPMLM, HF, classifier, ablation, and comparison runs were moved to
+`data/outputs/archive/2026-06-11-experiment-runs/`.
 
 ## Next Work
 
