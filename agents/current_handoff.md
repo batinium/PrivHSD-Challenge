@@ -135,6 +135,8 @@ Important slide takeaways:
   privatization via `--replace-text`, helper-column rejection, row/order/ID
   validation, metadata preservation checks, file hashes, git commit, command,
   mode, and metrics in the manifest.
+- A08/A22: final pitch/demo outline and human-rights judging narrative in
+  `docs/final_pitch_outline.md`.
 
 Recent commits:
 
@@ -176,19 +178,14 @@ Dataset:
 - labels: 22,175 `hate`, 18,969 `nothate`
 - splits: 32,924 train, 4,100 dev, 4,120 test
 
-Balanced anonymizer result:
+Latest aggregate experiment results:
 
-- placeholders: 2,315
-- residual identifiers: 3
-- residual quasi-identifiers: 0
-- target cue retention: 0.9994
-- character retention: 0.9953
-
-Local classifier original vs privatized:
-
-- original macro-F1: 0.7764
-- privatized macro-F1: 0.7756
-- macro-F1 delta: -0.0008
+| Variant | Residual IDs | Residual quasi IDs | Target retention | Character retention | Local macro-F1 delta | Notes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `balanced` | 3 | 0 | 0.9994 | 0.9953 | -0.0008 | Prior full Dynahate run. |
+| `balanced --style-scrub` | 3 | 0 | 0.9994 | 0.9434 | +0.0017 | Stronger style normalization; 77 changed local predictions. |
+| `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 | Chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. |
+| `create-submission --replace-text --mode balanced` | 3 | 0 | 0.9994 | 0.9953 | n/a | Exact-format validation passed: 41,144 rows, same columns/order, no helper columns. |
 
 Generated outputs are under ignored `data/outputs/`.
 
@@ -198,8 +195,8 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence:
 
-1. A08/A22: final pitch/demo and human-rights judging narrative.
-2. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+2. A26: HSD cue/rationale checks if time and dependencies allow.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that

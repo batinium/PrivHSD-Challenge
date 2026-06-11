@@ -16,7 +16,7 @@ and links to generated artifacts instead.
 | Challenge split |  |
 | Input CSV path |  |
 | Submitted CSV path |  |
-| Output text column | `privatized_text` |
+| Output text column | source text column replaced in place |
 | ID column |  |
 | Label column, if available |  |
 | Mode | `balanced` |
@@ -38,6 +38,23 @@ python -m privhsd.cli anonymize \
   --id-col id \
   --audit data/outputs/SUBMISSION.audit.json \
   --mode balanced
+
+# Exact-format upload artifact
+python -m privhsd.cli create-submission \
+  --input INPUT.csv \
+  --output data/outputs/SUBMISSION.csv \
+  --text-col text \
+  --id-col id \
+  --replace-text \
+  --mode balanced \
+  --manifest data/outputs/SUBMISSION.manifest.json
+
+python -m privhsd.cli validate-submission \
+  --source INPUT.csv \
+  --submission data/outputs/SUBMISSION.csv \
+  --text-col text \
+  --id-col id \
+  --output data/outputs/SUBMISSION.validation.json
 
 # Local metrics
 python -m privhsd.cli evaluate \
@@ -89,6 +106,19 @@ python -m privhsd.cli predict-classifier \
 | Proxy tradeoff mean |  |  |
 | Rows with privacy warnings |  |  |
 | Rows with over-masking warnings |  |  |
+
+## Exact-Format Validation
+
+| Check | Value | Source artifact |
+| --- | --- | --- |
+| Validation passed |  |  |
+| Same row count |  |  |
+| Same column set/order |  |  |
+| Same ID order |  |  |
+| Metadata preserved |  |  |
+| Helper columns rejected |  |  |
+| Input SHA-256 |  |  |
+| Output SHA-256 |  |  |
 
 ## Optional Local Classifier Summary
 

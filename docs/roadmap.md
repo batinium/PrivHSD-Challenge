@@ -28,7 +28,8 @@ destroying the signal needed for hate-speech detection.
 
 ## Current Baseline
 
-The current best submission candidate is `balanced` mode:
+The first exact-format submission candidate remains `balanced` mode unless
+official scores prove otherwise:
 
 - masks direct and quasi identifiers
 - preserves target-group terms by default
@@ -38,15 +39,12 @@ The current best submission candidate is `balanced` mode:
 
 Latest local Dynahate summary:
 
-| Metric | Value |
-| --- | ---: |
-| Rows | 41,144 |
-| Placeholders | 2,315 |
-| Residual identifiers | 3 |
-| Residual quasi-identifiers | 0 |
-| Target cue retention | 0.9994 |
-| Character retention | 0.9953 |
-| Local classifier macro-F1 delta | -0.0008 |
+| Variant | Residual IDs | Residual quasi IDs | Target retention | Character retention | Local macro-F1 delta | Notes |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `balanced` | 3 | 0 | 0.9994 | 0.9953 | -0.0008 | Prior full Dynahate run. |
+| `balanced --style-scrub` | 3 | 0 | 0.9994 | 0.9434 | +0.0017 | Stronger style normalization; 77 changed local predictions. |
+| `rerank-candidates` | 3 | 0 | 0.9997 | 0.9868 | +0.0019 | Chose `balanced` for 37,506 rows, `style_scrubbed` for 3,615, `privacy` for 23. |
+| `create-submission --replace-text --mode balanced` | 3 | 0 | 0.9994 | 0.9953 | n/a | Exact-format validation passed: 41,144 rows, same columns/order, no helper columns. |
 
 ## Model-Backed Plan
 
@@ -260,6 +258,9 @@ Useful outputs:
 This makes Presidio evidence in the pitch rather than a fragile dependency.
 
 ## Judging Strategy
+
+Status: a compact final pitch/demo outline and human-rights framing live in
+`docs/final_pitch_outline.md`.
 
 The final demo should show:
 
