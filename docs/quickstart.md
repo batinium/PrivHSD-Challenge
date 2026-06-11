@@ -40,6 +40,20 @@ python -m privhsd.cli prepare-dynahate --download \
   --output data/public_dev/dynahate.csv
 ```
 
+To prepare the broader public evaluation bundle, normalize the recommended
+datasets into a shared schema, and write a merged CSV:
+
+```bash
+python -m privhsd.cli prepare-recommended-datasets \
+  --output-dir data/public_dev \
+  --raw-dir data/public_dev/raw \
+  --merged-output data/public_dev/recommended_merged.csv
+```
+
+The merged schema keeps `id,text,label,source,split,target,type` first, then
+adds `platform,source_id,severity,target_categories,rationale_spans,meta`.
+Raw downloads stay under ignored `data/public_dev/raw/`.
+
 ## Privatize
 
 With the source checkout:

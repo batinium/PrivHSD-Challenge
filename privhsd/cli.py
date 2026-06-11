@@ -21,7 +21,12 @@ from .classifier import (
 )
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .cue_checks import CueCheckError, run_cue_checks
-from .datasets import add_prepare_dynahate_parser, prepare_dynahate
+from .datasets import (
+    add_prepare_dynahate_parser,
+    add_prepare_recommended_parser,
+    prepare_dynahate,
+    prepare_recommended_datasets,
+)
 from .dpmlm_spike import (
     DEFAULT_EPSILONS,
     DEFAULT_SAMPLE_SIZE as DEFAULT_DPMLM_SAMPLE_SIZE,
@@ -483,6 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
     token_actions.add_argument("--random-state", type=int, default=13)
 
     add_prepare_dynahate_parser(subparsers)
+    add_prepare_recommended_parser(subparsers)
 
     return parser
 
@@ -729,7 +735,7 @@ def main(argv: list[str] | None = None) -> int:
                 test_size=args.test_size,
                 random_state=args.random_state,
             )
-        else:
+        elif args.command == "prepare-dynahate":
             count = prepare_dynahate(
                 raw_path=args.raw,
                 output_path=args.output,
@@ -742,6 +748,19 @@ def main(argv: list[str] | None = None) -> int:
                 "download": args.download,
                 "row_count": count,
             }
+        elif args.command == "prepare-recommended-datasets":
+            result = prepare_recommended_datasets(
+                output_dir=args.output_dir,
+                raw_dir=args.raw_dir,
+                merged_output=args.merged_output,
+                datasets=args.datasets,
+                download=not args.no_download,
+                measuring_max_rows=args.measuring_max_rows,
+                measuring_page_size=args.measuring_page_size,
+                measuring_request_delay=args.measuring_request_delay,
+            )
+        else:  # pragma: no cover - argparse enforces command choices
+            raise ValueError(f"unsupported command: {args.command}")
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (

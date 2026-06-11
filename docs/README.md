@@ -13,7 +13,11 @@ Use it before changing code.
    author-risk evaluation are defensible.
 6. `dp_text_privacy_literature_notes.md` - mentor-adjacent DP NLP papers mapped
    to implementation choices.
-7. `score_log_template.md` - reproducible official-submission score log.
+7. `dataset_candidate_takeaways.md` - public dataset shortlist and experiment
+   roles for utility, cue, and privacy evaluation.
+8. `sjmeis_repo_takeaways.md` - practical notes from adjacent DP text rewriting
+   repositories, mapped to bounded experiments.
+9. `score_log_template.md` - reproducible official-submission score log.
 
 Reference docs:
 
