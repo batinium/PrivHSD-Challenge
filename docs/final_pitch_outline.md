@@ -32,6 +32,9 @@ python -m privhsd.cli create-submission \
    raw Presidio is dependency-heavy and false-positive-prone on HSD cues,
    filtered Presidio can safely feed reranking, and DPMLM is candidate-only
    because bounded real-model reranking did not select it.
+6. For methodology questions, point to `docs/methodology_justification.md`:
+   lexicons are justified by challenge labels, observed audit failures, and
+   target-identity/stylometry literature rather than arbitrary word lists.
 
 ## Evidence Table
 

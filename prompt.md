@@ -14,9 +14,10 @@ Start by reading:
 2. `agents/task_board.md`
 3. `agents/current_handoff.md`
 4. `docs/pipeline_design.md`
-5. `agents/coding_rules.md`
-6. `docs/official_submission_checklist.md`
-7. `docs/final_pitch_outline.md`
+5. `docs/methodology_justification.md`
+6. `agents/coding_rules.md`
+7. `docs/official_submission_checklist.md`
+8. `docs/final_pitch_outline.md`
 
 Initial commands:
 

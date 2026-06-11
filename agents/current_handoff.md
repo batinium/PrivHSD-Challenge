@@ -40,8 +40,9 @@ run/testing phase and is intended to be tracked.
 1. `docs/challenge_requirements.md`
 2. `docs/roadmap.md`
 3. `docs/pipeline_design.md`
-4. `agents/task_board.md`
-5. `agents/coding_rules.md`
+4. `docs/methodology_justification.md`
+5. `agents/task_board.md`
+6. `agents/coding_rules.md`
 
 Use `overnight_report.md` for the detailed overnight history and experiment
 results. Keep this handoff short.
