@@ -68,14 +68,8 @@ python -m privhsd.cli prepare-recommended-datasets \
 
 Prepared outputs:
 
-- `data/public_dev/dynahate.csv`
-- `data/public_dev/hatecheck.csv`
-- `data/public_dev/hatemoji.csv`
-- `data/public_dev/measuring_hate_speech.csv`
-- `data/public_dev/hatexplain.csv`
-- `data/public_dev/toxic_spans.csv`
-- `data/public_dev/convabuse.csv`
-- `data/public_dev/davidson.csv`
+- archived normalized files under `data/public_dev/archive/normalized/`
+- archived raw files under `data/public_dev/archive/raw/`
 - `data/public_dev/recommended_merged.csv`
 
 The merged CSV uses this schema:
@@ -83,6 +77,13 @@ The merged CSV uses this schema:
 ```text
 id,text,label,source,split,target,type,platform,source_id,severity,target_categories,rationale_spans,meta
 ```
+
+The merged CSV is an evaluation bundle, not a homogeneous training dataset.
+`label`, `target`, `type`, and `rationale_spans` are source-aware fields:
+`offensive`, `toxic`, `abuse`, and `ambiguous` are not automatically hate; some
+synthetic/adversarial sources use `platform=synthetic`; HateXplain rationale
+spans are token ranges while Toxic Spans rationale spans are character offsets.
+Use `source` before interpreting those columns.
 
 The command keeps raw downloads in ignored `data/public_dev/raw/`. For
 Measuring Hate Speech, it prefers a raw CSV exported from the Hugging Face

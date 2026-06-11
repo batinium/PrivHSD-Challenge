@@ -27,6 +27,7 @@ from .datasets import (
     prepare_dynahate,
     prepare_recommended_datasets,
 )
+from .dataset_profile import DatasetProfileError, profile_dataset
 from .dpmlm_spike import (
     DEFAULT_EPSILONS,
     DEFAULT_SAMPLE_SIZE as DEFAULT_DPMLM_SAMPLE_SIZE,
@@ -76,6 +77,19 @@ from .utility_benchmark import BenchmarkError, run_utility_benchmark
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="privhsd")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    profile = subparsers.add_parser(
+        "profile-dataset",
+        help="Safely inspect an incoming CSV without printing raw text examples.",
+    )
+    profile.add_argument("--input", type=Path, required=True)
+    profile.add_argument("--output", type=Path)
+    profile.add_argument("--text-col")
+    profile.add_argument("--id-col")
+    profile.add_argument("--label-col")
+    profile.add_argument("--source-col")
+    profile.add_argument("--split-col")
+    profile.add_argument("--top-k", type=int, default=20)
 
     anonymize = subparsers.add_parser(
         "anonymize",
@@ -498,7 +512,18 @@ def main(argv: list[str] | None = None) -> int:
     raw_argv = list(argv) if argv is not None else sys.argv[1:]
     args = parser.parse_args(raw_argv)
     try:
-        if args.command == "anonymize":
+        if args.command == "profile-dataset":
+            result = profile_dataset(
+                args.input,
+                output_path=args.output,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                source_col=args.source_col,
+                split_col=args.split_col,
+                top_k=args.top_k,
+            )
+        elif args.command == "anonymize":
             generalize_targets = None
             if args.generalize_targets:
                 generalize_targets = True
@@ -770,6 +795,7 @@ def main(argv: list[str] | None = None) -> int:
         ClassifierError,
         CsvPipelineError,
         CueCheckError,
+        DatasetProfileError,
         DpmlmCandidateError,
         DpmlmSpikeError,
         HfUtilityError,

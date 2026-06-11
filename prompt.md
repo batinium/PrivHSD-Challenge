@@ -1,343 +1,677 @@
-# Continuation Prompt For Next Agent
+# Overnight Agent Prompt: PrivHSD Challenge Hardening
 
-You are working in `/home/bati/projects/PrivHSD-Challenge` on branch `main`.
+You are working in `/home/bati/projects/PrivHSD-Challenge`.
 
-The official challenge files are **not available yet**. Continue with optional
-model-backed testing and experiment hardening on the local Dynahate data and
-synthetic fixtures. The challenge goal is still to reduce authorship-identifying
-signal while preserving hate-speech-detection utility. Do not treat the task as
-simple PII redaction.
+Your job is to work autonomously overnight on the PrivHSD system until the
+project is materially stronger for the official challenge evaluator. Do not stop
+after a shallow pass. Keep iterating through implementation, tests, experiments,
+and documentation until you either meet the success criteria below or hit a
+hard blocker that cannot be worked around.
 
-Start by reading:
+## Mission
 
-1. `docs/roadmap.md`
-2. `agents/task_board.md`
-3. `agents/current_handoff.md`
-4. `docs/pipeline_design.md`
+Build and validate a privacy-preserving text transformation system for hate
+speech detection datasets.
+
+The system must:
+
+- preserve row count, row order, IDs, labels, and metadata;
+- reduce direct identifiers, quasi-identifiers, and author-identifying style;
+- preserve hate-speech detection utility;
+- preserve target/action/negation/modality cues;
+- avoid over-restricting offensive, insulting, toxic, political, satirical,
+  counterspeech, or public-interest expression;
+- preserve evidence of hate against vulnerable or historically targeted groups;
+- be explainable, auditable, and compatible with human review.
+
+This is not a generic PII scrubber, not a production hate classifier, not an
+automated takedown system, and not a legal decision system.
+
+## Read First
+
+Start by reading these files:
+
+1. `docs/real_data_playbook.md`
+2. `docs/roadmap.md`
+3. `docs/challenge_requirements.md`
+4. `docs/human_rights_legal_test_plan.md`
 5. `docs/methodology_justification.md`
-6. `docs/dp_text_privacy_literature_notes.md`
-7. `agents/coding_rules.md`
+6. `docs/pipeline_design.md`
+7. `docs/dataset_plan.md`
 8. `docs/official_submission_checklist.md`
 9. `docs/final_pitch_outline.md`
+10. `agents/current_handoff.md`
+11. `agents/task_board.md`
+12. `agents/coding_rules.md`
 
-Initial commands:
+Also inspect the implementation before changing it:
+
+- `privhsd/pipeline.py`
+- `privhsd/detectors.py`
+- `privhsd/style.py`
+- `privhsd/metrics.py`
+- `privhsd/rerank.py`
+- `privhsd/cue_checks.py`
+- `privhsd/dataset_profile.py`
+- `privhsd/submission.py`
+- `privhsd/cli.py`
+- relevant tests under `tests/`
+
+## Current Data
+
+Public local data is available. The main public regression file is:
+
+```text
+data/public_dev/recommended_merged.csv
+```
+
+Raw and normalized public data are archived under:
+
+```text
+data/public_dev/archive/raw/
+data/public_dev/archive/normalized/
+```
+
+Important caveat: `recommended_merged.csv` is an evaluation/regression bundle,
+not one homogeneous training table. `label`, `target`, `type`, and
+`rationale_spans` are source-aware. Do not blindly collapse `offensive`,
+`toxic`, `abuse`, and `ambiguous` into `hate`. Do not use `source_id` as an
+author label; it is unique within each source.
+
+Generated outputs must go under ignored `data/outputs/`.
+
+## Persistent Progress Memory
+
+Keep a live markdown progress log while working. Create or update:
+
+```text
+agents/overnight_progress.md
+```
+
+Update it:
+
+- after the initial test/profile pass;
+- before and after each long-running experiment;
+- after each model benchmark group;
+- whenever a blocker or useful finding appears;
+- at least every 60 minutes during a long overnight run.
+
+Use this structure:
+
+```text
+# Overnight Progress
+
+## Current Objective
+
+## Completed Since Start
+
+## Running Now
+
+## Metrics Snapshot
+
+## Model Benchmark Notes
+
+## Blockers / Skips
+
+## Next Action
+```
+
+Do not paste raw sensitive/hateful examples into the progress file. Use row IDs,
+aggregate metrics, source names, and reason codes only.
+
+## Initial Commands
+
+Run these first:
 
 ```bash
-git pull --ff-only
 git status --short
-python -m pytest -q
-if [ -d .venv ]; then .venv/bin/python -m pytest -q; fi
+.venv/bin/python -m pytest -q
+.venv/bin/python -m privhsd.cli profile-dataset \
+  --input data/public_dev/recommended_merged.csv \
+  --output data/outputs/recommended_merged.profile.json
 ```
 
-Current status:
+If `.venv` is broken, use `python -m pytest -q` and repair the local
+environment. Do not delete or reset user changes. Do not use destructive git
+commands.
 
-- Core priority implementation through A29 is complete.
-- A26 HSD cue checks are complete.
-- Metadata leakage checks are implemented with `check-metadata-leakage`; local
-  Dynahate has 0 exact/normalized `id` leaks in original and protected text.
-- A14 Presidio comparison harness is complete.
-- A23 official submission checklist is complete.
-- A30 bounded Hugging Face utility runs are complete on
-  `data/outputs/dynahate.reranked.csv`.
-- A31 bounded Presidio/spaCy comparison is complete on the first 100 local
-  Dynahate rows and a sample-500 extension.
-- A32 DPMLM backend investigation and protected-token candidate adapter are
-  complete for this pass: `dpmlm` 1.1.2 is installed/importable after NLTK
-  resources, `generate-dpmlm-candidates` runs `FacebookAI/roberta-base`, but
-  bounded reranking selected 0 DPMLM candidates.
-- A33 bounded local LLM candidate generation/reranking is complete against LM
-  Studio at `http://100.120.207.64:1234`; current LLM candidates are low-yield
-  and did not beat deterministic reranking.
-- A36 weak token-action tagger training is complete on a sample-5,000 Dynahate
-  run with macro-F1 0.8556 against weak local labels.
-- A37 filtered Presidio augmentation is implemented on `anonymize`,
-  `rerank-candidates`, and `create-submission` with `--presidio-augment`.
-  Full Dynahate reranking selected `presidio_augmented` for 6,085 rows.
-- A38 mentor-adjacent DP NLP literature mapping is complete in
-  `docs/dp_text_privacy_literature_notes.md`; it supports selective cue
-  protection, privacy-pressure allocation, reranking/post-processing, and
-  empirical adversarial evaluation rather than direct DPMLM replacement.
-- The shareable architecture paper/PDF was removed to declutter; use
-  `docs/pipeline_design.md`, `docs/methodology_justification.md`, and
-  `docs/roadmap.md` as the canonical design docs until a new paper is drafted.
-- A41 audit hardening is complete: detector context rules now mask
-  single-token self-identifying names while preserving target-group cues, and
-  reranking/DPMLM share external rewrite validation for cue loss, residual
-  identifiers, new identifier signals, style-risk increases, and drift.
-- Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
-  to confirm.
-- Current full tests should be `87 passed, 1 skipped`.
-- Local Dynahate is expected at `data/public_dev/dynahate.csv`; it is ignored by
-  git and has columns `id,text,label,source,split,target,type`.
-- Generated outputs belong under ignored `data/outputs/`.
-- Existing untracked files may include `Webinar.txt`; do not commit it unless
-  explicitly requested.
+## Autonomy Rules
 
-Constraints:
+You may:
 
-- Core `privhsd anonymize` must remain local, deterministic, and dependency-light.
-- Do not make Hugging Face, Presidio, spaCy, DPMLM, LM Studio, llama.cpp, or
-  fine-tuning dependencies required for base anonymization.
-- Do not commit downloaded datasets, model weights, Hugging Face caches,
-  tokenizer caches, spaCy model files, DPMLM artifacts, local LLM outputs with
-  raw text, `data/outputs/`, or official/raw examples.
-- Preserve row count, row order, IDs, labels, and metadata in every CSV path.
-- For official `id,author,text,HS`-style files, run metadata leakage checks on
-  `id` and `author`, then run `evaluate-author-risk --author-col author` if
-  author labels have repeated rows.
-- Use the metric framing: high Utility_protected / Utility_original and low
-  Privacy_protected / Privacy_original.
-- Any model/LLM/DP output is evidence or a candidate for reranking, not a direct
-  product replacement unless it clearly improves the measured privacy/HSD
-  tradeoff and remains auditable.
+- search the web for current official docs, model cards, or research;
+- use the Consensus MCP if available for research questions;
+- use Hugging Face tooling and download models/datasets when useful;
+- train small local models;
+- run long CPU jobs if they produce measurable evidence;
+- install optional dependencies into `.venv` if needed;
+- add code, tests, docs, and CLI commands.
 
-## Next Priority: Remaining Model-Backed Experiment Work
+You must not:
 
-### Optional A30 Extension: Hugging Face Utility Evaluator Runs
+- make Hugging Face, Presidio, spaCy, DPMLM, LLMs, or fine-tuned models required
+  for the base `privhsd anonymize` path;
+- commit/download model weights, caches, raw challenge data, or `data/outputs/`;
+- paste raw hateful/sensitive examples into docs or final reports;
+- rely on a remote paid API unless explicitly authorized by the user;
+- replace the deterministic baseline with an opaque model;
+- stop just because one optional model path fails.
 
-The local `.venv` has `torch` 2.12.0+cpu and `transformers` 5.11.0 installed.
-Default HF probes passed sample 25 and sample 100 on reranked Dynahate with
-negligible drift, 1.0 agreement, and no large utility-drop rows:
+If an optional path fails, write a structured skip/blocker report and continue
+to the next path.
 
-- `facebook/roberta-hate-speech-dynabench-r4-target`: sample 100, revision
-  `391c99ab8b3f65beb77746a2cf6ddf1ddf9817e6`, CPU runtime 36.637s, mean delta
-  -0.0005.
-- `cardiffnlp/twitter-roberta-base-hate-latest`: sample 100, revision
-  `cc56585908cbda6d04ba2e1234d911fd1578c9ab`, CPU runtime 41.2954s, mean
-  delta -0.0016.
-- `unitary/toxic-bert`: sample 25, revision
-  `4d6c22e74ba2fdd26bc4f7238f50766b045a0d94`, CPU runtime 20.6408s, mean delta
-  -0.0.
+## Success Criteria
 
-The two HateXplain classifier variants loaded but produced structured
-`model_inference_failed` skips with `tuple index out of range`; keep
-`check-hsd-cues` as the reliable cue-retention fallback.
+Do not stop until one of these is true:
 
-Only scale to sample 500 or full runs if CPU runtime, model-card review, cache
-size, and disk budget are acceptable. Reuse the existing command shape:
+### Total Success
+
+All of the following are achieved:
+
+- full tests pass;
+- `profile-dataset` works on `recommended_merged.csv`;
+- exact-format `balanced` output works on `recommended_merged.csv`;
+- at least one source-aware regression report exists for original/protected
+  comparisons;
+- context/cue/rationale preservation is measured beyond global averages;
+- local small-model context-labeler stress tests have been run or clearly
+  blocked, with speed/usefulness results recorded;
+- any implemented improvement beats or matches the current baseline without
+  weakening HSD utility or legal framing;
+- docs and handoff files are updated with exact commands, metrics, outputs, and
+  remaining risks.
+
+### Minimum Overnight Success
+
+If total success is not feasible, achieve all of the following:
+
+- full tests pass;
+- implement at least one high-leverage missing evaluator or report;
+- run it on `recommended_merged.csv` or a clearly justified source-stratified
+  sample;
+- run at least a small LM Studio context-labeler benchmark if LM Studio is
+  reachable;
+- record aggregate results and blockers in docs;
+- leave the repo in a state where the official CSV can be profiled, processed,
+  validated, and diagnosed immediately.
+
+### Hard Blocker
+
+Only stop for a hard blocker if:
+
+- the same blocker recurs after at least three serious workaround attempts;
+- no other useful implementation or experiment can proceed;
+- you write a clear blocker note with the exact command, error, and next action.
+
+## Minimum Metrics To Protect
+
+Treat these as guardrails, not official scores:
+
+- exact-format validation must pass;
+- target cue retention should stay at or above `0.999` globally and should not
+  show systematic loss on HateCheck/Hatemoji/protected-group slices;
+- utility cue retention should stay at or above `0.999` globally;
+- any candidate that lowers utility/cue retention must have a clear privacy win
+  and be source-slice safe;
+- residual identifier counts should not exceed the current `balanced` baseline
+  on the same file;
+- no candidate should erase protected-group target evidence by default;
+- offensive/toxic/ambiguous/counterspeech rows must not be treated as automatic
+  hate in reports or model mappings.
+
+Current merged `balanced` baseline from prior run:
+
+- rows: 159,668
+- changed text cells: 26,941
+- identifier detections: 40,304 -> 5
+- direct identifiers: 33,032 -> 4
+- quasi identifiers: 7,272 -> 1
+- target cue retention: 0.9999
+- utility cue retention: 0.9999
+- character retention: 0.9721
+- manifest: `data/outputs/recommended_merged.balanced.manifest.json`
+- output: `data/outputs/recommended_merged.balanced.csv`
+
+## Highest Priority Work
+
+Work in this order unless local evidence shows a better order.
+
+### 1. Build Source-Aware Regression Reporting
+
+Implement a command or module that compares original and protected CSVs grouped
+by source-aware slices.
+
+Required inputs:
+
+- original CSV;
+- protected CSV;
+- original text column;
+- protected text column;
+- ID column;
+- grouping columns such as `source`, `label`, `split`, `platform`,
+  `target_categories`, and possibly `type`.
+
+Required aggregate outputs:
+
+- row count per group;
+- changed-text rate;
+- identifier before/after;
+- direct identifier before/after;
+- quasi identifier before/after;
+- target cue retention;
+- utility cue retention;
+- action cue retention if available;
+- negation/modality retention if available;
+- character retention;
+- warning counts;
+- top risky groups by privacy warnings and utility loss;
+- no raw text.
+
+Run it on:
+
+```text
+data/public_dev/recommended_merged.csv
+data/outputs/recommended_merged.balanced.csv
+```
+
+If the full file is too slow, run source-stratified samples first, then optimize
+or stream.
+
+### 2. Improve Context Awareness Deterministically
+
+Before adding a micro LLM, inspect existing cue/context logic and improve it if
+needed.
+
+Add or improve deterministic row-context tags such as:
+
+- `protected_target`
+- `historical_victim_group`
+- `hostile_action`
+- `threat`
+- `dehumanization`
+- `exclusion`
+- `negated_hate`
+- `counterspeech`
+- `quoted_or_reported`
+- `public_interest_or_institutional_criticism`
+- `offensive_only_risk`
+- `missing_context`
+
+Use context tags for audit/reranking policy, not as legal conclusions. They can
+be used to penalize candidates that lose critical cues or to identify slices
+for reporting.
+
+Add focused tests for:
+
+- same target/action words with negation versus endorsement;
+- counterspeech containing slurs or target terms;
+- quotation/reporting of hateful words;
+- offensive insult without protected target;
+- protected group plus direct threat/exclusion;
+- historical-victim group examples;
+- public official/institution criticism without protected target.
+
+### 3. Rationale/Span Preservation
+
+Implement or prototype source-aware rationale/span preservation checks.
+
+Rules:
+
+- HateXplain `rationale_spans` are token-index ranges.
+- Toxic Spans `rationale_spans` are character-offset ranges.
+- Parser must branch on `source`.
+- Do not print raw span text; report counts and row IDs only.
+
+Measure:
+
+- rows with rationale spans;
+- rationale spans that overlap replacements/placeholders;
+- rationale-bearing tokens/spans preserved after privatization;
+- source-level and label-level retention.
+
+Use this as a stronger utility check than dictionary cues alone.
+
+### 4. LM Studio Small-Model Context Labeler Stress Test
+
+The user has downloaded several small local models in LM Studio. Stress test
+them for **context understanding**, not direct anonymization. The model should
+produce advisory labels that help decide which words must not be masked.
+
+Do not let an LLM directly produce the final privatized text unless the output
+is validated and reranked. The best architecture is:
+
+```text
+row text
+  -> deterministic cue/context detector
+  -> small LLM context-labeler advisory JSON
+  -> token-action/context policy
+  -> deterministic masker/style scrubber
+  -> validators/reranker
+```
+
+First discover the available LM Studio endpoint and model IDs:
 
 ```bash
-python -m privhsd.cli evaluate-hf-utility \
-  --input data/outputs/dynahate.reranked.csv \
+curl -s http://127.0.0.1:1234/v1/models
+curl -s http://100.120.207.64:1234/v1/models
+```
+
+Try localhost first. If neither endpoint is reachable, record a structured
+blocker and continue with deterministic/HF work.
+
+User-reported local models to try if available:
+
+| Nickname | Expected model family / ID hint | Size | Quantization |
+| --- | --- | ---: | --- |
+| `qwen3-0.6b` | `lmstudio-community/qwen3-0.6b` or `qwen3-0.6b` | 0.6B | Q8_0 |
+| `lfm2-1.2b` | `liquid/lfm2-1.2b` | 1.2B | Q8_0 |
+| `lfm2.5-1.2b` | `liquid/lfm2.5-1.2b` | 1.2B | Q8_0 |
+| `qwen3-1.7b` | `qwen/qwen3-1.7b` | 1.7B | Q6_K |
+| `phi-4-mini-reasoning` | `microsoft/phi-4-mini-reasoning` | 3B | Q4_K_M |
+| `ministral-3-3b` | `mistralai/ministral-3-3b` | 3B | Q8_0 |
+| `qwen3-4b` | `qwen/qwen3-4b` | 4B | Q4_K_M |
+| `nemotron-3-nano-4b` | `nvidia/nemotron-3-nano-4b` | 4B | Q4_K_M |
+| `qwen3-4b-2507` | `qwen/qwen3-4b-2507` | 4B | Q8_0 |
+| `gemma-4-e2b` | `google/gemma-4-e2b` | 4.6B | Q4_K_M |
+| `gemma-3n-e4b` | `google/gemma-3n-e4b` | 6.9B | Q4_K_M |
+
+Exact LM Studio model IDs may differ. Use `/v1/models` output as source of
+truth.
+
+Implement or reuse a benchmark command/script that sends a source-stratified
+sample to each reachable model and tests **multiple output formats**. Small
+models may fail strict JSON but still provide useful context signals as short
+lists or tagged text. If no command exists, implement one. Suggested command
+name:
+
+```bash
+.venv/bin/python -m privhsd.cli benchmark-lm-context \
+  --input data/public_dev/recommended_merged.csv \
   --text-col text \
-  --privatized-col privatized_text \
   --id-col id \
+  --source-col source \
   --label-col label \
-  --sample-size 500 \
-  --output data/outputs/dynahate.reranked.hf_utility.sample500.json
+  --endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --model MODEL_ID \
+  --sample-size 100 \
+  --output data/outputs/lm_context.MODEL_ID.sample100.json
 ```
 
-### A31: Presidio/spaCy Comparison Runs
+Test these modes, from strictest to most permissive:
 
-Sample 100 and sample 500 are complete in `.venv` using Presidio/spaCy.
-Sample 100 results:
+1. `json`: ask for valid JSON only.
+2. `tagged`: ask for one field per line with stable prefixes.
+3. `word_lists`: ask for compact comma-separated lists only.
+4. `binary_tags`: ask for yes/no tags plus protected words.
 
-- PrivHSD spans: 1
-- Presidio spans: 27
-- overlap: 1
-- Presidio-only: 26
-- PrivHSD-only: 0
-- false-positive-risk count on HSD cues/targets: 9
-- runtime after setup: 0.4389s
-- dependency cost: Presidio default initialization downloaded
-  `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, even after
-  `en_core_web_sm` was installed
+The strict JSON response requested from each model should look like:
 
-Presidio remains a comparison baseline, not the product. Do not integrate it
-into core anonymization unless measured privacy/HSD tradeoff gains justify the
-false-positive and dependency costs.
+```json
+{
+  "context_tags": [
+    "protected_target",
+    "hostile_action",
+    "negated_hate",
+    "counterspeech",
+    "quoted_or_reported",
+    "offensive_only_risk",
+    "missing_context"
+  ],
+  "protected_phrases": ["phrase that must remain semantically visible"],
+  "maskable_phrases": ["phrase likely to be identifier/style only"],
+  "uncertainty": "low|medium|high",
+  "reason_codes": ["target_action_preserved", "quote_marker_present"]
+}
+```
 
-Sample 500 results:
+The tagged fallback can look like:
 
-- PrivHSD spans: 8
-- Presidio spans: 174
-- overlap: 6
-- Presidio-only: 168
-- PrivHSD-only: 2
-- false-positive-risk count on HSD cues/targets: 52
-- runtime after setup: 1.4907s
+```text
+TAGS: protected_target, hostile_action, negated_hate
+PROTECT: group name; action phrase; not/never/should markers
+MASKABLE: username; email; location if not target cue
+UNCERTAINTY: low
+REASONS: negation_present; target_action_present
+```
 
-Filtered Presidio augmentation is now implemented:
+The word-list fallback can look like:
 
-- flags: `--presidio-augment` on `anonymize`, `rerank-candidates`, and
-  `create-submission`
-- direct augmented full run accepted DATE 1,400, LOCATION 5,185, PERSON 3,834
-  and rejected NRP 14,021 plus other risky/noisy spans
-- full rerank chose `presidio_augmented` for 6,085 rows, `balanced` for 31,821,
-  `style_scrubbed` for 3,219, and `privacy` for 19
-- local utility benchmark: macro-F1 delta +0.0048, prediction agreement 0.9838
-- cue checks: target-term retention 0.9974, utility-cue retention 1.0,
-  58 rows with any conservative cue loss
-- concrete behavior: masks `Amy`, `Steven`, `Mustafa`, `Britain`, `Caribbean`,
-  and `the 1950s`; preserves target terms like `Muslims` and `Hindus`; rejects
-  false positives like `ngl` and `sl33p`
+```text
+protected_words: word1, phrase two, phrase three
+maskable_words: word4, phrase five
+context_tags: counterspeech, quoted_or_reported
+```
 
-### A33: Local LLM Candidate Generation
+The binary-tags fallback can be even simpler:
 
-Bounded run is complete. The local LLM client now supports LM Studio-compatible
-JSON schema response formatting, response-format fallback, wrapped JSON
-extraction, and aggregate `status_counts` in reports.
+```text
+protected_target=yes
+hostile_action=yes
+negation=no
+counterspeech=no
+quoted_or_reported=yes
+protect=phrase one; phrase two
+mask=phrase three
+```
 
-Latest result:
+Build parsers for these fallback formats if useful. They do not need to be
+perfect, but they must be measurable and reject ambiguous output. The benchmark
+should record the best parse mode per model and the failure modes.
 
-- endpoint: `http://100.120.207.64:1234/v1/chat/completions`
-- model: `openai/gpt-oss-20b`
-- sample size: 10
-- accepted candidates: 3
-- rejected by checks: 7
-- runtime: 18.2567s
-- reranker selected LLM candidates: 0
-- output metrics: matched deterministic `rerank-candidates`
+Use short prompts and low `max_tokens` so models can be tested in bursts. Good
+defaults:
 
-Do not scale local LLM generation unless a model produces a much higher
-accepted-and-selected rate on bounded samples. Do not use remote paid APIs
-unless explicitly authorized.
+- sample 20 for initial smoke across all models;
+- sample 100 for promising models;
+- temperature 0 or as low as LM Studio supports;
+- max output tokens 160-256;
+- timeout 20-60 seconds per row depending on model size;
+- record schema-valid rate, timeout rate, invalid JSON rate, and latency.
 
-Example:
+Sample selection must be source/label/functionality aware. Include, when
+available:
+
+- HateCheck contrastive cases;
+- Hatemoji perturbations;
+- HateXplain rationale rows;
+- Toxic Spans rationale rows;
+- Measuring Hate Speech ambiguous/severity bands;
+- Davidson offensive rows;
+- protected-group plus threat/exclusion rows;
+- counterspeech/quotation/negation patterns.
+
+Evaluate each model on:
+
+- parse validity by mode: JSON, tagged, word-list, binary-tags, or failed;
+- rows/second and p50/p95 latency;
+- agreement with deterministic context tags;
+- ability to identify negation/counterspeech/quotation;
+- whether protected phrases include target/action/negation cues;
+- whether maskable phrases avoid target/action/rationale spans;
+- uncertainty calibration;
+- usefulness as a teacher for token-action training or reranker features.
+
+Write aggregate model leaderboard output only, no raw text:
+
+```text
+data/outputs/lm_context_benchmark.summary.json
+data/outputs/lm_context_benchmark.MODEL_ID.json
+```
+
+The most useful result is not necessarily the largest model or the best JSON
+writer. Prefer the model with the best speed/usefulness tradeoff and the lowest
+unparseable-output rate. A 0.6B or 1.2B model is valuable if it reliably
+identifies context tags and protected/maskable phrases through any parseable
+format.
+
+If a model is promising, use it as a teacher or advisory scorer:
+
+- generate context tags/protected phrases for a stratified sample;
+- compare against deterministic tags;
+- train or improve weak token-action/context rules;
+- integrate only through validators/reranking, not direct final rewriting.
+
+Update `agents/overnight_progress.md` after each model or model group.
+
+### 5. Source-Stratified HF Utility Evaluation
+
+If useful, run Hugging Face utility models on a source-stratified sample, not
+just the first N rows.
+
+Allowed examples:
+
+- `facebook/roberta-hate-speech-dynabench-r4-target`
+- `cardiffnlp/twitter-roberta-base-hate-latest`
+- `unitary/toxic-bert`
+- other well-justified public models after checking model cards
+
+You may search the web or Hugging Face model cards. If using search, prefer
+official docs/model cards. Record model ID, revision, runtime, sample size,
+device, and skip reasons.
+
+Do not make these models required for the core anonymizer.
+
+### 6. Train Small Local Models Only If They Answer A Question
+
+You may train local lightweight models when useful:
+
+- source-aware TF-IDF utility classifiers;
+- one-vs-rest or per-source utility probes;
+- author-risk adversary only if repeated author/user labels exist;
+- token-action uncertainty scorer.
+
+Do not train a large transformer first. Do not commit checkpoints. Save metrics
+and model artifacts only under `data/outputs/`.
+
+### 7. Reranking Experiments
+
+Run reranking only after the reporting above can show slice-level tradeoffs.
+
+Compare:
+
+- `balanced`;
+- `balanced --style-scrub`;
+- `rerank-candidates`;
+- `rerank-candidates --presidio-augment`;
+- any new context-aware reranking policy.
+
+Do not select a global winner based only on a global average. Check hard slices:
+
+- HateCheck functionality cases;
+- Hatemoji perturbation cases;
+- HateXplain rationale rows;
+- Toxic Spans rationale rows;
+- Measuring Hate Speech severity bands;
+- offensive/toxic/ambiguous labels;
+- protected and historical-victim groups.
+
+## Web, Hugging Face, And Consensus Use
+
+You are allowed to search the web. Use it when:
+
+- model cards or package docs may have changed;
+- you need current Hugging Face model details;
+- you need official challenge/Council of Europe references;
+- you are unsure about a legal/research claim.
+
+When using search for technical claims, prefer primary sources: official docs,
+model cards, papers, and repository docs.
+
+If the Consensus MCP is available, use it for research questions like:
+
+- best practices for hate speech utility evaluation;
+- context-sensitive hate speech detection;
+- authorship obfuscation evaluation;
+- privacy-preserving text rewriting;
+- rationale preservation in HSD.
+
+When adding research-backed claims to docs, cite sources or record the source
+names/URLs. Do not let research browsing replace implementation and measurement.
+
+## Official Data Strategy
+
+When the real CSV arrives, the runbook is:
+
+1. `profile-dataset`
+2. create exact-format `balanced`
+3. `validate-submission`
+4. local utility/cue/privacy evidence
+5. official upload
+6. diagnose official score
+7. try one targeted alternate
+
+Do not start with DPMLM, LLM rewriting, raw Presidio, broad target
+generalization, or large model training.
+
+## Commands To Keep Handy
+
+Profile:
 
 ```bash
-python -m privhsd.cli generate-llm-candidates \
-  --input data/public_dev/dynahate.csv \
-  --output data/outputs/dynahate.llm_candidates.sample25.csv \
-  --text-col text \
-  --id-col id \
-  --sample-size 25 \
-  --endpoint http://127.0.0.1:1234/v1/chat/completions \
-  --model local-model \
-  --report data/outputs/dynahate.llm_candidates.sample25.report.json
-
-python -m privhsd.cli rerank-candidates \
-  --input data/outputs/dynahate.llm_candidates.sample25.csv \
-  --output data/outputs/dynahate.llm_reranked.sample25.csv \
-  --text-col text \
-  --id-col id \
-  --candidate-col llm_candidate \
-  --audit data/outputs/dynahate.llm_reranked.sample25.audit.json
+.venv/bin/python -m privhsd.cli profile-dataset \
+  --input data/public_dev/recommended_merged.csv \
+  --output data/outputs/recommended_merged.profile.json
 ```
 
-Use the example only for a new model comparison. Compare against deterministic
-`rerank-candidates`. Reject raw LLM outputs that lose
-target/action/negation/modality cues, drift semantically, or increase privacy
-risk.
+Exact-format baseline:
 
-### A32: Real DPMLM Rewrite Spike
+```bash
+.venv/bin/python -m privhsd.cli create-submission \
+  --input data/public_dev/recommended_merged.csv \
+  --output data/outputs/recommended_merged.balanced.csv \
+  --text-col text \
+  --id-col id \
+  --replace-text \
+  --mode balanced \
+  --manifest data/outputs/recommended_merged.balanced.manifest.json
+```
 
-`dpmlm-spike` remains a backend/blocker harness. The implemented rewrite path is
-`generate-dpmlm-candidates`, which uses the low-level DPMLM token API rather
-than raw sentence rewriting.
+Validate:
 
-Current evidence:
+```bash
+.venv/bin/python -m privhsd.cli validate-submission \
+  --source data/public_dev/recommended_merged.csv \
+  --submission data/outputs/recommended_merged.balanced.csv \
+  --text-col text \
+  --id-col id \
+  --output data/outputs/recommended_merged.balanced.validation.json
+```
 
-- `dpmlm` 1.1.2 is installed/importable after NLTK resources.
-- Raw direct tiny-model DPMLM can change protected HSD cues, so raw sentence
-  rewrite is unsafe.
-- `generate-dpmlm-candidates` freezes target terms, utility/action cues,
-  negation/modality terms, stopwords, capitalized tokens, repeated-letter
-  tokens, placeholders, and punctuation.
-- Safe default run:
-  `data/outputs/dynahate.dpmlm_candidates.roberta.sample8.eps100.safe2.report.json`
-  accepted 0/8 candidates in 3.9847s.
-- Looser min-score-4 run:
-  `data/outputs/dynahate.dpmlm_candidates.roberta.min4.sample12.eps100.final.report.json`
-  accepted 11/12 candidates in 4.9143s.
-- Reranking those looser candidates selected `balanced` for 10 rows,
-  `style_scrubbed` for 2 rows, and 0 DPMLM candidates.
+Full tests:
 
-Do **not** integrate DPMLM into core anonymization unless it beats deterministic
-or Presidio-reranked outputs on privacy/HSD tradeoff and auditability.
-
-### A36: Weak Token-Action Tagger
-
-`privhsd train-token-action-tagger` is implemented behind
-`privhsd[token-actions]`. It trains a scikit-learn token classifier from weak
-local detector/cue labels with actions `KEEP`, `MASK_IDENTIFIER`,
-`GENERALIZE_CONTEXT`, `PROTECT_TARGET`, `PROTECT_HSD`, and `NORMALIZE_STYLE`.
-
-Sample-5,000 Dynahate result:
-
-- output: `data/outputs/dynahate.token_action_tagger.sample5000.json`
-- model: `data/outputs/dynahate.token_action_tagger.sample5000.pkl`
-- tokens: 67,415
-- dev accuracy: 0.9888
-- dev macro-F1: 0.8556
-- `PROTECT_HSD` F1: 0.9890
-- `PROTECT_TARGET` F1: 0.7810
-- `GENERALIZE_CONTEXT` F1: 0.5823
-
-Next use should be as a reranker/scorer feature or uncertainty detector, not as
-a direct anonymizer.
-
-### A34/A35: Transformer Fine-Tuning / Attention Experiments
-
-Do not train a new attention mechanism as the first-line anonymizer. If you run
-fine-tuning, treat it as optional evidence:
-
-- HSD utility evaluator fine-tuning on original Dynahate train/dev split
-- author-risk evaluator only if a dataset with author/user labels is available
-- transformer scorer or reranker, not a required anonymizer
-- small models and bounded epochs first
-- save metrics, not model weights
-- do not commit checkpoints or caches
-
-Compare any fine-tuned/attention method against:
-
-- local TF-IDF utility benchmark
-- HF utility evaluator
-- `evaluate-author-risk` when author labels exist
-- `check-hsd-cues`
-- residual privacy metrics
-- runtime and dependency cost
-- feasibility, auditability, rights framing, and limitations
-
-## Already Useful Local Evidence
-
-Full Dynahate aggregate evidence already recorded in docs:
-
-- `balanced`: residual IDs 3, residual quasi IDs 0, target retention 0.9994,
-  character retention 0.9953, local macro-F1 delta -0.0008.
-- `balanced --style-scrub`: residual IDs 3, residual quasi IDs 0, target
-  retention 0.9994, character retention 0.9434, local macro-F1 delta +0.0017.
-- `rerank-candidates`: residual IDs 3, residual quasi IDs 0, target retention
-  0.9997, character retention 0.9868, local macro-F1 delta +0.0019.
-- exact-format balanced submission validation passed locally: 41,144 rows, same
-  columns/order, no helper columns.
-- reranked cue check: 59 rows with any conservative cue loss; utility-cue
-  retention mean 1.0.
-- HF utility sample 100 on reranked output: Dynabench/CardiffNLP agreement 1.0,
-  negligible mean drift, and no large utility-drop rows.
-- Presidio sample 100: 27 Presidio spans, 1 PrivHSD span, 1 overlap,
-  9 false-positive-risk spans, and 400.7 MB `en_core_web_lg` dependency cost.
-- Presidio sample 500: 174 Presidio spans, 8 PrivHSD spans, 6 overlaps,
-  52 false-positive-risk spans.
-- Weak token-action tagger sample 5,000: dev macro-F1 0.8556 against weak
-  local labels.
-- Filtered Presidio rerank full run: 6,085 Presidio candidates selected,
-  macro-F1 delta +0.0048, target-term retention 0.9974, utility-cue retention
-  1.0.
-- DPMLM: protected-token `FacebookAI/roberta-base` candidate adapter works, but
-  safe default accepted 0/8 and looser reranking selected 0 DPMLM candidates.
-- Local LLM sample 10: `openai/gpt-oss-20b` accepted 3 candidates, rejected 7,
-  but reranking selected no LLM candidates; deterministic reranked remains
-  stronger.
+```bash
+.venv/bin/python -m pytest -q
+```
 
 ## Required Updates Before Stopping
 
-Before ending work:
+Before stopping, always run:
 
 ```bash
-python -m pytest -q
-if [ -d .venv ]; then .venv/bin/python -m pytest -q; fi
+.venv/bin/python -m pytest -q
 git status --short
 ```
 
-Update:
+Update these files:
 
-- `docs/roadmap.md` with aggregate results and blockers
-- `agents/task_board.md` task statuses
-- `agents/current_handoff.md` exact current state
-- `docs/final_pitch_outline.md` if model results materially change the story
-- `docs/score_log_template.md` only if submission commands change
+- `docs/roadmap.md` with aggregate results, exact commands, outputs, and
+  blockers;
+- `docs/real_data_playbook.md` if the official-data workflow changes;
+- `docs/final_pitch_outline.md` if results materially change the story;
+- `docs/methodology_justification.md` if you add new context/rationale logic;
+- `docs/official_submission_checklist.md` if required checks change;
+- `agents/current_handoff.md` with the exact final state;
+- `agents/task_board.md` with completed/in-progress tasks.
 
-Commit and push coherent milestones. Keep `data/outputs/` and all model caches
-ignored. Do not stop just because one optional model path fails; record the skip
-or blocker and continue to the next bounded experiment.
+Leave a final summary that includes:
+
+- what was implemented;
+- what commands were run;
+- key metrics;
+- files changed;
+- outputs written under `data/outputs/`;
+- remaining risks;
+- next best action when the official CSV arrives.
+
+Do not stop at a plan. Implement, run, measure, document, and continue until the
+success criteria are met or a real blocker is documented.

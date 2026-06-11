@@ -5,6 +5,8 @@ file, commit messages, screenshots, and issue comments.
 
 ## Required Checks
 
+- `profile-dataset` has been run on the official CSV and the selected
+  text/ID/label columns are recorded.
 - `git status --short` has no unintended source changes.
 - `python -m pytest -q` passes.
 - The submission CSV was created with `create-submission --replace-text`.
@@ -37,6 +39,10 @@ file, commit messages, screenshots, and issue comments.
 ## Recommended Commands
 
 ```bash
+python -m privhsd.cli profile-dataset \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.profile.json
+
 python -m privhsd.cli create-submission \
   --input INPUT.csv \
   --output data/outputs/SUBMISSION.csv \

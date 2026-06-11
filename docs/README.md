@@ -8,16 +8,17 @@ Use it before changing code.
 1. `challenge_requirements.md` - what the hackathon expects.
 2. `roadmap.md` - current strategy and next technical bets.
 3. `pipeline_design.md` - implementation contract and module map.
-4. `quickstart.md` - commands for running the pipeline.
-5. `methodology_justification.md` - why rules, lexicons, reranking, and
+4. `real_data_playbook.md` - first actions when the official CSV arrives.
+5. `quickstart.md` - commands for running the pipeline.
+6. `methodology_justification.md` - why rules, lexicons, reranking, and
    author-risk evaluation are defensible.
-6. `dp_text_privacy_literature_notes.md` - mentor-adjacent DP NLP papers mapped
+7. `dp_text_privacy_literature_notes.md` - mentor-adjacent DP NLP papers mapped
    to implementation choices.
-7. `dataset_candidate_takeaways.md` - public dataset shortlist and experiment
+8. `dataset_candidate_takeaways.md` - public dataset shortlist and experiment
    roles for utility, cue, and privacy evaluation.
-8. `sjmeis_repo_takeaways.md` - practical notes from adjacent DP text rewriting
+9. `sjmeis_repo_takeaways.md` - practical notes from adjacent DP text rewriting
    repositories, mapped to bounded experiments.
-9. `score_log_template.md` - reproducible official-submission score log.
+10. `score_log_template.md` - reproducible official-submission score log.
 
 Reference docs:
 

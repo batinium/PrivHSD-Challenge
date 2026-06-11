@@ -180,6 +180,47 @@ Important interpretation:
   should preserve the words/spans that explain HSD or toxicity labels unless
   they are true identifiers.
 
+Merge audit and caveats:
+
+- The merge is meaningful as a public regression/evaluation bundle: every
+  source was normalized into the same 13-column schema, all merged IDs are
+  source-prefixed, `source_id` is preserved, `meta` is valid JSON for every
+  row, and row provenance remains recoverable from the archived normalized
+  files under `data/public_dev/archive/normalized/`.
+- It is not meaningful as one undifferentiated training table. The `label`
+  column is a source-normalized top-level label, not a single legal ontology.
+  `hate`, `offensive`, `toxic`, `abuse`, `ambiguous`, and `not_hate` must stay
+  source-aware unless an explicit mapping policy is documented for an
+  experiment.
+- Some rows are synthetic or adversarial by design, not necessarily AI
+  generated. Dynahate, HateCheck, and Hatemoji use `platform=synthetic` because
+  they are challenge/test-suite style resources. That is useful for functional
+  regression, but these rows should not be presented as natural social-media
+  prevalence evidence.
+- Some derived labels are created by the normalizer and must be treated as
+  documented proxies. Measuring Hate Speech maps continuous/ordinal harm scores
+  into `hate`, `ambiguous`, and `not_hate` using the policy stored in `meta`;
+  `severity` preserves the continuous score and is the better signal for drift
+  analysis.
+- The `type` column is intentionally overloaded. Depending on source it means
+  hate subtype, functional test category, toxic-span type, ConvAbuse category,
+  or the synthetic value `severity_score`. Do not aggregate `type` globally.
+- The `target` and `target_categories` columns are heterogeneous. Dynahate and
+  Hatemoji include shorthand target codes, HateXplain uses target names, and
+  Measuring Hate Speech uses target indicator names. Use these for grouping and
+  cue checks, not as a single normalized protected-characteristic taxonomy
+  until a separate target normalizer exists.
+- `rationale_spans` is also source-dependent: HateXplain uses token-index
+  ranges, while Toxic Spans uses character-offset ranges. Any parser must branch
+  on `source`.
+- `platform` is useful provenance, but Measuring Hate Speech currently carries
+  numeric platform codes from the raw file. Decode or document those codes
+  before using platform as a presentation variable.
+- For most pipeline commands only `id`, `text`, `label`, and `source` are
+  required. Keep the other columns in the merged CSV for audit and evaluation,
+  but create slim source-specific views for experiments that do not need
+  `meta`, `severity`, targets, or rationales.
+
 ## Model-Backed Plan
 
 Do not train a new attention mechanism first. The available data is better used
@@ -263,21 +304,36 @@ Recommended order:
      HateCheck functionality and Hatemoji subset
    - treat any systematic target/action/negation loss in these compact suites
      as a blocker before official submission
-6. Reranking on the merged bundle:
+6. LM Studio small-model context-labeler stress test:
+   - evaluate local Qwen/LFM/Phi/Mistral/Nemotron/Gemma models as advisory
+     context labelers, not direct anonymizers
+   - test multiple parse modes because small models may fail strict JSON:
+     strict JSON, tagged lines, comma-separated word lists, and simple
+     binary-tag outputs
+   - start with sample 20 across all reachable models, then sample 100 for
+     promising models
+   - compare speed, parse-valid rate by mode, timeout rate, agreement with
+     deterministic context tags, negation/counterspeech/quotation detection,
+     and whether protected phrases cover target/action/negation/rationale cues
+   - use useful small-model output as teacher data or reranker features only
+     after deterministic validators pass
+   - write aggregate model leaderboards under `data/outputs/` and progress
+     notes under `agents/overnight_progress.md`
+7. Reranking on the merged bundle:
    - run bounded source-stratified samples first, then full merged reranking if
      runtime is acceptable
    - compare `balanced`, `style_scrubbed`, `privacy`, `target_generalized`,
      and `presidio_augmented` by source and label
    - do not select a global alternate unless it improves hard slices without
      harming Article 10-sensitive offensive/counterspeech slices
-7. HF utility model runs:
+8. HF utility model runs:
    - status on Dynahate: bounded runs complete in `.venv` with CPU Torch and
      Transformers
    - next: run stratified samples from `recommended_merged.csv`, not only the
      first N rows
    - keep model results source-aware because toxicity, offensive language,
      abuse, and hate labels are not interchangeable
-8. Author-risk search remains open:
+9. Author-risk search remains open:
    - this merged bundle does not provide repeated author IDs
    - keep `evaluate-author-risk` ready for official data or a later dataset
      with stable repeated user labels
@@ -305,7 +361,7 @@ Longer-running optional paths:
    - filtered augmentation is implemented behind `--presidio-augment`; full
      reranking selected it for 6,085 rows and improved local macro-F1 delta to
      +0.0048 while preserving utility cues
-3. Local LLM candidate generation:
+3. Local LLM candidate generation and context labeling:
    - status: bounded LM Studio run complete against
      `http://100.120.207.64:1234`
    - implementation now supports LM Studio-compatible JSON schema output,
@@ -321,6 +377,21 @@ Longer-running optional paths:
      rows under the same checks
    - do not scale LLM generation unless accepted candidates start winning the
      reranker on bounded samples
+   - new experiment direction: use small local models as **context labelers**
+     rather than final rewriters. Candidate models currently available in LM
+     Studio may include `qwen3-0.6b`, `liquid/lfm2-1.2b`,
+     `liquid/lfm2.5-1.2b`, `qwen/qwen3-1.7b`,
+     `microsoft/phi-4-mini-reasoning`, `mistralai/ministral-3-3b`,
+     `qwen/qwen3-4b`, `nvidia/nemotron-3-nano-4b`,
+     `qwen/qwen3-4b-2507`, `google/gemma-4-e2b`, and
+     `google/gemma-3n-e4b`; discover exact IDs through LM Studio `/v1/models`
+   - context-labeler output can be strict JSON, tagged lines, word lists, or
+     binary tags; the benchmark should select the most reliable parse mode per
+     model
+   - rank models by schema-valid rate, speed, context usefulness, and safety
+     against target/action/negation/rationale cue loss
+   - use best models for teacher labels, uncertainty scoring, or reranker
+     features, not as direct anonymization output
 4. DPMLM rewrite spike:
    - status: protected-token candidate generator implemented as
      `generate-dpmlm-candidates`
@@ -436,6 +507,41 @@ identifiers while preserving HSD classifier confidence and target/action cues.
 When Hugging Face evaluators are available, include their HSD score deltas as
 utility signals. Keep all candidate text row-local; do not use neighboring rows
 as context.
+
+### 3a. Context Labeling And Token-Action Policy
+
+Status: partially implemented through deterministic target/action/negation cue
+checks, weak token-action labels, local LLM candidate validation, and reranking.
+The next step is to make context awareness explicit and measurable.
+
+Desired pipeline:
+
+```text
+row text
+  -> deterministic context tags
+  -> optional small local LLM context-labeler advisory JSON
+  -> token-action policy
+  -> deterministic masking/style scrub
+  -> cue/privacy validators
+  -> reranker
+```
+
+The small LLM should not rewrite the final text directly. It should only
+propose context tags and phrase-level advice:
+
+- protected phrases: target groups, hostile actions, negation, modality,
+  counterspeech, quote/reporting markers, rationale spans
+- maskable phrases: identifiers, direct metadata, author style only
+- uncertainty and reason codes for audit/reranking
+
+Evaluation must compare local models by speed and usefulness. Good small-model
+candidates in the current LM Studio setup include Qwen 0.6B/1.7B/4B variants,
+Liquid LFM2 1.2B variants, Phi-4-mini-reasoning, Ministral 3B, Nemotron nano
+4B, and Gemma variants. The target is not maximum model quality at any cost;
+the target is a fast advisory model that improves context-sensitive protection
+without becoming a required dependency. Strict JSON is useful when it works,
+but small models should also be tested with simpler tagged-line, word-list, and
+binary-tag formats.
 
 ### 4. Hugging Face Utility Evaluator
 
