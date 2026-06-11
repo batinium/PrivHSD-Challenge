@@ -12,6 +12,7 @@ privhsd/
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   detectors.py     deterministic span detectors
+  hf_utility.py    optional Hugging Face utility model registry/evaluator
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
   style.py         deterministic style scrubbing for author cues
@@ -173,6 +174,33 @@ original text, then compares author accuracy, macro-F1, true-author confidence,
 and residual high-risk row IDs on original versus privatized dev text. If the
 requested author column is absent, it writes a structured skipped report instead
 of failing.
+
+List approved optional Hugging Face utility probes:
+
+```bash
+python -m privhsd.cli hf-model-registry \
+  --output data/outputs/hf_model_registry.json
+```
+
+Evaluate original versus privatized HSD/toxicity score drift on a small sample:
+
+```bash
+python -m privhsd.cli evaluate-hf-utility \
+  --input data/outputs/dynahate.privatized.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --id-col id \
+  --label-col label \
+  --sample-size 100 \
+  --output data/outputs/dynahate.hf_utility.json
+```
+
+`evaluate-hf-utility` is optional through `privhsd[hf-utility]`. It defaults to
+the approved Dynabench and CardiffNLP probes, reports model ID, revision when
+available, device, runtime, sample size, score drift, threshold agreement, and
+row IDs with large utility drops. Missing dependencies, model-load failures, and
+inference failures are recorded as structured skips rather than making
+`privhsd anonymize` depend on Hugging Face.
 
 ## Local Metrics
 

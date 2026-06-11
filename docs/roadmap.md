@@ -71,7 +71,7 @@ Near-term implementation order:
 
 1. Add author-risk evaluation when an `author` column exists. **Done.**
 2. Add deterministic style scrubbing for non-lexical author signals. **Done.**
-3. Add a Hugging Face utility evaluator behind an optional extra.
+3. Add a Hugging Face utility evaluator behind an optional extra. **Done.**
 4. Add candidate reranking that balances HSD utility against privacy risk.
 5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
    reporting.
@@ -155,6 +155,13 @@ utility signals. Keep all candidate text row-local; do not use neighboring rows
 as context.
 
 ### 4. Hugging Face Utility Evaluator
+
+Status: implemented as `privhsd hf-model-registry` and
+`privhsd evaluate-hf-utility` behind the optional `privhsd[hf-utility]` extra.
+The evaluator samples rows by default, records structured skip JSON for missing
+dependencies or model failures, and reports model ID, revision when available,
+device, runtime, sample size, score drift, threshold agreement, and row IDs with
+large utility drops.
 
 Add `privhsd evaluate-hf-utility` behind an optional dependency extra. It should
 accept original and privatized columns, run one or more approved local

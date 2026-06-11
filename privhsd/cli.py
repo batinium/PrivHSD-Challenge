@@ -21,6 +21,13 @@ from .classifier import (
 )
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .datasets import add_prepare_dynahate_parser, prepare_dynahate
+from .hf_utility import (
+    DEFAULT_DROP_THRESHOLD,
+    DEFAULT_SAMPLE_SIZE,
+    HfUtilityError,
+    run_hf_utility_evaluation,
+    write_model_registry,
+)
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
@@ -101,6 +108,38 @@ def build_parser() -> argparse.ArgumentParser:
     author_risk.add_argument("--output", type=Path)
     author_risk.add_argument("--test-size", type=float, default=0.25)
     author_risk.add_argument("--random-state", type=int, default=13)
+
+    hf_registry = subparsers.add_parser(
+        "hf-model-registry",
+        help="Write the approved optional Hugging Face utility model registry.",
+    )
+    hf_registry.add_argument("--output", type=Path)
+
+    hf_utility = subparsers.add_parser(
+        "evaluate-hf-utility",
+        help="Run optional Hugging Face HSD/toxicity utility probes.",
+    )
+    hf_utility.add_argument("--input", type=Path, required=True)
+    hf_utility.add_argument("--text-col", required=True)
+    hf_utility.add_argument("--privatized-col", default="privatized_text")
+    hf_utility.add_argument("--id-col")
+    hf_utility.add_argument("--label-col")
+    hf_utility.add_argument("--output", type=Path)
+    hf_utility.add_argument(
+        "--model",
+        dest="models",
+        action="append",
+        help="Approved HF model ID. Repeat to evaluate multiple models.",
+    )
+    hf_utility.add_argument("--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE)
+    hf_utility.add_argument("--device", default="cpu")
+    hf_utility.add_argument("--batch-size", type=int, default=8)
+    hf_utility.add_argument(
+        "--drop-threshold",
+        type=float,
+        default=DEFAULT_DROP_THRESHOLD,
+    )
+    hf_utility.add_argument("--decision-threshold", type=float, default=0.5)
 
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
@@ -222,6 +261,23 @@ def main(argv: list[str] | None = None) -> int:
                 test_size=args.test_size,
                 random_state=args.random_state,
             )
+        elif args.command == "hf-model-registry":
+            result = write_model_registry(args.output)
+        elif args.command == "evaluate-hf-utility":
+            result = run_hf_utility_evaluation(
+                args.input,
+                text_col=args.text_col,
+                privatized_col=args.privatized_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                output_path=args.output,
+                model_ids=args.models,
+                sample_size=args.sample_size,
+                device=args.device,
+                batch_size=args.batch_size,
+                drop_threshold=args.drop_threshold,
+                decision_threshold=args.decision_threshold,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -274,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         BenchmarkError,
         ClassifierError,
         CsvPipelineError,
+        HfUtilityError,
         OSError,
         ValueError,
     ) as exc:

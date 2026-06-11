@@ -29,8 +29,8 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A21 | todo | unassigned | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
 | A22 | todo | unassigned | Add human-rights and judging narrative: leaderboard score is only one criterion. |
 | A23 | todo | unassigned | Add official-submission checklist that verifies metadata preservation, no raw example leakage, and reproducible artifact paths. |
-| A24 | todo | unassigned | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
-| A25 | todo | unassigned | Add optional `evaluate-hf-utility` command for original-vs-privatized HSD/toxicity score drift on small samples and full runs. |
+| A24 | done | Codex | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
+| A25 | done | Codex | Add optional `evaluate-hf-utility` command for original-vs-privatized HSD/toxicity score drift on small samples and full runs. |
 | A26 | todo | unassigned | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
 | A27 | todo | unassigned | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
 | A28 | todo | unassigned | Add exact-format submission validator/creator for leaderboard uploads with text columns privatized in place when required. |
@@ -51,12 +51,11 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A24/A25: approved Hugging Face model registry and utility evaluator.
-2. A19: candidate reranking using privacy and HSD utility scores.
-3. A27: DPMLM protected-cue spike on bounded samples only.
-4. A28: exact-format submission validator/creator.
-5. A08/A22: final pitch/demo narrative and human-rights framing.
-6. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A19: candidate reranking using privacy and HSD utility scores.
+2. A27: DPMLM protected-cue spike on bounded samples only.
+3. A28: exact-format submission validator/creator.
+4. A08/A22: final pitch/demo narrative and human-rights framing.
+5. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 ## Non-Negotiables
 
