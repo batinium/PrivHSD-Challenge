@@ -32,7 +32,7 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A24 | done | Codex | Add approved model registry and license/runtime manifest for optional Hugging Face utility evaluators. |
 | A25 | done | Codex | Add optional `evaluate-hf-utility` command for original-vs-privatized HSD/toxicity score drift on small samples and full runs. |
 | A26 | todo | unassigned | Add HSD cue/rationale checks using HateXplain-style target/rationale models or conservative token occlusion when rationale models are unavailable. |
-| A27 | todo | unassigned | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
+| A27 | done | Codex | Add DPMLM protected-cue rewrite spike: small samples, epsilon sweep, runtime report, and no core dependency. |
 | A28 | todo | unassigned | Add exact-format submission validator/creator for leaderboard uploads with text columns privatized in place when required. |
 | A29 | todo | unassigned | Add optional local LLM candidate generator through LM Studio or llama.cpp OpenAI-compatible endpoint with schema checks and reranking only. |
 
@@ -51,10 +51,9 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A27: DPMLM protected-cue spike on bounded samples only.
-2. A28: exact-format submission validator/creator.
-3. A08/A22: final pitch/demo narrative and human-rights framing.
-4. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A28: exact-format submission validator/creator.
+2. A08/A22: final pitch/demo narrative and human-rights framing.
+3. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 ## Non-Negotiables
 

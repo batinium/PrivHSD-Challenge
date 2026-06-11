@@ -75,7 +75,7 @@ Near-term implementation order:
 4. Add candidate reranking that balances HSD utility against privacy risk.
    **Done.**
 5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
-   reporting.
+   reporting. **Done as a bounded blocker/report harness.**
 6. Add exact-format submission validation and final judging narrative.
 
 ## Strategic Gap
@@ -185,6 +185,12 @@ Start with small samples. Full-dataset runs are useful only after memory,
 runtime, and license checks are documented.
 
 ### 5. DPMLM Spike
+
+Status: implemented as `privhsd dpmlm-spike`. In the current local environment
+no supported DPMLM backend is installed, so the command writes a structured
+blocker report with epsilon sweep configuration, protected cue manifest,
+runtime, sample IDs, and existing privatized-column baseline metrics when
+available. DPMLM remains outside core anonymization.
 
 Run a small, optional DPMLM-style experiment after the author-risk and HF
 evaluators exist. Use only bounded samples at first.

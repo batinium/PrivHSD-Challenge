@@ -12,6 +12,7 @@ privhsd/
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   detectors.py     deterministic span detectors
+  dpmlm_spike.py   bounded optional DPMLM spike/blocker report
   hf_utility.py    optional Hugging Face utility model registry/evaluator
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
@@ -222,6 +223,26 @@ author-risk confidence when an author column and scikit-learn are available,
 target/action cue loss, and length/character drift. It writes only the chosen
 text column by default; per-candidate scores go to the audit JSON without raw
 text.
+
+Run a bounded DPMLM protected-cue spike or blocker report:
+
+```bash
+python -m privhsd.cli dpmlm-spike \
+  --input data/outputs/dynahate.privatized.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --id-col id \
+  --sample-size 25 \
+  --epsilon 25 \
+  --epsilon 50 \
+  --output data/outputs/dynahate.dpmlm_spike.json
+```
+
+`dpmlm-spike` is an experiment harness, not core anonymization. It records the
+epsilon sweep, sample IDs, protected target/action/negation cue manifest,
+backend detection, runtime, existing privatized-column baseline metrics when
+provided, and structured blockers when no supported local DPMLM backend or
+audited adapter is available.
 
 ## Local Metrics
 

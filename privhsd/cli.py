@@ -21,6 +21,12 @@ from .classifier import (
 )
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .datasets import add_prepare_dynahate_parser, prepare_dynahate
+from .dpmlm_spike import (
+    DEFAULT_EPSILONS,
+    DEFAULT_SAMPLE_SIZE as DEFAULT_DPMLM_SAMPLE_SIZE,
+    DpmlmSpikeError,
+    run_dpmlm_spike,
+)
 from .hf_utility import (
     DEFAULT_DROP_THRESHOLD,
     DEFAULT_SAMPLE_SIZE,
@@ -161,6 +167,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Existing column containing an optional rewrite candidate. Repeatable.",
     )
     rerank.add_argument("--audit", type=Path)
+
+    dpmlm = subparsers.add_parser(
+        "dpmlm-spike",
+        help="Run a bounded protected-cue DPMLM rewrite spike or blocker report.",
+    )
+    dpmlm.add_argument("--input", type=Path, required=True)
+    dpmlm.add_argument("--text-col", required=True)
+    dpmlm.add_argument("--id-col")
+    dpmlm.add_argument("--privatized-col")
+    dpmlm.add_argument("--output", type=Path)
+    dpmlm.add_argument("--sample-size", type=int, default=DEFAULT_DPMLM_SAMPLE_SIZE)
+    dpmlm.add_argument(
+        "--epsilon",
+        dest="epsilons",
+        action="append",
+        type=float,
+        help=(
+            "Privacy epsilon to test. Repeatable. Defaults to "
+            + ", ".join(str(value) for value in DEFAULT_EPSILONS)
+            + "."
+        ),
+    )
+    dpmlm.add_argument("--backend", default="auto")
+    dpmlm.add_argument("--random-seed", type=int, default=0)
 
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
@@ -311,6 +341,18 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_cols=args.candidate_cols,
                 audit_path=args.audit,
             )
+        elif args.command == "dpmlm-spike":
+            result = run_dpmlm_spike(
+                args.input,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                privatized_col=args.privatized_col,
+                output_path=args.output,
+                sample_size=args.sample_size,
+                epsilons=args.epsilons,
+                backend=args.backend,
+                random_seed=args.random_seed,
+            )
         elif args.command == "train-classifier":
             result = train_classifier(
                 args.input,
@@ -363,6 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         BenchmarkError,
         ClassifierError,
         CsvPipelineError,
+        DpmlmSpikeError,
         HfUtilityError,
         OSError,
         RerankError,
