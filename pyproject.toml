@@ -22,8 +22,10 @@ classifiers = [
 author-risk = ["scikit-learn>=1.3"]
 benchmark = ["scikit-learn>=1.3"]
 classifier = ["scikit-learn>=1.3"]
+dpmlm = ["dpmlm>=1.1.2"]
 hf-utility = ["transformers>=4.40", "torch>=2.1"]
 presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
+token-actions = ["scikit-learn>=1.3"]
 
 [project.scripts]
 privhsd = "privhsd.cli:main"

@@ -9,6 +9,7 @@ the experiment cannot run.
 from __future__ import annotations
 
 from collections import Counter
+import importlib
 import importlib.util
 from pathlib import Path
 import time
@@ -55,11 +56,46 @@ def validate_columns(
         )
 
 
-def detect_backends() -> dict[str, bool]:
-    return {
-        backend: importlib.util.find_spec(backend) is not None
-        for backend in SUPPORTED_BACKENDS
-    }
+def detect_backends() -> dict[str, dict[str, Any]]:
+    statuses: dict[str, dict[str, Any]] = {}
+    for backend in SUPPORTED_BACKENDS:
+        installed = importlib.util.find_spec(backend) is not None
+        importable = False
+        error = None
+        if installed:
+            try:
+                importlib.import_module(backend)
+            except Exception as exc:  # pragma: no cover - environment dependent
+                error = f"{type(exc).__name__}: {exc}"
+            else:
+                importable = True
+        statuses[backend] = {
+            "installed": installed,
+            "importable": importable,
+            "error": error,
+        }
+    return statuses
+
+
+def normalize_backend_statuses(
+    backends: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    statuses: dict[str, dict[str, Any]] = {}
+    for backend in SUPPORTED_BACKENDS:
+        status = backends.get(backend, False)
+        if isinstance(status, bool):
+            statuses[backend] = {
+                "installed": status,
+                "importable": status,
+                "error": None,
+            }
+        else:
+            statuses[backend] = {
+                "installed": bool(status.get("installed", False)),
+                "importable": bool(status.get("importable", False)),
+                "error": status.get("error"),
+            }
+    return statuses
 
 
 def protected_cue_manifest() -> dict[str, Any]:
@@ -140,11 +176,12 @@ def skipped_epsilon_result(
     *,
     sample_size: int,
     blockers: list[str],
+    skip_reason: str,
 ) -> dict[str, Any]:
     return {
         "epsilon": epsilon,
         "status": "skipped",
-        "skip_reason": "no_supported_dpmlm_backend",
+        "skip_reason": skip_reason,
         "runtime_seconds": 0.0,
         "sample_size": sample_size,
         "deterministic": None,
@@ -184,11 +221,19 @@ def run_dpmlm_spike(
         raise DpmlmSpikeError("--sample-size must be non-negative")
 
     start = time.perf_counter()
-    backends = detect_backends()
-    available_backends = [name for name, available in backends.items() if available]
+    backends = normalize_backend_statuses(detect_backends())
+    backend_detected = {
+        name: status["importable"] for name, status in backends.items()
+    }
+    available_backends = [
+        name for name, status in backends.items() if status["importable"]
+    ]
     backend_available = backend == "auto" and bool(available_backends)
     if backend != "auto":
-        backend_available = backends.get(backend, False)
+        backend_available = backends.get(
+            backend,
+            {"importable": False},
+        )["importable"]
     sampled_rows = collect_sample_rows(
         rows,
         text_col=text_col,
@@ -196,11 +241,21 @@ def run_dpmlm_spike(
         sample_size=sample_size,
     )
     blockers = []
+    skip_reason = "no_supported_dpmlm_backend"
     if not backend_available:
         blockers.append(
             "No supported local DPMLM backend is installed "
             f"({', '.join(SUPPORTED_BACKENDS)} checked)."
         )
+        installed_blocked = [
+            f"{name}: {status['error']}"
+            for name, status in backends.items()
+            if status["installed"] and not status["importable"] and status["error"]
+        ]
+        if installed_blocked:
+            blockers.append(
+                "Installed backend import failed: " + "; ".join(installed_blocked)
+            )
         blockers.append(
             "Protected-cue rewrite policy is defined, but no backend-specific "
             "token-freezing API is available to exercise it."
@@ -211,6 +266,7 @@ def run_dpmlm_spike(
     selected_backend = None
     if backend_available:
         selected_backend = available_backends[0] if backend == "auto" else backend
+        skip_reason = "adapter_not_implemented"
         blockers.append(
             "A potential backend was detected, but this harness has no audited "
             "DPMLM adapter yet; leaving integration blocked until adapter tests "
@@ -223,6 +279,7 @@ def run_dpmlm_spike(
             epsilon,
             sample_size=effective_sample_size,
             blockers=blockers,
+            skip_reason=skip_reason,
         )
         for epsilon in epsilons
     ]
@@ -252,7 +309,8 @@ def run_dpmlm_spike(
         "backend": {
             "requested": backend,
             "selected": selected_backend,
-            "detected": backends,
+            "detected": backend_detected,
+            "details": backends,
         },
         "protected_cues": protected_cue_manifest(),
         "existing_privatized_baseline": existing_privatized_baseline(

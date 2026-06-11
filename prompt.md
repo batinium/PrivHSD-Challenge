@@ -36,13 +36,18 @@ Current status:
 - A30 bounded Hugging Face utility runs are complete on
   `data/outputs/dynahate.reranked.csv`.
 - A31 bounded Presidio/spaCy comparison is complete on the first 100 local
-  Dynahate rows.
+  Dynahate rows and a sample-500 extension.
+- A32 DPMLM backend investigation is complete for this pass: `dpmlm` 1.1.2 is
+  installed/importable after NLTK resources, but integration remains blocked by
+  no audited protected-cue adapter and poor tiny-model rewrite quality.
 - A33 bounded local LLM candidate generation/reranking is complete against LM
   Studio at `http://100.120.207.64:1234`; current LLM candidates are low-yield
   and did not beat deterministic reranking.
+- A36 weak token-action tagger training is complete on a sample-5,000 Dynahate
+  run with macro-F1 0.8556 against weak local labels.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
-- Current full tests should be `59 passed, 1 skipped`.
+- Current full tests should be `67 passed, 1 skipped`.
 - Local Dynahate is expected at `data/public_dev/dynahate.csv`; it is ignored by
   git and has columns `id,text,label,source,split,target,type`.
 - Generated outputs belong under ignored `data/outputs/`.
@@ -102,7 +107,8 @@ python -m privhsd.cli evaluate-hf-utility \
 
 ### A31: Presidio/spaCy Comparison Runs
 
-Sample 100 is complete in `.venv` using Presidio/spaCy. Results:
+Sample 100 and sample 500 are complete in `.venv` using Presidio/spaCy.
+Sample 100 results:
 
 - PrivHSD spans: 1
 - Presidio spans: 27
@@ -118,6 +124,16 @@ Sample 100 is complete in `.venv` using Presidio/spaCy. Results:
 Presidio remains a comparison baseline, not the product. Do not integrate it
 into core anonymization unless measured privacy/HSD tradeoff gains justify the
 false-positive and dependency costs.
+
+Sample 500 results:
+
+- PrivHSD spans: 8
+- Presidio spans: 174
+- overlap: 6
+- Presidio-only: 168
+- PrivHSD-only: 2
+- false-positive-risk count on HSD cues/targets: 52
+- runtime after setup: 1.4907s
 
 ### A33: Local LLM Candidate Generation
 
@@ -169,8 +185,19 @@ risk.
 
 ### A32: Real DPMLM Rewrite Spike
 
-Current `dpmlm-spike` is a blocker/report harness because no local DPMLM backend
-was installed. Investigate a maintained backend or reproducible adapter.
+Current `dpmlm-spike` is a blocker/report harness. `dpmlm` 1.1.2 is installed
+and importable after NLTK resources, and the spike now reports backend details.
+The current blocker is `adapter_not_implemented`, not missing package.
+
+Evidence:
+
+- `data/outputs/dynahate.dpmlm_spike.reranked.sample25.after_resources.json`
+  detects `dpmlm` and records the blocked epsilon 25/50 sweep.
+- `data/outputs/dynahate.dpmlm_direct_probe.tiny.json` shows direct tiny-model
+  DPMLM rewriting can change protected HSD cues.
+- `data/outputs/dynahate.dpmlm_protected_adapter_probe.tiny.json` shows a
+  low-level protected-token probe can preserve `immigrants should leave`, but
+  tiny-model text quality is poor.
 
 Only run actual rewrites if all are true:
 
@@ -184,6 +211,27 @@ Only run actual rewrites if all are true:
 
 Do **not** integrate DPMLM into core anonymization unless it beats deterministic
 style/reranked outputs on privacy/HSD tradeoff and auditability.
+
+### A36: Weak Token-Action Tagger
+
+`privhsd train-token-action-tagger` is implemented behind
+`privhsd[token-actions]`. It trains a scikit-learn token classifier from weak
+local detector/cue labels with actions `KEEP`, `MASK_IDENTIFIER`,
+`GENERALIZE_CONTEXT`, `PROTECT_TARGET`, `PROTECT_HSD`, and `NORMALIZE_STYLE`.
+
+Sample-5,000 Dynahate result:
+
+- output: `data/outputs/dynahate.token_action_tagger.sample5000.json`
+- model: `data/outputs/dynahate.token_action_tagger.sample5000.pkl`
+- tokens: 67,415
+- dev accuracy: 0.9888
+- dev macro-F1: 0.8556
+- `PROTECT_HSD` F1: 0.9890
+- `PROTECT_TARGET` F1: 0.7810
+- `GENERALIZE_CONTEXT` F1: 0.5823
+
+Next use should be as a reranker/scorer feature or uncertainty detector, not as
+a direct anonymizer.
 
 ### A34/A35: Transformer Fine-Tuning / Attention Experiments
 
@@ -225,6 +273,12 @@ Full Dynahate aggregate evidence already recorded in docs:
   negligible mean drift, and no large utility-drop rows.
 - Presidio sample 100: 27 Presidio spans, 1 PrivHSD span, 1 overlap,
   9 false-positive-risk spans, and 400.7 MB `en_core_web_lg` dependency cost.
+- Presidio sample 500: 174 Presidio spans, 8 PrivHSD spans, 6 overlaps,
+  52 false-positive-risk spans.
+- Weak token-action tagger sample 5,000: dev macro-F1 0.8556 against weak
+  local labels.
+- DPMLM: `dpmlm` installed/importable, direct tiny probe unsafe for HSD cues,
+  protected-token probe plausible but not submission-ready.
 - Local LLM sample 10: `openai/gpt-oss-20b` accepted 3 candidates, rejected 7,
   but reranking selected no LLM candidates; deterministic reranked remains
   stronger.

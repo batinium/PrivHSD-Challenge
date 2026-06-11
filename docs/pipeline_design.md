@@ -22,6 +22,7 @@ privhsd/
   rerank.py        row-local candidate generation and reranking
   style.py         deterministic style scrubbing for author cues
   submission.py    exact-format submission creator/validator
+  token_actions.py weak token-action label generation/training experiment
   utility_benchmark.py  optional scikit-learn utility-delta benchmark
 ```
 
@@ -130,6 +131,27 @@ prediction counts, split configuration, label counts, and a warning that this
 is only a local baseline. `predict-classifier` preserves row count, row order,
 IDs, labels if present, and metadata columns, then adds `predicted_label` and
 `predicted_confidence`.
+
+Train a weak token-action detector experiment:
+
+```bash
+python -m pip install '.[token-actions]'
+python -m privhsd.cli train-token-action-tagger \
+  --input data/public_dev/dynahate.csv \
+  --text-col text \
+  --id-col id \
+  --sample-size 5000 \
+  --model data/outputs/dynahate.token_action_tagger.sample5000.pkl \
+  --output data/outputs/dynahate.token_action_tagger.sample5000.json
+```
+
+`train-token-action-tagger` generates weak token labels from the local privacy
+detectors plus protected target/action/negation/style cues, then trains a
+scikit-learn token classifier. The actions are `KEEP`, `MASK_IDENTIFIER`,
+`GENERALIZE_CONTEXT`, `PROTECT_TARGET`, `PROTECT_HSD`, and `NORMALIZE_STYLE`.
+This is an experiment for future reranking/scoring and detector calibration; it
+does not provide official privacy labels and should not replace deterministic
+anonymization without measured privacy/HSD gains.
 
 Compare privatization variants in one machine-readable report:
 
@@ -246,7 +268,10 @@ python -m privhsd.cli dpmlm-spike \
 epsilon sweep, sample IDs, protected target/action/negation cue manifest,
 backend detection, runtime, existing privatized-column baseline metrics when
 provided, and structured blockers when no supported local DPMLM backend or
-audited adapter is available.
+audited adapter is available. Backend details include whether a package is
+installed, importable, and any import error. Current local evidence detects
+`dpmlm` after installing optional resources, but reports
+`adapter_not_implemented` until cue-freezing and determinism tests are audited.
 
 Create an exact-format upload CSV and manifest:
 

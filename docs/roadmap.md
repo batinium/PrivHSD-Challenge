@@ -66,6 +66,23 @@ cues/targets. Runtime after model setup was 0.4389s, but Presidio's default
 initialization downloaded `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, after
 the smaller `en_core_web_sm` had already been installed.
 
+Presidio/spaCy sample-500 comparison: Presidio found 174 spans, PrivHSD found
+8 spans, overlap was 6, Presidio-only spans were 168, PrivHSD-only spans were
+2, and 52 Presidio detections were flagged as false-positive risk on HSD
+cues/targets. Runtime after setup was 1.4907s.
+
+Weak token-action tagger sample-5,000 training: 67,415 weakly labeled tokens,
+dev accuracy 0.9888, macro-F1 0.8556, `PROTECT_HSD` F1 0.9890,
+`PROTECT_TARGET` F1 0.7810, `MASK_IDENTIFIER` F1 0.8000 on only two dev
+examples, and `GENERALIZE_CONTEXT` F1 0.5823. Treat this as detector/reranker
+evidence, not supervised privacy truth.
+
+DPMLM local probe: `dpmlm` 1.1.2 installs and imports after NLTK resources are
+downloaded. The repository spike detects it but still reports
+`adapter_not_implemented` because no audited adapter exists. A tiny direct probe
+rewrote protected cues, while a protected-token low-level probe preserved
+`immigrants should leave` but produced poor tiny-model text quality.
+
 ## Model-Backed Plan
 
 Do not train a new attention mechanism first. The available data is better used
@@ -78,6 +95,7 @@ for evaluation, reranking, and small calibration tests. The practical plan is:
 | `cardiffnlp/twitter-roberta-base-hate-latest` | Social-media hate/offensive utility evaluator. | Optional |
 | HateXplain models | Target/rationale cue checks and explainability support. | Optional |
 | `unitary/toxic-bert` or Detoxify | Toxicity proxy for weak-signal comparison only. | Optional |
+| Weak token-action tagger | Optional detector/reranker feature trained from weak local labels. | No |
 | DPMLM | Bounded rewrite spike with epsilon/runtime/utility reports. | No |
 | Local LLM through LM Studio or llama.cpp | Schema-constrained candidate generation only. | No |
 
@@ -115,9 +133,11 @@ Recommended order:
    - sample 500 or full runs are optional longer CPU jobs after license and
      cache-size review
 2. Presidio comparison:
-   - status: bounded sample-100 comparison complete
+   - status: bounded sample-100 and sample-500 comparisons complete
    - Presidio produced many detector-only spans, but a third of those spans
      carried false-positive risk on HSD cues/targets in the first 100 rows
+   - sample 500 found 174 Presidio spans versus 8 PrivHSD spans, with 52
+     false-positive-risk spans
    - dependency cost is high for a comparison baseline because default
      initialization pulled `en_core_web_lg` 3.8.0
 3. Local LLM candidate generation:
@@ -137,11 +157,18 @@ Recommended order:
    - do not scale LLM generation unless accepted candidates start winning the
      reranker on bounded samples
 4. DPMLM rewrite spike:
-   - find a maintained backend or reproducible adapter
-   - run tiny epsilon 25/50 sweeps only if cue-token protection and determinism
-     can be audited
+   - status: `dpmlm` 1.1.2 installed and importable after NLTK resources
+   - current spike detects the backend but blocks with `adapter_not_implemented`
+   - direct tiny-model DPMLM rewrote protected cues, so it cannot be used raw
+   - protected-token low-level probe preserved HSD cues but needs a real model,
+     determinism controls, and measured privacy/HSD gains before integration
    - do not integrate into core unless it beats deterministic/reranked outputs
-5. Transformer fine-tuning or attention experiments:
+5. Weak token-action training:
+   - status: sample-5,000 training complete with macro-F1 0.8556 against weak
+     labels
+   - use it next as a scorer/reranker feature or uncertainty detector, not as
+     a direct anonymizer
+6. Transformer fine-tuning or attention experiments:
    - use them only as optional evaluators, rerankers, or candidate scorers
    - do not train a new attention mechanism as the first-line solution
    - compare against local TF-IDF utility, HF utility probes, author-risk
@@ -270,10 +297,16 @@ text.
 ### 5. DPMLM Spike
 
 Status: implemented as `privhsd dpmlm-spike`. In the current local environment
-no supported DPMLM backend is installed, so the command writes a structured
-blocker report with epsilon sweep configuration, protected cue manifest,
-runtime, sample IDs, and existing privatized-column baseline metrics when
-available. DPMLM remains outside core anonymization.
+`dpmlm` 1.1.2 is installed and importable after NLTK resources are present, but
+the command still writes a structured `adapter_not_implemented` blocker report
+with epsilon sweep configuration, protected cue manifest, runtime, sample IDs,
+and existing privatized-column baseline metrics when available. DPMLM remains
+outside core anonymization.
+
+Direct library probes show why: the default sentence rewrite can modify
+protected HSD cues, while a low-level protected-token probe can freeze those
+cues but still needs real-model quality checks, determinism controls, and
+audited row-local integration.
 
 Run a small, optional DPMLM-style experiment after the author-risk and HF
 evaluators exist. Use only bounded samples at first.
@@ -346,6 +379,11 @@ installed for comparison runs. On the first 100 Dynahate rows, Presidio found
 27 spans versus 1 PrivHSD span, with 1 overlap and 9 false-positive-risk spans
 on HSD cues/targets. Treat this as evidence that Presidio is useful for
 comparison but risky as a direct anonymization backend.
+
+On the first 500 Dynahate rows, Presidio found 174 spans versus 8 PrivHSD
+spans, with 6 overlaps and 52 false-positive-risk spans on HSD cues/targets.
+The larger sample strengthens the same conclusion: Presidio is useful evidence,
+but direct replacement would likely overmask utility-bearing content.
 
 Useful outputs:
 

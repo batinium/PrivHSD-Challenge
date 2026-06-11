@@ -69,6 +69,7 @@ privhsd ablate
 privhsd train-classifier
 privhsd evaluate-classifier
 privhsd predict-classifier
+privhsd train-token-action-tagger
 privhsd evaluate-author-risk
 privhsd hf-model-registry
 privhsd evaluate-hf-utility
@@ -87,8 +88,9 @@ scikit-learn, external LLM APIs, Presidio, or Hugging Face models.
 `--style-scrub` is available as an optional deterministic author-style
 normalization pass after privacy masking.
 Hugging Face utility probes are optional through `privhsd[hf-utility]`.
-The local `.venv` now has optional HF and Presidio/spaCy dependencies installed
-for experiment runs; these remain outside core runtime requirements.
+The local `.venv` now has optional HF, Presidio/spaCy, DPMLM, and
+scikit-learn experiment dependencies installed for bounded runs; these remain
+outside core runtime requirements.
 
 ## Webinar Correction
 
@@ -136,8 +138,9 @@ Important slide takeaways:
   target-generalized, and optional rewrite-column candidates, with audit-only
   per-candidate scores and optional author-risk confidence when available.
 - A27: bounded DPMLM spike harness with epsilon sweep, protected-cue manifest,
-  runtime/blocker reporting, and no core dependency. Current local environment
-  has no supported DPMLM backend installed.
+  runtime/blocker reporting, backend import details, and no core dependency.
+  Current local environment has `dpmlm` 1.1.2 installed/importable after NLTK
+  resources, but integration is blocked by no audited protected-cue adapter.
 - A28: exact-format submission creator/validator with in-place text-column
   privatization via `--replace-text`, helper-column rejection, row/order/ID
   validation, metadata preservation checks, file hashes, git commit, command,
@@ -148,8 +151,9 @@ Important slide takeaways:
   false-positive risk on HSD cues, runtime, and structured dependency skips.
 - A15: optional neural utility evaluator path via the Hugging Face registry and
   `evaluate-hf-utility` command.
-- A20: blocked by no supported local DPMLM backend. The A27 spike harness
-  records this blocker with epsilon/report structure.
+- A20: blocked by no audited DPMLM protected-cue adapter and weak tiny-model
+  rewrite quality. The A27/A32 reports record this blocker with epsilon/report
+  structure.
 - A21/A29: optional local LLM candidate generator for LM Studio/llama.cpp
   OpenAI-compatible endpoints with JSON schema prompting, cue/length checks, and
   reranking-only output. Current local sample run skipped because no endpoint is
@@ -162,13 +166,19 @@ Important slide takeaways:
   `data/outputs/dynahate.reranked.csv`; default probes passed sample 25 and
   sample 100, Toxic-BERT passed sample 25, and HateXplain variants produced
   structured inference skips.
-- A31: bounded Presidio/spaCy detector comparison on the first 100 Dynahate
-  rows; comparison passed but documented false-positive risk and dependency
-  cost.
+- A31: bounded Presidio/spaCy detector comparison on the first 100 and 500
+  Dynahate rows; comparison passed but documented false-positive risk and
+  dependency cost.
+- A32: `dpmlm` 1.1.2 installed/imported after NLTK resources; direct tiny probe
+  rewrote protected cues, while a protected-token low-level probe preserved
+  `immigrants should leave` but produced poor tiny-model text quality.
 - A33: bounded local LLM candidate generation and reranking against LM Studio
   at `http://100.120.207.64:1234`; implementation hardened for JSON-schema
   response format/fallback and wrapped JSON parsing. Accepted LLM candidates
   did not beat deterministic reranking.
+- A36: optional weak token-action tagger training experiment with
+  `train-token-action-tagger`, scikit-learn extra, tests, and a sample-5,000
+  Dynahate report.
 
 Recent commits:
 
@@ -186,14 +196,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-59 passed, 1 skipped
+67 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-59 passed, 1 skipped
+67 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -258,6 +268,48 @@ Presidio comparison on `data/public_dev/dynahate.csv` sample 100:
   `en_core_web_lg` 3.8.0, a 400.7 MB spaCy model, after `en_core_web_sm` was
   installed.
 
+Presidio comparison on `data/public_dev/dynahate.csv` sample 500:
+
+- status: ok
+- runtime after setup: 1.4907s
+- aggregate: PrivHSD spans 8, Presidio spans 174, overlap 6,
+  Presidio-only 168, PrivHSD-only 2, false-positive-risk count 52
+- verdict: useful detector baseline, too much HSD-cue/target overmasking risk
+  for core use.
+
+Weak token-action training on `data/public_dev/dynahate.csv` sample 5,000:
+
+- command: `train-token-action-tagger`
+- outputs:
+  `data/outputs/dynahate.token_action_tagger.sample5000.json` and `.pkl`
+- tokens: 67,415
+- dev accuracy: 0.9888
+- dev macro-F1: 0.8556
+- per-action highlights: `PROTECT_HSD` F1 0.9890, `PROTECT_TARGET` F1 0.7810,
+  `MASK_IDENTIFIER` F1 0.8000 on two dev examples,
+  `GENERALIZE_CONTEXT` F1 0.5823
+- verdict: useful as a future detector/reranker feature, not supervised privacy
+  truth.
+
+DPMLM bounded evidence:
+
+- installed `dpmlm` 1.1.2 in `.venv`; downloaded NLTK resources to
+  `/home/bati/nltk_data`
+- revised `dpmlm-spike` now reports backend `details` with installed/importable
+  status and uses `adapter_not_implemented` when a backend is present but not
+  audited
+- current report:
+  `data/outputs/dynahate.dpmlm_spike.reranked.sample25.after_resources.json`
+- backend detected: `dpmlm` true; `private_transformers` false; `opendp` false
+- direct tiny-model probe:
+  `data/outputs/dynahate.dpmlm_direct_probe.tiny.json`, output changed
+  protected cues, so raw DPMLM rewrite is unsafe
+- protected-token low-level probe:
+  `data/outputs/dynahate.dpmlm_protected_adapter_probe.tiny.json`, preserved
+  `immigrants`, `should`, and `leave`, but tiny-model replacement quality was
+  poor
+- verdict: plausible adapter research path, not submission-ready.
+
 Local LLM bounded evidence:
 
 - Endpoint: `http://100.120.207.64:1234/v1/chat/completions`
@@ -291,14 +343,16 @@ Follow `docs/roadmap.md`.
 Recommended next sequence while official files are unavailable:
 
 1. Review `docs/experiment_verdict.md` for the compact decision table.
-2. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+2. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
+   or uncertainty detector, not as a direct anonymizer.
+3. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    model-card review, and cache size are acceptable.
-3. A32: investigate a real DPMLM backend/adapter only if cue-token protection
-   and determinism can be audited.
-4. A34/A35: run transformer fine-tuning or attention experiments only as
+4. DPMLM follow-up: build a real adapter only if protected-token freezing,
+   determinism, and utility metrics can be audited with a real model.
+5. A34/A35: run transformer fine-tuning or attention experiments only as
    optional evaluators/rerankers/candidate scorers, then document whether they
    improve measured privacy/HSD tradeoff enough to justify complexity.
-5. When official files arrive, return to `create-submission`,
+6. When official files arrive, return to `create-submission`,
    `validate-submission`, upload, and leaderboard-driven iteration.
 
 Do not start by training a new attention model. Use pretrained models to

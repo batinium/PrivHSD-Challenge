@@ -82,6 +82,33 @@ def test_dpmlm_spike_writes_structured_blocker_report(monkeypatch, tmp_path):
     assert "text" not in result["sample"]["rows"][0]
 
 
+def test_dpmlm_spike_reports_detected_backend_without_adapter(monkeypatch, tmp_path):
+    source = tmp_path / "dpmlm.csv"
+    write_dpmlm_rows(source)
+    monkeypatch.setattr(
+        "privhsd.dpmlm_spike.detect_backends",
+        lambda: {
+            "dpmlm": {"installed": True, "importable": True, "error": None},
+            "private_transformers": False,
+            "opendp": False,
+        },
+    )
+
+    result = run_dpmlm_spike(
+        source,
+        text_col="text",
+        id_col="id",
+        privatized_col="privatized_text",
+        sample_size=1,
+        epsilons=[25.0],
+    )
+
+    assert result["backend"]["selected"] == "dpmlm"
+    assert result["backend"]["detected"]["dpmlm"] is True
+    assert result["backend"]["details"]["dpmlm"]["installed"] is True
+    assert result["epsilon_results"][0]["skip_reason"] == "adapter_not_implemented"
+
+
 def test_dpmlm_spike_rejects_invalid_epsilon(tmp_path):
     source = tmp_path / "dpmlm.csv"
     write_dpmlm_rows(source)

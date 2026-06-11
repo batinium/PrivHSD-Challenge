@@ -45,6 +45,12 @@ from .local_llm import (
 from .presidio_compare import PresidioCompareError, run_presidio_comparison
 from .rerank import RerankError, run_candidate_reranking
 from .submission import SubmissionError, create_submission, validate_submission
+from .token_actions import (
+    DEFAULT_MODEL_PATH as DEFAULT_TOKEN_ACTION_MODEL_PATH,
+    DEFAULT_REPORT_PATH as DEFAULT_TOKEN_ACTION_REPORT_PATH,
+    TokenActionError,
+    train_token_action_tagger,
+)
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
@@ -325,7 +331,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write row-preserving predictions from a trained local classifier.",
     )
     predict_classifier_parser.add_argument("--input", type=Path, required=True)
-    predict_classifier_parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    predict_classifier_parser.add_argument(
+        "--model",
+        type=Path,
+        default=DEFAULT_MODEL_PATH,
+    )
     predict_classifier_parser.add_argument("--text-col", required=True)
     predict_classifier_parser.add_argument("--id-col")
     predict_classifier_parser.add_argument("--label-col", default="label")
@@ -339,6 +349,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--confidence-col",
         default="predicted_confidence",
     )
+
+    token_actions = subparsers.add_parser(
+        "train-token-action-tagger",
+        help="Train a weakly supervised token-action tagger from local rules.",
+    )
+    token_actions.add_argument("--input", type=Path, required=True)
+    token_actions.add_argument("--text-col", required=True)
+    token_actions.add_argument("--id-col")
+    token_actions.add_argument(
+        "--model",
+        type=Path,
+        default=DEFAULT_TOKEN_ACTION_MODEL_PATH,
+    )
+    token_actions.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_TOKEN_ACTION_REPORT_PATH,
+    )
+    token_actions.add_argument("--sample-size", type=int, default=5000)
+    token_actions.add_argument("--test-size", type=float, default=0.25)
+    token_actions.add_argument("--random-state", type=int, default=13)
 
     add_prepare_dynahate_parser(subparsers)
 
@@ -542,6 +573,17 @@ def main(argv: list[str] | None = None) -> int:
                 prediction_col=args.prediction_col,
                 confidence_col=args.confidence_col,
             )
+        elif args.command == "train-token-action-tagger":
+            result = train_token_action_tagger(
+                args.input,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                model_path=args.model,
+                output_path=args.output,
+                sample_size=args.sample_size,
+                test_size=args.test_size,
+                random_state=args.random_state,
+            )
         else:
             count = prepare_dynahate(
                 raw_path=args.raw,
@@ -571,6 +613,7 @@ def main(argv: list[str] | None = None) -> int:
         PresidioCompareError,
         RerankError,
         SubmissionError,
+        TokenActionError,
         ValueError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)
