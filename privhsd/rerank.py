@@ -63,6 +63,11 @@ STYLE_RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("repeated_letters", REPEATED_LETTER_PATTERN),
 )
 
+DEFAULT_MIN_REWRITE_TARGET_RETENTION = 1.0
+DEFAULT_MIN_REWRITE_UTILITY_RETENTION = 1.0
+DEFAULT_MIN_REWRITE_CHARACTER_RETENTION = 0.35
+DEFAULT_MAX_REWRITE_LENGTH_DRIFT = 0.65
+
 
 def rounded(value: float) -> float:
     return round(float(value), 4)
@@ -104,6 +109,74 @@ def style_risk_count(text: str) -> int:
     return sum(style_risk_counts(text).values())
 
 
+def length_drift(original: str, candidate: str) -> float:
+    denominator = max(len(original), 1)
+    return abs(len(candidate) - len(original)) / denominator
+
+
+def validate_rewrite_candidate(
+    original: str,
+    candidate: str,
+    *,
+    min_target_retention: float = DEFAULT_MIN_REWRITE_TARGET_RETENTION,
+    min_utility_retention: float = DEFAULT_MIN_REWRITE_UTILITY_RETENTION,
+    min_character_retention: float = DEFAULT_MIN_REWRITE_CHARACTER_RETENTION,
+    max_length_drift: float = DEFAULT_MAX_REWRITE_LENGTH_DRIFT,
+    reject_unchanged: bool = False,
+) -> tuple[bool, dict[str, Any]]:
+    candidate = candidate.strip()
+    reasons: list[str] = []
+    if not candidate:
+        reasons.append("empty_candidate")
+
+    metrics = row_metric(original, candidate)
+    drift = length_drift(original, candidate)
+    original_style_risk = style_risk_count(original)
+    candidate_style_risk = style_risk_count(candidate)
+
+    if reject_unchanged and original == candidate:
+        reasons.append("unchanged")
+    if metrics["target_cue_retention"] < min_target_retention:
+        reasons.append("target_cue_loss")
+    if metrics["utility_cue_retention"] < min_utility_retention:
+        reasons.append("utility_cue_loss")
+    if metrics["character_utility_retention"] < min_character_retention:
+        reasons.append("low_character_retention")
+    if drift > max_length_drift:
+        reasons.append("length_drift")
+    if metrics["residual_direct_identifier_count"]:
+        reasons.append("residual_direct_identifier")
+    if metrics["residual_quasi_identifier_count"]:
+        reasons.append("residual_quasi_identifier")
+    if (
+        metrics["privacy_identifier_count_after"]
+        > metrics["privacy_identifier_count_before"]
+    ):
+        reasons.append("new_identifier_signal")
+    if candidate_style_risk > original_style_risk:
+        reasons.append("style_risk_increase")
+
+    checks = {
+        "accepted": not reasons,
+        "reasons": reasons,
+        "target_cue_retention": metrics["target_cue_retention"],
+        "utility_cue_retention": metrics["utility_cue_retention"],
+        "character_utility_retention": metrics["character_utility_retention"],
+        "length_drift": rounded(drift),
+        "privacy_identifier_count_before": metrics["privacy_identifier_count_before"],
+        "privacy_identifier_count_after": metrics["privacy_identifier_count_after"],
+        "residual_direct_identifier_count": metrics["residual_direct_identifier_count"],
+        "residual_quasi_identifier_count": metrics["residual_quasi_identifier_count"],
+        "style_risk_count_before": original_style_risk,
+        "style_risk_count_after": candidate_style_risk,
+        "min_target_retention": min_target_retention,
+        "min_utility_retention": min_utility_retention,
+        "min_character_retention": min_character_retention,
+        "max_length_drift": max_length_drift,
+    }
+    return not reasons, checks
+
+
 def generate_candidates(
     text: str,
     *,
@@ -111,6 +184,22 @@ def generate_candidates(
     presidio_analyzer: Any | None = None,
     presidio_language: str = "en",
 ) -> list[Candidate]:
+    candidates, _rejected_candidates = generate_candidates_with_rejections(
+        text,
+        rewrite_candidates=rewrite_candidates,
+        presidio_analyzer=presidio_analyzer,
+        presidio_language=presidio_language,
+    )
+    return candidates
+
+
+def generate_candidates_with_rejections(
+    text: str,
+    *,
+    rewrite_candidates: dict[str, str] | None = None,
+    presidio_analyzer: Any | None = None,
+    presidio_language: str = "en",
+) -> tuple[list[Candidate], list[dict[str, Any]]]:
     generated = [
         Candidate(
             name="balanced",
@@ -159,21 +248,30 @@ def generate_candidates(
                 )
             )
     seen = {(candidate.name, candidate.text) for candidate in generated}
+    rejected: list[dict[str, Any]] = []
     for column, value in (rewrite_candidates or {}).items():
+        candidate_text = value.strip()
+        accepted, validation = validate_rewrite_candidate(text, candidate_text)
+        if not accepted:
+            rejected.append(
+                {
+                    "column": column,
+                    "name": f"rewrite:{column}",
+                    "source": "input_column",
+                    "validation": validation,
+                }
+            )
+            continue
         candidate = Candidate(
             name=f"rewrite:{column}",
-            text=value,
+            text=candidate_text,
             source="input_column",
+            metadata={"validation": validation},
         )
         if (candidate.name, candidate.text) not in seen:
             generated.append(candidate)
             seen.add((candidate.name, candidate.text))
-    return generated
-
-
-def length_drift(original: str, candidate: str) -> float:
-    denominator = max(len(original), 1)
-    return abs(len(candidate) - len(original)) / denominator
+    return generated, rejected
 
 
 def score_candidate(
@@ -355,6 +453,8 @@ def run_candidate_reranking(
     audit_rows: list[dict[str, Any]] = []
     chosen_metrics: list[dict[str, Any]] = []
     chosen_counts: Counter[str] = Counter()
+    rejected_rewrite_candidate_counts: Counter[str] = Counter()
+    rejected_rewrite_candidate_reason_counts: Counter[str] = Counter()
     for row_index, row in enumerate(rows, start=1):
         original = str(row.get(text_col, "") or "")
         rewrite_candidates = {
@@ -362,12 +462,16 @@ def run_candidate_reranking(
             for column in candidate_cols
             if str(row.get(column, "") or "")
         }
-        candidates = generate_candidates(
+        candidates, rejected_rewrite_candidates = generate_candidates_with_rejections(
             original,
             rewrite_candidates=rewrite_candidates,
             presidio_analyzer=presidio_analyzer,
             presidio_language=presidio_language,
         )
+        for rejected in rejected_rewrite_candidates:
+            rejected_rewrite_candidate_counts[str(rejected["column"])] += 1
+            for reason in rejected["validation"]["reasons"]:
+                rejected_rewrite_candidate_reason_counts[str(reason)] += 1
         author = str(row.get(author_col, "") or "") if author_col else None
         chosen, scored = choose_candidate(
             original,
@@ -390,6 +494,7 @@ def run_candidate_reranking(
                 "row_index": row_index,
                 "chosen": chosen.name,
                 "candidate_count": len(candidates),
+                "rejected_rewrite_candidates": rejected_rewrite_candidates,
                 "scores": scored,
             }
         )
@@ -420,6 +525,19 @@ def run_candidate_reranking(
             "language": presidio_language if presidio_augment else None,
         },
         "author_scorer": author_scorer_report,
+        "rewrite_candidate_validation": {
+            "rejected_count": sum(rejected_rewrite_candidate_counts.values()),
+            "rejected_counts_by_column": dict(
+                sorted(rejected_rewrite_candidate_counts.items())
+            ),
+            "rejected_counts_by_reason": dict(
+                sorted(rejected_rewrite_candidate_reason_counts.items())
+            ),
+            "min_target_retention": DEFAULT_MIN_REWRITE_TARGET_RETENTION,
+            "min_utility_retention": DEFAULT_MIN_REWRITE_UTILITY_RETENTION,
+            "min_character_retention": DEFAULT_MIN_REWRITE_CHARACTER_RETENTION,
+            "max_length_drift": DEFAULT_MAX_REWRITE_LENGTH_DRIFT,
+        },
         "row_count": len(rows),
         "chosen_counts": dict(sorted(chosen_counts.items())),
         "metrics": aggregate_metrics(chosen_metrics),

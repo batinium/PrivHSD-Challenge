@@ -9,6 +9,9 @@ file, commit messages, screenshots, and issue comments.
 - `python -m pytest -q` passes.
 - The submission CSV was created with `create-submission --replace-text`.
 - `validate-submission` passes with no helper columns.
+- Optional Presidio output, if used, came through `rerank-candidates
+  --replace-text --presidio-augment`, not raw Presidio or direct entity
+  replacement.
 - Row count matches the source dataset.
 - Column set and column order match the source dataset.
 - ID order matches the source dataset when an ID column is available.
@@ -55,4 +58,7 @@ python -m privhsd.cli validate-submission \
 
 Submit `balanced` first unless official feedback shows a better tradeoff.
 Consider `rerank-candidates` when author-style risk needs more pressure and the
-exact-format validation plus utility/cue reports still pass.
+exact-format validation plus utility/cue reports still pass. Treat
+`rerank-candidates --presidio-augment` as the current strongest alternate, but
+only after audit review confirms no target/action cue loss and
+`validate-submission` passes on the exact-format file.

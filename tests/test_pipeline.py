@@ -34,6 +34,32 @@ def test_utility_mode_keeps_context_detectors_but_not_target_generalization():
     assert "refugees" in result.text
 
 
+def test_context_person_masks_single_token_self_identification():
+    text = "My name is Amy and Muslims should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Amy" not in result.text
+    assert "[PERSON]" in result.text
+    assert "Muslims should leave" in result.text
+
+
+def test_context_location_does_not_mask_target_terms():
+    text = "I live in Muslim neighborhoods and they should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "[LOCATION]" not in result.text
+    assert "Muslim neighborhoods" in result.text
+
+
+def test_context_location_still_masks_non_target_places():
+    text = "I live in London and Muslims should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "London" not in result.text
+    assert "[LOCATION]" in result.text
+    assert "Muslims should leave" in result.text
+
+
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():
     text = "The women from River City organized a public meeting."
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))

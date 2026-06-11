@@ -208,12 +208,18 @@ selects one row-local winner.
 | `privacy` | Deterministic anonymizer in privacy mode. | More privacy pressure. | Can overgeneralize target terms. | Ablation/alternate only. |
 | `target_generalized` | Balanced mode with target generalization enabled. | Tests privacy-heavy target handling. | Often hurts HSD interpretability. | Candidate only. |
 | `presidio_augmented` | Filtered Presidio spans added to balanced masking. | Catches extra names, locations, durable dates. | Presidio raw output has high false-positive risk. | Strongest local alternate after filtering. |
-| `rewrite:<candidate_col>` | Precomputed external candidate column, e.g. DPMLM or LLM. | Allows model-backed rewrites. | Semantic drift, cue loss, new identifiers. | Must pass generation checks and reranking. |
+| `rewrite:<candidate_col>` | Precomputed external candidate column, e.g. DPMLM or LLM. | Allows model-backed rewrites. | Semantic drift, cue loss, new identifiers. | Must pass shared validation and reranking. |
 
 Reranking score rewards target cue retention, utility cue retention, character
 retention, and accepted Presidio spans. It penalizes residual identifiers,
 style risk, target/cue loss, length drift, semantic drift, and optional
 author-classifier confidence when an author column is usable.
+
+External rewrite candidates are filtered before scoring. The shared validation
+rejects candidates that drop target/action cues, leave residual direct or
+quasi-identifiers, introduce new identifier signals, increase style risk, or
+drift too far in length/character similarity. Rejected candidates are recorded
+in the audit JSON by column and reason without storing raw text.
 
 ## Optional Model Paths
 
@@ -229,6 +235,13 @@ and durable `DATE_TIME` spans. It rejects:
 - locations with risky shape;
 - transient dates such as `today`, `tomorrow`, `yesterday`, and `christmas`;
 - unsupported entity types.
+
+Presidio is useful because the local deterministic detector can miss names or
+places. It is risky because hate-speech target terms often look like national,
+religious, or political entities. Therefore Presidio is a candidate source, not
+an unconditional replacement. For official alternates, route it through
+`rerank-candidates --replace-text --presidio-augment`, review the audit, and
+then run exact-format submission validation.
 
 ### DPMLM
 
@@ -352,7 +365,7 @@ it is not the default because target identity may be necessary for HSD utility.
 | --- | --- |
 | Are we done locally? | Mostly yes until official data arrives. |
 | First official run? | `create-submission --replace-text --mode balanced`. |
-| Strongest alternate? | `rerank-candidates --presidio-augment`, then exact-format validation. |
+| Strongest alternate? | `rerank-candidates --replace-text --presidio-augment`, then exact-format validation. |
 | Should we do more DPMLM now? | No, unless official scores show a reason. |
 | Should we train a new model now? | No, not without official data and a clear metric gain target. |
 | What should a tutor review? | Reranking objective, privacy/utility metrics, author-risk evaluation, and whether the protected cue policy is defensible. |
@@ -365,7 +378,7 @@ it is not the default because target identity may be necessary for HSD utility.
 4. Validate row count, row order, columns, IDs, labels, authors, and metadata.
 5. Run official evaluator and record Utility and Privacy ratios.
 6. If an author column has repeated authors, run `evaluate-author-risk`.
-7. Run `rerank-candidates --presidio-augment` as the strongest alternate.
+7. Run `rerank-candidates --replace-text --presidio-augment` as the strongest alternate.
 8. Submit the alternate only if exact validation passes and official scoring is better.
 9. Revisit DPMLM/LLM only if official privacy remains weak and utility headroom exists.
 

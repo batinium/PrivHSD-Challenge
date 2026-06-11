@@ -168,14 +168,17 @@ Use `balanced` first for official evaluator submissions.
 
 ## Current Roadmap
 
-Next work should focus on authorship-risk evaluation and style scrubbing:
+Next implementation work should wait for the official data unless a new
+official score exposes a specific weakness. On official `id,author,text,HS`
+style files:
 
-- train an author classifier when official data includes an author column
-- normalize style cues such as casing, punctuation, repeated characters,
-  emojis, spacing, and signatures
-- rerank candidate privatizations by author-risk reduction and HSD utility
-- treat Presidio, DPMLM, and specialized LLM rewriting as optional experiments
-  rather than default dependencies
+- run metadata leakage checks for `id` and `author`
+- create and validate a first exact-format `balanced` submission
+- run author-risk evaluation when author labels repeat enough for a classifier
+- try `rerank-candidates --replace-text --presidio-augment` as the strongest
+  audited alternate
+- keep Presidio, DPMLM, and specialized LLM rewriting as optional candidates,
+  not default dependencies
 
 ## Agent Rule
 

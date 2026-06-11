@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 import hashlib
 import importlib
 from pathlib import Path
@@ -16,8 +15,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_csv, write_json
 from .cue_checks import DEFAULT_RETENTION_THRESHOLD, row_cue_report
 from .dpmlm_spike import DPMLM_WARNING, protected_cue_manifest
-from .metrics import row_metric
-from .rerank import length_drift, style_risk_count
+from .rerank import validate_rewrite_candidate
 from .style import PLACEHOLDER_PATTERN
 
 
@@ -436,8 +434,15 @@ def validate_candidate(
     max_length_drift: float,
     cue_retention_threshold: float,
 ) -> tuple[bool, dict[str, Any]]:
-    metrics = row_metric(original, candidate)
-    drift = length_drift(original, candidate)
+    accepted, checks = validate_rewrite_candidate(
+        original,
+        candidate,
+        min_target_retention=min_target_retention,
+        min_utility_retention=min_utility_retention,
+        min_character_retention=min_character_retention,
+        max_length_drift=max_length_drift,
+        reject_unchanged=True,
+    )
     cue_report = row_cue_report(
         row_index=row_index,
         row_id=row_id,
@@ -445,50 +450,18 @@ def validate_candidate(
         privatized=candidate,
         threshold=cue_retention_threshold,
     )
-    original_style_risk = style_risk_count(original)
-    candidate_style_risk = style_risk_count(candidate)
-    reasons = []
-    if original == candidate:
-        reasons.append("unchanged")
-    if metrics["target_cue_retention"] < min_target_retention:
-        reasons.append("target_cue_loss")
-    if metrics["utility_cue_retention"] < min_utility_retention:
-        reasons.append("utility_cue_loss")
+    reasons = list(checks["reasons"])
     if cue_report["loss_groups"]:
         reasons.append("conservative_hsd_cue_loss")
-    if metrics["character_utility_retention"] < min_character_retention:
-        reasons.append("low_character_retention")
-    if drift > max_length_drift:
-        reasons.append("length_drift")
-    if (
-        metrics["privacy_identifier_count_after"]
-        > metrics["privacy_identifier_count_before"]
-    ):
-        reasons.append("new_identifier_signal")
-    if candidate_style_risk > original_style_risk:
-        reasons.append("style_risk_increase")
-    if SequenceMatcher(None, original, candidate).ratio() < min_character_retention:
-        reasons.append("sequence_drift")
 
     checks = {
-        "accepted": not reasons,
+        **checks,
+        "accepted": accepted and not cue_report["loss_groups"],
         "reasons": reasons,
-        "target_cue_retention": metrics["target_cue_retention"],
-        "utility_cue_retention": metrics["utility_cue_retention"],
-        "character_utility_retention": metrics["character_utility_retention"],
-        "length_drift": rounded(drift),
         "cue_loss_groups": cue_report["loss_groups"],
-        "privacy_identifier_count_before": metrics["privacy_identifier_count_before"],
-        "privacy_identifier_count_after": metrics["privacy_identifier_count_after"],
-        "style_risk_count_before": original_style_risk,
-        "style_risk_count_after": candidate_style_risk,
-        "min_target_retention": min_target_retention,
-        "min_utility_retention": min_utility_retention,
-        "min_character_retention": min_character_retention,
-        "max_length_drift": max_length_drift,
         "cue_retention_threshold": cue_retention_threshold,
     }
-    return not reasons, checks
+    return checks["accepted"], checks
 
 
 def validate_columns(

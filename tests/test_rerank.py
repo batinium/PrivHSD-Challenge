@@ -94,6 +94,20 @@ def test_generate_candidates_includes_deterministic_and_rewrite_options():
     ]
 
 
+def test_generate_candidates_rejects_external_rewrite_with_cue_loss():
+    candidates = generate_candidates(
+        "Muslims should leave.",
+        rewrite_candidates={"manual_candidate": "People are annoying."},
+    )
+
+    assert [candidate.name for candidate in candidates] == [
+        "balanced",
+        "style_scrubbed",
+        "privacy",
+        "target_generalized",
+    ]
+
+
 def test_generate_candidates_can_include_filtered_presidio_candidate():
     candidates = generate_candidates(
         "i'm going to kill Amy",
@@ -134,8 +148,55 @@ def test_candidate_reranking_preserves_rows_and_writes_audit(tmp_path):
         score["name"] == "rewrite:manual_candidate"
         for score in audit_data["rows"][0]["scores"]
     )
+    assert audit_data["summary"]["rewrite_candidate_validation"]["rejected_count"] == 0
     assert "text" not in audit_data["rows"][0]
     assert summary["metrics"]["target_cue_retention_mean"] == 1.0
+
+
+def test_candidate_reranking_audits_rejected_rewrite_candidates(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    audit = tmp_path / "audit.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["id", "text", "label", "manual_candidate"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "id": "1",
+                "text": "Muslims should leave.",
+                "label": "hate",
+                "manual_candidate": "People are annoying.",
+            }
+        )
+
+    summary = run_candidate_reranking(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        candidate_cols=["manual_candidate"],
+        audit_path=audit,
+    )
+
+    audit_data = json.loads(audit.read_text(encoding="utf-8"))
+    row_audit = audit_data["rows"][0]
+    rejected = row_audit["rejected_rewrite_candidates"][0]
+    reasons = rejected["validation"]["reasons"]
+    assert row_audit["candidate_count"] == 4
+    assert not any(
+        score["name"] == "rewrite:manual_candidate"
+        for score in row_audit["scores"]
+    )
+    assert rejected["column"] == "manual_candidate"
+    assert "target_cue_loss" in reasons
+    assert "utility_cue_loss" in reasons
+    assert summary["rewrite_candidate_validation"]["rejected_count"] == 1
+    assert summary["rewrite_candidate_validation"]["rejected_counts_by_reason"][
+        "target_cue_loss"
+    ] == 1
 
 
 def test_candidate_reranking_can_replace_text_in_place(tmp_path):

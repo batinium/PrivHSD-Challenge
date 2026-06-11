@@ -61,8 +61,9 @@ modality, and hate/action cues.
 `--presidio-augment` is also optional and requires `privhsd[presidio]`. It adds
 filtered Presidio `PERSON`, `LOCATION`, and durable `DATE_TIME` spans while
 preserving Presidio `NRP` spans and target/action cue overlaps. Use it for an
-augmented run or as a reranker candidate, not as an unconditional raw Presidio
-replacement.
+augmented diagnostic run or, for submission alternates, through
+`rerank-candidates --replace-text --presidio-augment`. Do not submit raw
+Presidio or unconditional entity replacement as the first official output.
 
 Evaluate a privatized CSV:
 
@@ -254,11 +255,14 @@ python -m privhsd.cli rerank-candidates \
 candidate columns can be supplied with repeatable `--candidate-col` arguments.
 If `--presidio-augment` is set, it also generates a filtered
 `presidio_augmented` candidate using accepted Presidio spans only.
-The scorer penalizes residual identifiers, residual style signals, optional
-author-risk confidence when an author column and scikit-learn are available,
-target/action cue loss, and length/character drift. It writes only the chosen
-text column by default; per-candidate scores go to the audit JSON without raw
-text.
+External rewrite columns are validated before scoring: candidates that drop
+target/action cues, leave residual identifiers, introduce new identifier
+signals, increase style risk, or drift too far are rejected and recorded in the
+audit. The scorer then penalizes residual identifiers, residual style signals,
+optional author-risk confidence when an author column and scikit-learn are
+available, target/action cue loss, and length/character drift. It writes only
+the chosen text column by default; per-candidate scores go to the audit JSON
+without raw text.
 
 Generate protected-token DPMLM rewrite candidates for reranking only:
 

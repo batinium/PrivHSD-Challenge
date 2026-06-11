@@ -89,7 +89,7 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
 PERSON_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
     re.compile(
         r"\b(?i:my name is|i am|i'm|this is|call me)\s+"
-        r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"
+        r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b"
     ),
     re.compile(
         r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+"
@@ -243,6 +243,17 @@ TARGET_GENERALIZATION_CONTEXT_CUES = (
 )
 
 
+def contains_target_group_term(value: str) -> bool:
+    """Return whether a candidate span is itself a protected target cue."""
+    lowered = value.lower()
+    for terms in TARGET_GROUP_TERMS.values():
+        for term in terms:
+            pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
+            if re.search(pattern, lowered):
+                return True
+    return False
+
+
 def regex_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for entity_type, pattern in REGEX_PATTERNS:
@@ -265,8 +276,11 @@ def context_spans(text: str) -> list[Span]:
     for pattern in PERSON_CONTEXT_PATTERNS:
         for match in pattern.finditer(text):
             start, end = match.span(1)
+            value = text[start:end]
+            if contains_target_group_term(value):
+                continue
             spans.append(
-                Span(start, end, "PERSON", text[start:end], 0.72, "context_person")
+                Span(start, end, "PERSON", value, 0.72, "context_person")
             )
     for pattern in ALIAS_CONTEXT_PATTERNS:
         for match in pattern.finditer(text):
@@ -278,7 +292,7 @@ def context_spans(text: str) -> list[Span]:
         for match in pattern.finditer(text):
             start, end = match.span(1)
             value = text[start:end]
-            if value.lower() in {"the", "a", "an"}:
+            if value.lower() in {"the", "a", "an"} or contains_target_group_term(value):
                 continue
             spans.append(
                 Span(start, end, "LOCATION", value, 0.65, "context_location")

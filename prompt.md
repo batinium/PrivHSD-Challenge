@@ -61,9 +61,13 @@ Current status:
 - A40 shareable architecture paper is complete in
   `docs/privhsd_system_design_paper.md`, with PDF copy at
   `docs/privhsd_system_design_paper.pdf`.
+- A41 audit hardening is complete: detector context rules now mask
+  single-token self-identifying names while preserving target-group cues, and
+  reranking/DPMLM share external rewrite validation for cue loss, residual
+  identifiers, new identifier signals, style-risk increases, and drift.
 - Latest pushed HEAD when this prompt was written: run `git rev-parse --short HEAD`
   to confirm.
-- Current full tests should be `82 passed, 1 skipped`.
+- Current full tests should be `87 passed, 1 skipped`.
 - Local Dynahate is expected at `data/public_dev/dynahate.csv`; it is ignored by
   git and has columns `id,text,label,source,split,target,type`.
 - Generated outputs belong under ignored `data/outputs/`.

@@ -419,7 +419,9 @@ Status update: filtered Presidio augmentation is now implemented on
 `anonymize`, `rerank-candidates`, and `create-submission` via
 `--presidio-augment`. It rejects `NRP`, protected cue overlaps, transient dates,
 and common shape false positives, then allows reranking to decide whether the
-augmented candidate is worth the utility drift.
+augmented candidate is worth the utility drift. For official alternates, use
+the reranked exact-format path (`rerank-candidates --replace-text
+--presidio-augment`) rather than direct raw Presidio replacement.
 
 Useful outputs:
 
