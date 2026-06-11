@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .ablation import AblationError, run_ablation
+from .author_risk import AuthorRiskError, run_author_risk_evaluation
 from .classifier import (
     DEFAULT_EVALUATE_REPORT_PATH,
     DEFAULT_MODEL_PATH,
@@ -38,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     anonymize.add_argument("--output-col", default="privatized_text")
     anonymize.add_argument("--replace-text", action="store_true")
     anonymize.add_argument("--audit", type=Path)
+    anonymize.add_argument(
+        "--style-scrub",
+        action="store_true",
+        help="Normalize style-bearing author cues after privacy masking.",
+    )
     anonymize.add_argument(
         "--mode",
         choices=["utility", "balanced", "privacy"],
@@ -81,6 +87,20 @@ def build_parser() -> argparse.ArgumentParser:
     ablate.add_argument("--output-dir", type=Path)
     ablate.add_argument("--test-size", type=float, default=0.25)
     ablate.add_argument("--random-state", type=int, default=13)
+
+    author_risk = subparsers.add_parser(
+        "evaluate-author-risk",
+        help="Train a local author adversary and compare original vs privatized text.",
+    )
+    author_risk.add_argument("--input", type=Path, required=True)
+    author_risk.add_argument("--text-col", required=True)
+    author_risk.add_argument("--privatized-col", default="privatized_text")
+    author_risk.add_argument("--author-col", default="author")
+    author_risk.add_argument("--id-col")
+    author_risk.add_argument("--label-col")
+    author_risk.add_argument("--output", type=Path)
+    author_risk.add_argument("--test-size", type=float, default=0.25)
+    author_risk.add_argument("--random-state", type=int, default=13)
 
     train_classifier_parser = subparsers.add_parser(
         "train-classifier",
@@ -159,6 +179,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_path=args.audit,
                 mode=args.mode,
                 generalize_targets=generalize_targets,
+                style_scrub=args.style_scrub,
             )
         elif args.command == "evaluate":
             result = evaluate_csv(
@@ -186,6 +207,18 @@ def main(argv: list[str] | None = None) -> int:
                 label_col=args.label_col,
                 output_path=args.output,
                 output_dir=args.output_dir,
+                test_size=args.test_size,
+                random_state=args.random_state,
+            )
+        elif args.command == "evaluate-author-risk":
+            result = run_author_risk_evaluation(
+                args.input,
+                text_col=args.text_col,
+                privatized_col=args.privatized_col,
+                author_col=args.author_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                output_path=args.output,
                 test_size=args.test_size,
                 random_state=args.random_state,
             )
@@ -237,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except (
         AblationError,
+        AuthorRiskError,
         BenchmarkError,
         ClassifierError,
         CsvPipelineError,

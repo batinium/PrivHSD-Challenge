@@ -14,7 +14,7 @@ Branch and pushed HEAD:
 
 ```text
 main
-fd3957e Refocus roadmap on authorship risk
+9daf80d Add author risk evaluator and style scrubber
 ```
 
 Untracked files:
@@ -68,11 +68,14 @@ privhsd ablate
 privhsd train-classifier
 privhsd evaluate-classifier
 privhsd predict-classifier
+privhsd evaluate-author-risk
 privhsd prepare-dynahate
 ```
 
 Core `privhsd anonymize` remains dependency-light and does not require
 scikit-learn, external LLM APIs, Presidio, or Hugging Face models.
+`--style-scrub` is available as an optional deterministic author-style
+normalization pass after privacy masking.
 
 ## Webinar Correction
 
@@ -109,6 +112,10 @@ Important slide takeaways:
 - A12: richer metrics and warnings.
 - A13: synthetic PII stress fixtures and tests.
 - A16: optional local classifier train/evaluate/predict workflow.
+- A17: optional local author-risk evaluator with structured no-author skip JSON.
+- A18: deterministic style scrubber for casing, spacing, repeated letters,
+  punctuation bursts, emoji/symbol bursts, signatures, self-tags, and idiolect
+  markers while preserving target/action cues.
 
 Recent commits:
 
@@ -126,14 +133,14 @@ Latest base suite:
 
 ```text
 python -m pytest -q
-22 passed, 3 skipped
+31 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-24 passed, 1 skipped
+31 passed, 1 skipped
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,
@@ -172,14 +179,12 @@ Follow `docs/roadmap.md`.
 
 Recommended next sequence:
 
-1. A17: author-attribution privacy evaluator using an `author` column.
-2. A18: style-scrubbing transformer for authorship cues.
-3. A24/A25: optional Hugging Face model registry and utility evaluator.
-4. A19: candidate generation/reranking by privacy and HSD utility.
-5. A27: DPMLM protected-cue spike on bounded samples only.
-6. A28: exact-format submission validator/creator.
-7. A08/A22: final pitch/demo and human-rights judging narrative.
-8. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A24/A25: optional Hugging Face model registry and utility evaluator.
+2. A19: candidate generation/reranking by privacy and HSD utility.
+3. A27: DPMLM protected-cue spike on bounded samples only.
+4. A28: exact-format submission validator/creator.
+5. A08/A22: final pitch/demo and human-rights judging narrative.
+6. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 Do not start by training a new attention model. Use pretrained models to
 measure HSD utility and generate/rerank candidates, then keep anything that

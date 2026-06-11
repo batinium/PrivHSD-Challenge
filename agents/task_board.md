@@ -22,8 +22,8 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A14 | todo | unassigned | Add optional Presidio/spaCy comparison as a detector baseline, not a replacement. |
 | A15 | todo | unassigned | Add optional neural utility evaluators after model-license checks. |
 | A16 | done | Codex | Add local baseline classifier train/evaluate/predict workflows. |
-| A17 | todo | unassigned | Add authorship-risk evaluator: train an author classifier when an `author` column exists and report accuracy/F1 drop after privatization. |
-| A18 | todo | unassigned | Add style-scrubbing transformer for authorship cues: casing, punctuation bursts, emojis, repeated chars, spacing, signatures, and idiolect markers. |
+| A17 | done | Codex | Add authorship-risk evaluator: train an author classifier when an `author` column exists and report accuracy/F1 drop after privatization. |
+| A18 | done | Codex | Add style-scrubbing transformer for authorship cues: casing, punctuation bursts, emojis, repeated chars, spacing, signatures, and idiolect markers. |
 | A19 | todo | unassigned | Add candidate reranking: compare deterministic, style-scrubbed, target-generalized, and optional rewrite outputs by privacy/HSD utility score. |
 | A20 | todo | unassigned | Spike DPMLM-style rewriting on a tiny sample; document epsilon/runtime/utility tradeoffs before any integration. |
 | A21 | todo | unassigned | Prototype specialized local LLM rewriting with schema constraints and self-checks; no generic prompting and no required external API. |
@@ -51,14 +51,12 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. A17: author-attribution privacy evaluator.
-2. A18: style-scrubbing transformer for authorship cues.
-3. A24/A25: approved Hugging Face model registry and utility evaluator.
-4. A19: candidate reranking using privacy and HSD utility scores.
-5. A27: DPMLM protected-cue spike on bounded samples only.
-6. A28: exact-format submission validator/creator.
-7. A08/A22: final pitch/demo narrative and human-rights framing.
-8. A14/A21/A29: optional Presidio and specialized local LLM experiments.
+1. A24/A25: approved Hugging Face model registry and utility evaluator.
+2. A19: candidate reranking using privacy and HSD utility scores.
+3. A27: DPMLM protected-cue spike on bounded samples only.
+4. A28: exact-format submission validator/creator.
+5. A08/A22: final pitch/demo narrative and human-rights framing.
+6. A14/A21/A29: optional Presidio and specialized local LLM experiments.
 
 ## Non-Negotiables
 

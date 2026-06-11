@@ -8,6 +8,7 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from .detectors import Span, detect_spans
+from .style import scrub_style
 
 
 MODES = {"utility", "balanced", "privacy"}
@@ -18,6 +19,7 @@ class PrivatizerConfig:
     mode: str = "balanced"
     generalize_targets: bool | None = None
     include_context_detectors: bool = True
+    style_scrub: bool = False
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -102,10 +104,22 @@ def privatize_text(
         include_targets=config.target_generalization_enabled,
     )
     privatized, transformations = apply_replacements(text, spans, config)
+    style_metrics: dict[str, Any] = {
+        "style_scrub_enabled": config.style_scrub,
+        "style_scrub_changed": False,
+        "style_transform_count": 0,
+        "style_counts_by_type": {},
+    }
+    if config.style_scrub:
+        style_result = scrub_style(privatized)
+        privatized = style_result.text
+        transformations = transformations + style_result.transformations
+        style_metrics = dict(style_result.metrics)
+    metrics = text_metrics(text, privatized, spans)
+    metrics.update(style_metrics)
     return PrivatizationResult(
         text=privatized,
         spans=tuple(spans),
         transformations=transformations,
-        metrics=text_metrics(text, privatized, spans),
+        metrics=metrics,
     )
-

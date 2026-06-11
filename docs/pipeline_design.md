@@ -7,12 +7,14 @@ The active implementation is in `privhsd/`.
 ```text
 privhsd/
   ablation.py      multi-mode ablation report runner
+  author_risk.py   optional local authorship-risk adversary
   classifier.py    optional local CSV train/evaluate/predict classifier
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   detectors.py     deterministic span detectors
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
+  style.py         deterministic style scrubbing for author cues
   utility_benchmark.py  optional scikit-learn utility-delta benchmark
 ```
 
@@ -37,8 +39,15 @@ python -m privhsd.cli anonymize \
   --text-col text \
   --id-col id \
   --audit data/outputs/dynahate.audit.json \
-  --mode balanced
+  --mode balanced \
+  --style-scrub
 ```
+
+`--style-scrub` is optional. It runs after privacy masking and normalizes
+authorship style cues such as casing, whitespace, repeated punctuation,
+repeated letters, emoji/symbol bursts, self-tags, signatures, and common
+idiolect markers while preserving placeholders, target-group terms, negation,
+modality, and hate/action cues.
 
 Evaluate a privatized CSV:
 
@@ -146,6 +155,25 @@ report includes the same local relative utility benchmark used by
 report includes `utility_benchmark_skipped` with the install hint and still
 writes the deterministic ablation metrics.
 
+Evaluate authorship risk when an author column is available:
+
+```bash
+python -m privhsd.cli evaluate-author-risk \
+  --input data/outputs/dynahate.privatized.csv \
+  --text-col text \
+  --privatized-col privatized_text \
+  --author-col author \
+  --id-col id \
+  --output data/outputs/author_risk.json
+```
+
+`evaluate-author-risk` is optional and uses scikit-learn only when this command
+is run. It trains a local TF-IDF logistic-regression author adversary on
+original text, then compares author accuracy, macro-F1, true-author confidence,
+and residual high-risk row IDs on original versus privatized dev text. If the
+requested author column is absent, it writes a structured skipped report instead
+of failing.
+
 ## Local Metrics
 
 `privhsd evaluate`, anonymize audit summaries, and ablation reports use the same
@@ -187,6 +215,8 @@ Output CSV must:
 - preserve existing columns
 - preserve labels and metadata
 - add `privatized_text` unless `--replace-text` is explicitly used
+- optionally normalize author style with `--style-scrub` while preserving the
+  same row and metadata contract
 
 ## Modes
 

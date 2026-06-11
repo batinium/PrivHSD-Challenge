@@ -69,8 +69,8 @@ datasets, and generated official examples must not be committed.
 
 Near-term implementation order:
 
-1. Add author-risk evaluation when an `author` column exists.
-2. Add deterministic style scrubbing for non-lexical author signals.
+1. Add author-risk evaluation when an `author` column exists. **Done.**
+2. Add deterministic style scrubbing for non-lexical author signals. **Done.**
 3. Add a Hugging Face utility evaluator behind an optional extra.
 4. Add candidate reranking that balances HSD utility against privacy risk.
 5. Spike DPMLM on small samples with protected HSD cues and explicit epsilon
@@ -96,6 +96,13 @@ These can identify authors even when names, handles, and locations are removed.
 
 ### 1. Authorship-Risk Evaluator
 
+Status: implemented as `privhsd evaluate-author-risk`. The command trains a
+local optional scikit-learn author adversary when the requested author column is
+available, reports original versus privatized accuracy, macro-F1, confidence
+drop, privacy ratios/gains, residual high-risk row IDs, and local HSD proxy
+retention, and writes a structured skipped JSON report when no author column is
+present.
+
 When an `author` column is available, train a local author classifier on
 original text and evaluate it on privatized text.
 
@@ -109,6 +116,11 @@ Report:
 This aligns the local evaluation with the actual privacy adversary.
 
 ### 2. Style-Scrubbing Transformer
+
+Status: implemented behind `--style-scrub` and
+`PrivatizerConfig(style_scrub=True)`. The pass is deterministic, runs locally
+after privacy masking, preserves placeholders and HSD cues, and records
+style-scrub metrics in CSV audit rows.
 
 Add an optional deterministic text pass that normalizes authorship style while
 preserving hate-speech content:

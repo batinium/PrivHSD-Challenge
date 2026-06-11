@@ -49,6 +49,7 @@ def process_csv(
     audit_path: Path | None = None,
     mode: str = "balanced",
     generalize_targets: bool | None = None,
+    style_scrub: bool = False,
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
     if text_col not in fieldnames:
@@ -56,7 +57,11 @@ def process_csv(
     if id_col and id_col not in fieldnames:
         raise CsvPipelineError(f"{input_path}: missing id column {id_col!r}")
 
-    config = PrivatizerConfig(mode=mode, generalize_targets=generalize_targets)
+    config = PrivatizerConfig(
+        mode=mode,
+        generalize_targets=generalize_targets,
+        style_scrub=style_scrub,
+    )
     output_fieldnames = list(fieldnames)
     if not replace_text and output_col not in output_fieldnames:
         output_fieldnames.append(output_col)
@@ -102,6 +107,7 @@ def process_csv(
         "replace_text": replace_text,
         "mode": mode,
         "generalize_targets": config.target_generalization_enabled,
+        "style_scrub": style_scrub,
         "metrics": aggregate_metrics(metric_rows),
     }
     if audit_path:
@@ -143,4 +149,3 @@ def evaluate_csv(
     if output_path:
         write_json(output_path, result)
     return result
-
