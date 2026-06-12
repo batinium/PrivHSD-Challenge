@@ -46,6 +46,9 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A38 | done | Codex | Map mentor-adjacent DP NLP papers from Consensus and primary paper pages to concrete PrivHSD design choices in `docs/dp_text_privacy_literature_notes.md`. |
 | A39 | todo | unassigned | Add optional adversarial LLM reconstruction/privacy-judge report only as secondary evidence after deterministic leakage, author-risk, cue, and official metrics. |
 | A40 | removed | Codex | Shareable system design paper and PDF were removed to declutter; use the canonical pipeline, methodology, and roadmap docs until a new paper is drafted. |
+| A41 | done | Codex | Add source-aware original/protected regression reporting with grouped privacy, cue, context, warning, and rationale/span preservation metrics. |
+| A42 | done | Codex | Add deterministic advisory context tags and source-aware rationale/span parsing for HateXplain token ranges and Toxic Spans character ranges. |
+| A43 | done | Codex | Add LM Studio context-labeler benchmark with JSON/tagged/word-list/binary parse modes and structured endpoint blocker reports. |
 
 ## Current Priority
 
@@ -62,20 +65,25 @@ privacy/HSD tradeoff over the deterministic baseline.
 
 Recommended next sequence:
 
-1. Use `rerank-candidates --presidio-augment` as the strongest alternate after
+1. Use `source-regression-report` after every exact-format official candidate
+   so hard source/label/split/platform/type slices are visible before tuning.
+2. Use `rerank-candidates --presidio-augment` as the strongest alternate after
    the first `balanced` official submission.
-2. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
+3. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature
    or uncertainty detector, not as a direct anonymizer.
-3. A39: add an optional LLM reconstruction/privacy-judge report only if it can
+4. A39: add an optional LLM reconstruction/privacy-judge report only if it can
    be kept local, non-leaking, and secondary to deterministic/official metrics.
-4. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
+5. Optional A30 extension: run sample 500 HF utility only if CPU runtime,
    cache size, and model-card review are acceptable.
-5. DPMLM follow-up: keep it candidate-only; scale only if official metrics or a
+6. DPMLM follow-up: keep it candidate-only; scale only if official metrics or a
    better scorer show that protected-token DPMLM candidates can beat
    deterministic/reranked outputs.
-6. A34/A35: run transformer fine-tuning/attention experiments only as optional
+7. A34/A35: run transformer fine-tuning/attention experiments only as optional
    evidence, then document whether they improve the tradeoff.
-7. When official files arrive, return to exact-format submission and
+8. LM Studio is reachable at `http://169.254.83.107:1234`; run
+   `benchmark-lm-context` across the local small models before using any
+   advisory LLM signal in reranking.
+9. When official files arrive, return to exact-format submission and
    leaderboard-driven iterations.
 
 ## Non-Negotiables

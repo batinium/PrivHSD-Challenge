@@ -107,12 +107,39 @@ We verify this with:
 
 - `row_metric`: target and utility cue retention;
 - `check-hsd-cues`: target/action/negation/modality retention;
+- `source-regression-report`: source-aware privacy, cue, context, and
+  rationale preservation slices;
 - reranker penalties for cue loss;
 - DPMLM protected-token freezing.
 
 This does not guarantee semantic preservation under every sarcasm or implicit
 hate case. It is a conservative safety mechanism: avoid destroying explicit HSD
 cues unless an official privacy score proves the tradeoff is better.
+
+## Context Tags And Rationale Preservation
+
+The deterministic context tags added in `privhsd.context` are audit features,
+not legal findings. They identify rows that need careful preservation or human
+review, including protected-target references, historical-victim groups,
+hostile action, threats, dehumanization, exclusion, negated hate,
+counterspeech, quotation/reporting, public-interest institutional criticism,
+offensive-only risk, and missing context.
+
+These tags help avoid two technical mistakes:
+
+1. Treating offensive or toxic wording as hate by default when there is no
+   protected target or hostile action.
+2. Masking target/action/negation evidence that a downstream HSD model or human
+   reviewer needs to distinguish endorsement, counterspeech, reporting, and
+   protected-group abuse.
+
+`source-regression-report` also adds source-aware rationale/span preservation.
+HateXplain rationale spans are parsed as token-index ranges, while Toxic Spans
+rationales are parsed as character-offset ranges. Reports count rationale
+spans, changed-overlap spans, placeholder-overlap spans, and preserved spans by
+source-aware groups without printing raw text. This gives a stronger utility
+signal than dictionary cue retention alone, especially on rows where the
+dataset provides explicit evidence spans.
 
 ## What Reranking Means
 

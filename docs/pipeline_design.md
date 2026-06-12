@@ -9,6 +9,7 @@ privhsd/
   ablation.py      multi-mode ablation report runner
   author_risk.py   optional local authorship-risk adversary
   classifier.py    optional local CSV train/evaluate/predict classifier
+  context.py       deterministic advisory context tags for audit/reporting
   cli.py           command-line interface
   csv_pipeline.py  CSV read/write, audit, and batch processing
   cue_checks.py    conservative HSD cue retention checks
@@ -16,11 +17,14 @@ privhsd/
   detectors.py     deterministic span detectors
   dpmlm_spike.py   bounded optional DPMLM spike/blocker report
   hf_utility.py    optional Hugging Face utility model registry/evaluator
+  lm_context_benchmark.py optional LM Studio context-labeler benchmark
   local_llm.py     optional local OpenAI-compatible candidate generator
   metrics.py       local privacy/utility proxy metrics
   pipeline.py      single-text privatization API
   presidio_compare.py optional Presidio detector comparison baseline
+  rationale_checks.py source-aware rationale/span preservation checks
   rerank.py        row-local candidate generation and reranking
+  source_report.py source-aware original/protected regression reports
   style.py         deterministic style scrubbing for author cues
   submission.py    exact-format submission creator/validator
   token_actions.py weak token-action label generation/training experiment
@@ -382,6 +386,29 @@ cue retention and length drift, writes accepted candidates to a candidate
 column, and directs the user to `rerank-candidates --candidate-col`. It does not
 submit raw LLM outputs directly.
 
+Benchmark a local LM Studio context labeler without rewriting text:
+
+```bash
+python -m privhsd.cli benchmark-lm-context \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --source-col source \
+  --label-col label \
+  --endpoint http://127.0.0.1:1234/v1/chat/completions \
+  --model MODEL_ID \
+  --sample-size 20 \
+  --output data/outputs/lm_context_benchmark.MODEL_ID.json
+```
+
+`benchmark-lm-context` tests local models as advisory context labelers, not
+rewriters. It tries strict JSON, tagged lines, word-list, and binary-tag output
+formats; records parse validity, latency, deterministic-tag agreement, and
+protected/maskable phrase counts; and writes only row IDs and aggregate labels,
+not raw text or raw model phrases. If the endpoint is unreachable, it writes a
+structured `blocked` report and exits successfully so optional LM Studio
+availability never blocks the deterministic pipeline.
+
 Check conservative HSD cue retention:
 
 ```bash
@@ -396,6 +423,30 @@ python -m privhsd.cli check-hsd-cues \
 `check-hsd-cues` reports target-term, utility-cue, action-term, and
 negation/modality retention by row ID. It is a conservative local fallback when
 HateXplain-style rationale models are unavailable.
+
+Compare original and exact-format protected CSVs by source-aware slices:
+
+```bash
+python -m privhsd.cli source-regression-report \
+  --original data/public_dev/recommended_merged.csv \
+  --protected data/outputs/recommended_merged.balanced.csv \
+  --original-text-col text \
+  --protected-text-col text \
+  --id-col id \
+  --group-col source \
+  --group-col label \
+  --group-col split \
+  --group-col platform \
+  --group-col type \
+  --output data/outputs/recommended_merged.balanced.source_regression.json
+```
+
+`source-regression-report` validates row alignment, computes identifier
+before/after counts, changed-text rate, target/utility/action/negation cue
+retention, deterministic context-tag loss, and source-aware rationale/span
+preservation. HateXplain rationale spans are parsed as token-index ranges;
+Toxic Spans rationale spans are parsed as character-offset ranges. Reports are
+aggregate-only and include row IDs for review queues, not raw text.
 
 Check whether metadata values leak into text columns:
 

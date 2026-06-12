@@ -67,6 +67,27 @@ python -m privhsd.cli validate-submission \
 
 Do not tune before this exact-format baseline exists.
 
+After validation, run the source-aware regression report so privacy and utility
+tradeoffs are visible by source/label/split/platform/type slices instead of one
+global average:
+
+```bash
+python -m privhsd.cli source-regression-report \
+  --original data/official/OFFICIAL.csv \
+  --protected data/outputs/official.balanced.csv \
+  --original-text-col TEXT_COLUMN \
+  --protected-text-col TEXT_COLUMN \
+  --id-col ID_COLUMN \
+  --group-col SOURCE_COLUMN \
+  --group-col LABEL_COLUMN \
+  --group-col SPLIT_COLUMN \
+  --output data/outputs/official.balanced.source_regression.json
+```
+
+Use only columns that exist in the official file. If rationale/span metadata is
+present, keep it in the CSV so the report can measure source-aware rationale
+preservation by row ID without printing raw text.
+
 ## 3. Run Local Evidence
 
 If labels are available:

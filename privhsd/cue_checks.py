@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from functools import lru_cache
 from pathlib import Path
 import re
 from statistics import mean
@@ -25,9 +26,14 @@ def rounded(value: float) -> float:
     return round(float(value), 4)
 
 
-def phrase_count(text: str, phrase: str) -> int:
+@lru_cache(maxsize=None)
+def phrase_pattern(phrase: str) -> re.Pattern[str]:
     pattern = r"(?<![a-z0-9])" + re.escape(phrase.lower()) + r"(?![a-z0-9])"
-    return len(re.findall(pattern, text.lower()))
+    return re.compile(pattern)
+
+
+def phrase_count(text: str, phrase: str) -> int:
+    return len(phrase_pattern(phrase).findall(text.lower()))
 
 
 def counts_for_terms(text: str, terms: list[str]) -> Counter[str]:
@@ -48,6 +54,7 @@ def sorted_terms(counter: Counter[str]) -> dict[str, int]:
     return dict(sorted(counter.items()))
 
 
+@lru_cache(maxsize=1)
 def cue_terms() -> dict[str, list[str]]:
     target_terms = sorted(
         {

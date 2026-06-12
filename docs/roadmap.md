@@ -66,6 +66,63 @@ rows, and 210 high-mask-density rows. This makes the merged bundle the new
 default public regression benchmark, while Dynahate remains the cleanest
 single-source comparison to older results.
 
+Source-aware merged regression report added on 2026-06-12:
+
+```text
+data/outputs/recommended_merged.balanced.source_regression.json
+```
+
+Command:
+
+```bash
+.venv/bin/python -m privhsd.cli source-regression-report \
+  --original data/public_dev/recommended_merged.csv \
+  --protected data/outputs/recommended_merged.balanced.csv \
+  --original-text-col text \
+  --protected-text-col text \
+  --id-col id \
+  --group-col source \
+  --group-col label \
+  --group-col split \
+  --group-col platform \
+  --group-col type \
+  --output data/outputs/recommended_merged.balanced.source_regression.json
+```
+
+Overall metrics: 159,668 rows, changed-text rate 0.1687, identifiers
+40,304 -> 5, direct identifiers 33,032 -> 4, quasi identifiers 7,272 -> 1,
+target cue retention 0.9999, utility cue retention 0.9999, action cue
+retention 0.9991, negation/modality retention 0.9989, character retention
+0.9721, 139 utility-loss rows, 203 context-loss rows, and 11 rationale-loss
+rows. Rationale preservation was 47,729/47,740 spans, or 0.9998 retention,
+across 26,909 rows with parsed HateXplain token ranges or Toxic Spans
+character ranges. The report includes source/label/split/platform/type groups,
+top risky groups, warning counts, context-tag counts, and row IDs only.
+
+LM Studio context-labeler benchmark scaffolding was added on 2026-06-12 as
+`privhsd benchmark-lm-context`. The original localhost/Tailscale checks wrote
+structured blocked artifacts: `data/outputs/lm_context_benchmark.summary.json`
+for localhost (`connection refused`, 0.0347s) and
+`data/outputs/lm_context_benchmark.tailscale.blocked.json` for the Tailscale
+endpoint (`timed out`, 2.0379s).
+
+The user later provided a reachable LM Studio endpoint:
+
+```text
+http://169.254.83.107:1234
+```
+
+`/v1/models` returned 22 IDs, including `qwen3-0.6b`,
+`liquid/lfm2-1.2b`, `liquid/lfm2.5-1.2b`, `qwen/qwen3-1.7b`,
+`microsoft/phi-4-mini-reasoning`, `mistralai/ministral-3-3b`,
+`qwen/qwen3-4b`, `nvidia/nemotron-3-nano-4b`,
+`qwen/qwen3-4b-2507`, several Gemma variants, `openai/gpt-oss-20b`,
+and embedding models. Tiny smoke results are not yet comprehensive:
+`qwen3-0.6b` sample 5 had 0/5 parseable outputs across all four modes, while
+`mistralai/ministral-3-3b` sample 3 parsed 2/3 via JSON but had deterministic
+tag agreement mean 0.0 and 2 maskable cue violations. Next step is controlled
+model-group stress testing, not direct integration.
+
 Bounded model-backed evidence added on 2026-06-11:
 
 | Probe | Sample | Status | Mean delta | Agreement | Runtime | Notes |
@@ -575,6 +632,21 @@ fallback for A26 when rationale models are unavailable. It reports target-term,
 utility-cue, action-term, and negation/modality retention by row ID without raw
 text.
 
+### 4b. Source-Aware Regression And Rationale Checks
+
+Status: implemented as `privhsd source-regression-report`. The report compares
+an original CSV against an exact-format protected CSV by requested grouping
+columns such as `source`, `label`, `split`, `platform`, and `type`. It reports
+changed-text rate, identifier/direct/quasi counts, target/utility/action/
+negation retention, deterministic context-tag loss, warning counts, risky
+groups, and rationale preservation without raw text.
+
+Rationale parsing is source-aware: HateXplain rows use token-index ranges and
+Toxic Spans rows use character-offset ranges. A full
+`recommended_merged.csv` vs `balanced` run completed on 2026-06-12 and found
+0.9998 rationale-span retention, with 11 rationale-loss rows available by row
+ID for review.
+
 ### 5. DPMLM Spike
 
 Status: implemented as `privhsd dpmlm-spike` plus
@@ -631,6 +703,16 @@ pipeline:
 Keep this optional and local where possible. LM Studio or llama.cpp can be used
 through an OpenAI-compatible local endpoint, but the candidate must still pass
 the same validators as deterministic candidates.
+
+### 6a. Local LLM Context Labeler Benchmark
+
+Status: implemented as `privhsd benchmark-lm-context`. This command does not
+rewrite text. It benchmarks local LM Studio models as advisory context labelers
+using strict JSON, tagged-line, word-list, and binary-tag formats, then reports
+parse validity, latency, agreement with deterministic context tags, protected
+phrase counts, maskable phrase counts, and blocker details. The 2026-06-12 run
+could not reach localhost or the Tailscale endpoint, so it wrote structured
+blocked reports and continued with deterministic reporting.
 
 ### 7. Exact-Format Submission Validator
 

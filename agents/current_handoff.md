@@ -1,6 +1,6 @@
 # Current Handoff
 
-Date: 2026-06-11
+Date: 2026-06-12
 
 ## Repo State
 
@@ -82,7 +82,9 @@ privhsd create-submission
 privhsd validate-submission
 privhsd compare-presidio
 privhsd generate-llm-candidates
+privhsd benchmark-lm-context
 privhsd check-hsd-cues
+privhsd source-regression-report
 privhsd check-metadata-leakage
 privhsd prepare-dynahate
 ```
@@ -189,6 +191,85 @@ Important slide takeaways:
 - A37: filtered Presidio augmentation on `anonymize`, `rerank-candidates`, and
   `create-submission` via `--presidio-augment`; full Dynahate reranking selected
   `presidio_augmented` for 6,085 rows.
+- A41/A42: source-aware regression reporting, deterministic context tags, and
+  source-aware rationale/span preservation checks. Full
+  `recommended_merged.csv` vs `balanced` report was written to
+  `data/outputs/recommended_merged.balanced.source_regression.json`.
+- A43: `benchmark-lm-context` for LM Studio context-labeler stress tests with
+  JSON, tagged, word-list, and binary-tag parsing. The early 2026-06-12 run
+  wrote structured blocker reports because localhost refused the connection and
+  the Tailscale endpoint timed out. Later the user provided the reachable
+  endpoint `http://169.254.83.107:1234`.
+
+Latest merged public artifacts:
+
+```text
+data/outputs/recommended_merged.profile.json
+data/outputs/recommended_merged.balanced.csv
+data/outputs/recommended_merged.balanced.manifest.json
+data/outputs/recommended_merged.balanced.validation.json
+data/outputs/recommended_merged.balanced.source_regression.json
+data/outputs/lm_context_benchmark.summary.json
+data/outputs/lm_context_benchmark.tailscale.blocked.json
+data/outputs/lm_context_benchmark.qwen3-0.6b.smoke5.json
+data/outputs/lm_context_benchmark.ministral-3-3b.smoke3.json
+```
+
+Latest source-aware merged report summary:
+
+- rows: 159,668
+- identifiers: 40,304 -> 5
+- direct identifiers: 33,032 -> 4
+- quasi identifiers: 7,272 -> 1
+- target cue retention: 0.9999
+- utility cue retention: 0.9999
+- action cue retention: 0.9991
+- negation/modality retention: 0.9989
+- rationale span retention: 0.9998, with 47,729/47,740 spans preserved
+
+Reachable LM Studio endpoint:
+
+```text
+http://169.254.83.107:1234
+```
+
+Confirmed `/v1/models` IDs:
+
+```text
+google/gemma-4-e2b
+qwen3-0.6b
+google/gemma-3n-e4b
+microsoft/phi-4-mini-reasoning
+qwen/qwen3-4b
+qwen/qwen3-1.7b
+nvidia/nemotron-3-nano-4b
+liquid/lfm2-1.2b
+liquid/lfm2.5-1.2b
+qwen/qwen3.6-27b
+google/gemma-4-e4b
+mistralai/ministral-3-3b
+qwen/qwen3-4b-2507
+google/gemma-4-26b-a4b-qat
+google/gemma-4-12b
+google/gemma-4-12b-qat
+gpt-oss-safeguard-20b
+text-embedding-bge-m3
+zai-org/glm-4.7-flash
+gemma-4-26b-a4b-it
+text-embedding-nomic-embed-text-v1.5
+openai/gpt-oss-20b
+```
+
+LM context smoke results so far:
+
+- `qwen3-0.6b` sample 5: endpoint reachable, 0/5 parseable outputs across
+  JSON/tagged/word-list/binary modes, runtime 25.5117s.
+- `mistralai/ministral-3-3b` sample 3: 2/3 parsed via JSON, p50 latency
+  2.6031s, p95 12.2023s, deterministic-tag agreement mean 0.0, 2 maskable cue
+  violations. Treat as weak smoke evidence only.
+
+Next agent should not treat those as comprehensive LM results. Run controlled
+model groups through `benchmark-lm-context` and update aggregate leaderboards.
 
 Recent commits:
 
@@ -205,15 +286,22 @@ f6198f6 Add official submission checklist
 Latest base suite:
 
 ```text
-python -m pytest -q
-82 passed, 1 skipped
+.venv/bin/python -m pytest -q
+115 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-82 passed, 1 skipped
+115 passed, 1 skipped
+```
+
+Latest overnight focused suite:
+
+```text
+.venv/bin/python -m pytest -q tests/test_context.py tests/test_rationale_checks.py tests/test_source_report.py tests/test_lm_context_benchmark.py tests/test_cue_checks.py
+18 passed
 ```
 
 Package smoke passed: built a wheel, installed it in `/tmp/privhsd-install-test`,

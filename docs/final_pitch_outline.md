@@ -53,6 +53,18 @@ python -m privhsd.cli create-submission \
 Exact-format balanced submission validation passed on local Dynahate: 41,144
 rows, same columns/order, no helper columns.
 
+Merged public bundle evidence: `balanced` exact-format validation passed on
+159,668 rows with 26,941 changed text cells, identifiers 40,304 -> 5, direct
+identifiers 33,032 -> 4, quasi identifiers 7,272 -> 1, target cue retention
+0.9999, utility cue retention 0.9999, and character retention 0.9721.
+
+Source-aware regression on the merged bundle adds hard-slice evidence beyond
+global averages: action cue retention 0.9991, negation/modality retention
+0.9989, 139 utility-loss rows, 203 context-loss rows, and 11 rationale-loss
+rows. Rationale preservation was 47,729/47,740 spans, or 0.9998 retention,
+with HateXplain token ranges and Toxic Spans character ranges parsed
+separately.
+
 ## Model-Backed Evidence
 
 - HF utility on reranked sample 100: Dynabench and CardiffNLP probes both had
@@ -72,6 +84,12 @@ rows, same columns/order, no helper columns.
 - Local LLM candidate generation works through LM Studio after JSON-schema
   compatibility hardening, but `openai/gpt-oss-20b` accepted only 3/10 sample
   candidates and reranking selected none of them over deterministic candidates.
+- Local LM context-labeler benchmarking is implemented separately from rewrite
+  generation. Initial localhost/Tailscale checks produced structured blockers;
+  the later reachable endpoint `http://169.254.83.107:1234` exposed 22 model
+  IDs. Tiny smokes are mixed and not yet comprehensive: `qwen3-0.6b` produced
+  0/5 parseable outputs, while `mistralai/ministral-3-3b` parsed 2/3 rows via
+  JSON but had poor deterministic-tag agreement and maskable cue violations.
 - DPMLM now has a protected-token candidate generator with
   `FacebookAI/roberta-base`; the safe default accepted 0/8 first-sample rows,
   while a looser sample accepted 11/12 but reranking selected 0 DPMLM

@@ -60,10 +60,20 @@ from .local_llm import (
     LocalLlmError,
     run_local_llm_candidates,
 )
+from .lm_context_benchmark import (
+    DEFAULT_ENDPOINT as DEFAULT_LM_CONTEXT_ENDPOINT,
+    DEFAULT_MAX_TOKENS as DEFAULT_LM_CONTEXT_MAX_TOKENS,
+    DEFAULT_MODES as DEFAULT_LM_CONTEXT_MODES,
+    DEFAULT_SAMPLE_SIZE as DEFAULT_LM_CONTEXT_SAMPLE_SIZE,
+    DEFAULT_TIMEOUT as DEFAULT_LM_CONTEXT_TIMEOUT,
+    LmContextBenchmarkError,
+    run_lm_context_benchmark,
+)
 from .metadata_leakage import MetadataLeakageError, scan_metadata_leakage
 from .presidio_compare import PresidioCompareError, run_presidio_comparison
 from .presidio_augment import PresidioAugmentError
 from .rerank import RerankError, run_candidate_reranking
+from .source_report import SourceReportError, run_source_regression_report
 from .submission import SubmissionError, create_submission, validate_submission
 from .token_actions import (
     DEFAULT_MODEL_PATH as DEFAULT_TOKEN_ACTION_MODEL_PATH,
@@ -397,6 +407,50 @@ def build_parser() -> argparse.ArgumentParser:
     cue_checks.add_argument("--output", type=Path)
     cue_checks.add_argument("--retention-threshold", type=float, default=1.0)
 
+    source_report = subparsers.add_parser(
+        "source-regression-report",
+        help="Compare original/protected CSVs by source-aware slices.",
+    )
+    source_report.add_argument("--original", type=Path, required=True)
+    source_report.add_argument("--protected", type=Path, required=True)
+    source_report.add_argument("--original-text-col", required=True)
+    source_report.add_argument("--protected-text-col", required=True)
+    source_report.add_argument("--id-col")
+    source_report.add_argument(
+        "--group-col",
+        dest="group_cols",
+        action="append",
+        default=[],
+        help="Original CSV column to group by. Repeat for source-aware slices.",
+    )
+    source_report.add_argument("--source-col", default="source")
+    source_report.add_argument("--label-col", default="label")
+    source_report.add_argument("--rationale-col", default="rationale_spans")
+    source_report.add_argument("--output", type=Path)
+
+    lm_context = subparsers.add_parser(
+        "benchmark-lm-context",
+        help="Benchmark a local LM Studio context-labeler on stratified rows.",
+    )
+    lm_context.add_argument("--input", type=Path, required=True)
+    lm_context.add_argument("--text-col", required=True)
+    lm_context.add_argument("--id-col")
+    lm_context.add_argument("--source-col", default="source")
+    lm_context.add_argument("--label-col", default="label")
+    lm_context.add_argument("--endpoint", default=DEFAULT_LM_CONTEXT_ENDPOINT)
+    lm_context.add_argument("--model", required=True)
+    lm_context.add_argument("--sample-size", type=int, default=DEFAULT_LM_CONTEXT_SAMPLE_SIZE)
+    lm_context.add_argument("--output", type=Path)
+    lm_context.add_argument(
+        "--mode",
+        dest="modes",
+        action="append",
+        choices=list(DEFAULT_LM_CONTEXT_MODES),
+        help="Output format to try. Repeat to override the default mode order.",
+    )
+    lm_context.add_argument("--timeout", type=float, default=DEFAULT_LM_CONTEXT_TIMEOUT)
+    lm_context.add_argument("--max-tokens", type=int, default=DEFAULT_LM_CONTEXT_MAX_TOKENS)
+
     metadata_leakage = subparsers.add_parser(
         "check-metadata-leakage",
         help="Check whether metadata values such as id/author appear in text columns.",
@@ -708,6 +762,34 @@ def main(argv: list[str] | None = None) -> int:
                 output_path=args.output,
                 retention_threshold=args.retention_threshold,
             )
+        elif args.command == "source-regression-report":
+            result = run_source_regression_report(
+                args.original,
+                args.protected,
+                original_text_col=args.original_text_col,
+                protected_text_col=args.protected_text_col,
+                id_col=args.id_col,
+                group_cols=args.group_cols or None,
+                source_col=args.source_col,
+                label_col=args.label_col,
+                rationale_col=args.rationale_col,
+                output_path=args.output,
+            )
+        elif args.command == "benchmark-lm-context":
+            result = run_lm_context_benchmark(
+                args.input,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                source_col=args.source_col,
+                label_col=args.label_col,
+                endpoint=args.endpoint,
+                model=args.model,
+                sample_size=args.sample_size,
+                output_path=args.output,
+                modes=args.modes,
+                timeout=args.timeout,
+                max_tokens=args.max_tokens,
+            )
         elif args.command == "check-metadata-leakage":
             result = scan_metadata_leakage(
                 args.input,
@@ -799,12 +881,14 @@ def main(argv: list[str] | None = None) -> int:
         DpmlmCandidateError,
         DpmlmSpikeError,
         HfUtilityError,
+        LmContextBenchmarkError,
         LocalLlmError,
         MetadataLeakageError,
         OSError,
         PresidioAugmentError,
         PresidioCompareError,
         RerankError,
+        SourceReportError,
         SubmissionError,
         TokenActionError,
         ValueError,

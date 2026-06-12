@@ -21,6 +21,8 @@ file, commit messages, screenshots, and issue comments.
 - Text columns are privatized in place.
 - Manifest exists and records command, git commit, input/output hashes, mode,
   validation, and aggregate metrics.
+- `source-regression-report` has been run when source/label/split metadata is
+  available, so hard slices are checked before tuning.
 - Generated reports are under ignored `data/outputs/`.
 - No downloaded datasets, model weights, Hugging Face caches, or raw official
   examples are staged for commit.
@@ -31,7 +33,9 @@ file, commit messages, screenshots, and issue comments.
 - Local utility benchmark if labels are available.
 - Author-risk report when an author column exists.
 - HSD cue retention report.
+- Source-aware regression report with context and rationale/span preservation.
 - HF utility report or structured skip.
+- LM Studio context-labeler benchmark or structured endpoint/model skip.
 - DPMLM spike report or structured blocker.
 - Presidio comparison report or structured skip.
 - Candidate-reranking audit when using reranked outputs.
@@ -58,6 +62,16 @@ python -m privhsd.cli validate-submission \
   --text-col text \
   --id-col id \
   --output data/outputs/SUBMISSION.validation.json
+
+python -m privhsd.cli source-regression-report \
+  --original INPUT.csv \
+  --protected data/outputs/SUBMISSION.csv \
+  --original-text-col text \
+  --protected-text-col text \
+  --id-col id \
+  --group-col source \
+  --group-col label \
+  --output data/outputs/SUBMISSION.source_regression.json
 ```
 
 ## Decision Rule
