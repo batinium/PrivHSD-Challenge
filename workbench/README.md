@@ -54,3 +54,14 @@ reports. Use synthetic or consented text for public demos.
 - Green spans are protected HSD target cues. They are detected and preserved in
   `balanced` mode so downstream HSD review still sees the legally relevant
   target evidence.
+
+## Detection Layers
+
+- Deterministic rules and small lexicons run by default.
+- Filtered Presidio is optional. It adds broader NER spans for likely names,
+  locations, and durable dates, then rejects protected HSD cues and noisy spans.
+- RoBERTa + HateBERT token-policy ensemble is optional advisory guidance. It
+  predicts token actions such as `MASK_IDENTIFIER`, `PROTECT_TARGET`, and
+  `PROTECT_HSD`; it does not silently rewrite the output.
+- LLM guidance is last-resort routing advice only. The workbench does not call
+  a local LLM automatically.

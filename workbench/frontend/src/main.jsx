@@ -1,10 +1,12 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
+  Brain,
   Clipboard,
   Copy,
   Download,
+  Info,
   Play,
   RotateCcw,
   ShieldCheck
@@ -134,14 +136,124 @@ function Tags({ values }) {
   );
 }
 
+function ModelPanel({ status, result, runModel, setRunModel }) {
+  const ensemble = status?.token_policy_ensemble || {};
+  const advisory = result?.model_advisory;
+  const metrics = advisory?.metrics || ensemble.metrics;
+  const actionCounts = advisory?.action_counts || {};
+  const modelSpans = advisory?.spans || [];
+  return (
+    <section className="panel model-panel">
+      <div className="panel-heading">
+        <h2>Model Guidance</h2>
+        <Brain size={18} />
+      </div>
+      <div className="layer-row active">
+        <strong>Deterministic layer</strong>
+        <span>Active</span>
+      </div>
+      <div className={`layer-row ${ensemble.available ? "ready" : "inactive"}`}>
+        <strong>RoBERTa + HateBERT ensemble</strong>
+        <span>{runModel ? "Requested" : ensemble.available ? "Available" : "Missing"}</span>
+      </div>
+      <label className="check model-toggle">
+        <input
+          checked={runModel}
+          disabled={!ensemble.available}
+          onChange={(event) => setRunModel(event.target.checked)}
+          type="checkbox"
+        />
+        <span>Run ensemble on this text</span>
+      </label>
+      {metrics ? (
+        <div className="metric-strip">
+          <span>Macro F1 {metrics.macro_f1 ?? "n/a"}</span>
+          <span>Target F1 {metrics.protect_target_f1 ?? "n/a"}</span>
+          <span>HSD F1 {metrics.protect_hsd_f1 ?? "n/a"}</span>
+        </div>
+      ) : null}
+      {advisory ? (
+        <div className="advisory-box">
+          <strong>Status: {advisory.status}</strong>
+          <p>{advisory.message || "Advisory token actions are available below."}</p>
+          {Object.keys(actionCounts).length ? (
+            <Tags values={Object.entries(actionCounts).map(([key, value]) => `${key}: ${value}`)} />
+          ) : null}
+          {modelSpans.length ? (
+            <div className="mini-table">
+              {modelSpans.slice(0, 8).map((span, index) => (
+                <div className="mini-row" key={`${span.action}-${index}`}>
+                  <span>{span.action}</span>
+                  <span>{span.start}-{span.end}</span>
+                  <span>{span.confidence}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function GuidancePanel({ result, status }) {
+  const llm = result?.llm_guidance || status?.llm_guidance;
+  const lexicon = status?.lexicon_policy;
+  const presidio = result?.presidio_augment;
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>Fallbacks</h2>
+        <Info size={18} />
+      </div>
+      <div className="guidance-block">
+        <strong>LLM guidance</strong>
+        <p>{llm?.message || llm?.role || "Last-resort semantic review is not automatic."}</p>
+        {result?.llm_guidance ? (
+          <Tags
+            values={
+              result.llm_guidance.recommend_review
+                ? result.llm_guidance.reasons
+                : ["no_llm_review_recommended"]
+            }
+          />
+        ) : null}
+      </div>
+      <div className="guidance-block">
+        <strong>Lexicon and rules</strong>
+        <p>{lexicon?.role || "Street suffixes, target lexicons, and cue checks run first."}</p>
+        {presidio ? (
+          <Tags
+            values={[
+              `presidio: ${presidio.enabled ? "enabled" : "off"}`,
+              `accepted: ${presidio.accepted_span_count ?? 0}`,
+              `rejected: ${presidio.rejected_span_count ?? 0}`
+            ]}
+          />
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [text, setText] = useState("");
   const [mode, setMode] = useState("balanced");
   const [styleScrub, setStyleScrub] = useState(false);
   const [generalizeTargets, setGeneralizeTargets] = useState(false);
+  const [usePresidio, setUsePresidio] = useState(false);
+  const [runModel, setRunModel] = useState(false);
+  const [modelStatus, setModelStatus] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/model-status")
+      .then((response) => response.json())
+      .then(setModelStatus)
+      .catch(() => setModelStatus(null));
+  }, []);
 
   const originalParts = useMemo(
     () => splitOriginal(text, result?.transformations || [], result?.protected_spans || []),
@@ -163,7 +275,9 @@ function App() {
           text,
           mode,
           style_scrub: styleScrub,
-          generalize_targets: generalizeTargets ? true : null
+          generalize_targets: generalizeTargets ? true : null,
+          use_presidio: usePresidio,
+          run_model_ensemble: runModel
         })
       });
       if (!response.ok) {
@@ -238,6 +352,15 @@ function App() {
             type="checkbox"
           />
           <span>Generalize targets</span>
+        </label>
+        <label className="check">
+          <input
+            checked={usePresidio}
+            disabled={modelStatus?.lexicon_policy?.presidio_available === false}
+            onChange={(event) => setUsePresidio(event.target.checked)}
+            type="checkbox"
+          />
+          <span>Filtered Presidio</span>
         </label>
         <button className="ghost" onClick={() => setText(SAMPLE_TEXT)} type="button">
           <Clipboard size={17} />
@@ -344,6 +467,15 @@ function App() {
             </table>
           </div>
         </section>
+
+        <ModelPanel
+          result={result}
+          runModel={runModel}
+          setRunModel={setRunModel}
+          status={modelStatus}
+        />
+
+        <GuidancePanel result={result} status={modelStatus} />
       </section>
     </main>
   );
