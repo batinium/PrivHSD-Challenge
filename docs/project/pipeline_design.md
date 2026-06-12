@@ -1,626 +1,181 @@
 # Pipeline Design
 
-## Current Package
+Date: 2026-06-12
 
-The active implementation is in `privhsd/`.
+ContextSafe-HSD is built as a layered preprocessing system. The submission path
+must be deterministic, reproducible, and auditable; optional model paths provide
+evidence, uncertainty, and candidates that can be accepted only after checks.
 
-```text
-privhsd/
-  ablation.py      multi-mode ablation report runner
-  author_risk.py   optional local authorship-risk adversary
-  classifier.py    optional local CSV train/evaluate/predict classifier
-  context.py       deterministic advisory context tags for audit/reporting
-  cli.py           command-line interface
-  csv_pipeline.py  CSV read/write, audit, and batch processing
-  cue_checks.py    conservative HSD cue retention checks
-  dpmlm_candidates.py optional protected-token DPMLM candidate generator
-  detectors.py     deterministic span detectors
-  dpmlm_spike.py   bounded optional DPMLM spike/blocker report
-  hf_utility.py    optional Hugging Face utility model registry/evaluator
-  lm_context_benchmark.py optional LM Studio context-labeler benchmark
-  local_llm.py     optional local OpenAI-compatible candidate generator
-  metrics.py       local privacy/utility proxy metrics
-  pipeline.py      single-text privatization API
-  presidio_compare.py optional Presidio detector comparison baseline
-  rationale_checks.py source-aware rationale/span preservation checks
-  rerank.py        row-local candidate generation and reranking
-  source_report.py source-aware original/protected regression reports
-  style.py         deterministic style scrubbing for author cues
-  submission.py    exact-format submission creator/validator
-  token_actions.py weak token-action label generation/training experiment
-  utility_benchmark.py  optional scikit-learn utility-delta benchmark
-```
+## Layers
 
-The deterministic detectors cover direct identifiers and conservative
-quasi-identifiers including handles, emails, phone numbers, URLs, IP addresses,
-dates, context names, context locations, schools/organizations, common ID
-formats, and explicit aliases such as `alias`, `aka`, `known as`, and
-`goes by`.
+| Layer | Purpose | Main modules | Submission role |
+| --- | --- | --- | --- |
+| CSV and manifests | Preserve rows, IDs, labels, metadata, hashes, and command provenance. | `csv_pipeline.py`, `submission.py` | Required |
+| Deterministic privacy | Mask direct and quasi identifiers with typed placeholders. | `detectors.py`, `pipeline.py`, `metrics.py` | Required |
+| HSD cue protection | Preserve target, hostility, action, negation, modality, counterspeech, and rationale cues. | `cue_checks.py`, `context.py`, `rationale_checks.py` | Required audit |
+| Style pressure | Reduce author-style signals without erasing HSD meaning. | `style.py` | Optional candidate |
+| Candidate reranking | Choose the best row-local tradeoff among deterministic and optional candidates. | `rerank.py` | Optional alternate |
+| Slice regression | Check privacy and utility by source/label/split/platform/type. | `source_report.py` | Required when columns exist |
+| Author risk | Measure stylometric author predictability when repeated author IDs exist. | `author_risk.py` | Required when columns exist |
+| Transformer token policy | Fine-tune weakly supervised token-action models and ensembles. | `token_policy.py` | Advisory/reranking support |
+| External model probes | Bound score drift, Presidio behavior, DPMLM, or local LLM candidates. | `hf_utility.py`, `presidio_compare.py`, `dpmlm_candidates.py`, `local_llm.py` | Evidence only unless reranked |
 
-The next roadmap step is broader authorship-risk reduction. PII masking is only
-one part of privacy; author style, syntax, formatting, repeated expressions, and
-contextual habits can also identify an author.
+## Core Submission Path
 
-## CLI Contract
-
-Privatize a CSV:
-
-```bash
-python -m privhsd.cli anonymize \
-  --input data/public_dev/dynahate.csv \
-  --output data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --id-col id \
-  --audit data/outputs/dynahate.audit.json \
-  --mode balanced \
-  --style-scrub
-```
-
-`--style-scrub` is optional. It runs after privacy masking and normalizes
-authorship style cues such as casing, whitespace, repeated punctuation,
-repeated letters, emoji/symbol bursts, self-tags, signatures, and common
-idiolect markers while preserving placeholders, target-group terms, negation,
-modality, and hate/action cues.
-
-`--presidio-augment` is also optional and requires `privhsd[presidio]`. It adds
-filtered Presidio `PERSON`, `LOCATION`, and durable `DATE_TIME` spans while
-preserving Presidio `NRP` spans and target/action cue overlaps. Use it for an
-augmented diagnostic run or, for submission alternates, through
-`rerank-candidates --replace-text --presidio-augment`. Do not submit raw
-Presidio or unconditional entity replacement as the first official output.
-
-Evaluate a privatized CSV:
-
-```bash
-python -m privhsd.cli evaluate \
-  --input data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --output data/outputs/dynahate.metrics.json
-```
-
-Benchmark downstream utility with an optional local classifier:
-
-```bash
-python -m pip install '.[benchmark]'
-python -m privhsd.cli benchmark-utility \
-  --input data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --label-col label \
-  --id-col id \
-  --output data/outputs/dynahate.utility_benchmark.json
-```
-
-`benchmark-utility` trains a TF-IDF + logistic regression classifier only on the
-original-text training split, then compares dev-split predictions on original
-text and `privatized_text`. It reports accuracy, macro-F1, prediction
-agreement, label recall deltas, and confidence drift. This is a local relative
-utility proxy, not a production hate-speech classifier and not a replacement for
-the official challenge evaluator.
-
-Train a local baseline hate-speech classifier:
-
-```bash
-python -m pip install '.[classifier]'
-python -m privhsd.cli train-classifier \
-  --input data/public_dev/dynahate.csv \
-  --text-col text \
-  --label-col label \
-  --id-col id \
-  --model data/outputs/dynahate.classifier.pkl \
-  --output data/outputs/dynahate.classifier.train.json
-```
-
-Evaluate a saved classifier:
-
-```bash
-python -m privhsd.cli evaluate-classifier \
-  --input data/public_dev/dynahate.csv \
-  --model data/outputs/dynahate.classifier.pkl \
-  --text-col text \
-  --label-col label \
-  --id-col id \
-  --output data/outputs/dynahate.classifier.evaluate.json
-```
-
-Write row-preserving predictions:
-
-```bash
-python -m privhsd.cli predict-classifier \
-  --input data/outputs/dynahate.privatized.csv \
-  --model data/outputs/dynahate.classifier.pkl \
-  --text-col privatized_text \
-  --id-col id \
-  --output data/outputs/dynahate.classifier.predictions.csv
-```
-
-`train-classifier`, `evaluate-classifier`, and `predict-classifier` are optional
-scikit-learn workflows. They use a TF-IDF + logistic regression baseline and
-write outputs under `data/outputs/` by default. Metrics JSON includes accuracy,
-macro-F1, per-label precision/recall/F1/support, confusion matrix/counts,
-prediction counts, split configuration, label counts, and a warning that this
-is only a local baseline. `predict-classifier` preserves row count, row order,
-IDs, labels if present, and metadata columns, then adds `predicted_label` and
-`predicted_confidence`.
-
-Train a weak token-action detector experiment:
-
-```bash
-python -m pip install '.[token-actions]'
-python -m privhsd.cli train-token-action-tagger \
-  --input data/public_dev/dynahate.csv \
-  --text-col text \
-  --id-col id \
-  --sample-size 5000 \
-  --model data/outputs/dynahate.token_action_tagger.sample5000.pkl \
-  --output data/outputs/dynahate.token_action_tagger.sample5000.json
-```
-
-`train-token-action-tagger` generates weak token labels from the local privacy
-detectors plus protected target/action/negation/style cues, then trains a
-scikit-learn token classifier. The actions are `KEEP`, `MASK_IDENTIFIER`,
-`GENERALIZE_CONTEXT`, `PROTECT_TARGET`, `PROTECT_HSD`, and `NORMALIZE_STYLE`.
-This is an experiment for future reranking/scoring and detector calibration; it
-does not provide official privacy labels and should not replace deterministic
-anonymization without measured privacy/HSD gains.
-
-Compare privatization variants in one machine-readable report:
-
-```bash
-python -m privhsd.cli ablate \
-  --input data/public_dev/dynahate.csv \
-  --text-col text \
-  --id-col id \
-  --label-col label \
-  --output data/outputs/dynahate.ablation.json \
-  --output-dir data/outputs/dynahate_ablation
-```
-
-`ablate` compares:
-
-- `identity`: no privatization.
-- `regex_only`: direct regex detectors only, no context detectors, no target
-  generalization.
-- `balanced`: current default.
-- `privacy`: privacy mode.
-- `balanced_with_targets`: balanced mode plus target-group generalization.
-
-The JSON report contains input and column configuration, variant definitions,
-aggregate proxy metrics, per-row metric/audit metadata without raw text, and
-optional utility benchmark summaries. If `--output-dir` is provided, one CSV per
-variant is written with original columns preserved and a `privatized_text`
-column added. If `--label-col` is provided and scikit-learn is installed, the
-report includes the same local relative utility benchmark used by
-`benchmark-utility` for each variant. If scikit-learn is not installed, the
-report includes `utility_benchmark_skipped` with the install hint and still
-writes the deterministic ablation metrics.
-
-Evaluate authorship risk when an author column is available:
-
-```bash
-python -m privhsd.cli evaluate-author-risk \
-  --input data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --author-col author \
-  --id-col id \
-  --output data/outputs/author_risk.json
-```
-
-`evaluate-author-risk` is optional and uses scikit-learn only when this command
-is run. It trains a local TF-IDF logistic-regression author adversary on
-original text, then compares author accuracy, macro-F1, true-author confidence,
-and residual high-risk row IDs on original versus privatized dev text. If the
-requested author column is absent, it writes a structured skipped report instead
-of failing.
-
-List approved optional Hugging Face utility probes:
-
-```bash
-python -m privhsd.cli hf-model-registry \
-  --output data/outputs/hf_model_registry.json
-```
-
-Evaluate original versus privatized HSD/toxicity score drift on a small sample:
-
-```bash
-python -m privhsd.cli evaluate-hf-utility \
-  --input data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --id-col id \
-  --label-col label \
-  --device auto \
-  --sample-size 100 \
-  --output data/outputs/dynahate.hf_utility.json
-```
-
-`evaluate-hf-utility` is optional through `privhsd[hf-utility]`. It defaults to
-the approved Dynabench and CardiffNLP probes, reports model ID, revision when
-available, resolved device, runtime, sample size, score drift, threshold
-agreement, and row IDs with large utility drops. `--device auto` uses CUDA when
-the Python environment has CUDA-enabled PyTorch; otherwise it falls back to CPU.
-Missing dependencies, model-load failures, unavailable CUDA, and inference
-failures are recorded as structured skips rather than making `privhsd anonymize`
-depend on Hugging Face.
-
-Generate row-local candidates and choose the best privacy/HSD tradeoff:
-
-```bash
-python -m privhsd.cli rerank-candidates \
-  --input data/public_dev/dynahate.csv \
-  --output data/outputs/dynahate.reranked.csv \
-  --text-col text \
-  --id-col id \
-  --presidio-augment \
-  --audit data/outputs/dynahate.rerank.audit.json
-```
-
-`rerank-candidates` generates deterministic `balanced`, `style_scrubbed`,
-`privacy`, and `target_generalized` candidates per row. Optional rewrite
-candidate columns can be supplied with repeatable `--candidate-col` arguments.
-If `--presidio-augment` is set, it also generates a filtered
-`presidio_augmented` candidate using accepted Presidio spans only.
-External rewrite columns are validated before scoring: candidates that drop
-target/action cues, leave residual identifiers, introduce new identifier
-signals, increase style risk, or drift too far are rejected and recorded in the
-audit. The scorer then penalizes residual identifiers, residual style signals,
-optional author-risk confidence when an author column and scikit-learn are
-available, target/action cue loss, and length/character drift. It writes only
-the chosen text column by default; per-candidate scores go to the audit JSON
-without raw text.
-
-Generate protected-token DPMLM rewrite candidates for reranking only:
-
-```bash
-python -m privhsd.cli generate-dpmlm-candidates \
-  --input data/public_dev/dynahate.csv \
-  --output data/outputs/dynahate.dpmlm_candidates.csv \
-  --text-col text \
-  --id-col id \
-  --model FacebookAI/roberta-base \
-  --epsilon 100 \
-  --sample-size 25 \
-  --report data/outputs/dynahate.dpmlm_candidates.report.json
-```
-
-`generate-dpmlm-candidates` uses the low-level DPMLM token API instead of raw
-sentence rewriting. It freezes target terms, utility/action cues,
-negation/modality terms, stopwords, capitalized tokens, repeated-letter tokens,
-placeholders, and punctuation. It caps rewrites per row, seeds NumPy/Torch per
-row for reproducibility, rejects candidates with cue loss, length/character
-drift, new identifier signals, style-risk increases, or no actual token
-replacement, and writes accepted text into a helper candidate column. The
-default `--min-eligible-score 5` is intentionally strict; on current Dynahate it
-produces no candidates because likely rewrite targets overlap HSD/style signals.
-A looser `--min-eligible-score 4` sample with `FacebookAI/roberta-base` accepted
-11/12 candidates, but reranking selected zero DPMLM candidates over
-deterministic alternatives.
-
-Run a bounded DPMLM backend spike or blocker report:
-
-```bash
-python -m privhsd.cli dpmlm-spike \
-  --input data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --id-col id \
-  --sample-size 25 \
-  --epsilon 25 \
-  --epsilon 50 \
-  --output data/outputs/dynahate.dpmlm_spike.json
-```
-
-`dpmlm-spike` is retained as the backend/blocker harness. The audited candidate
-path is `generate-dpmlm-candidates`; both remain outside core anonymization and
-must feed `rerank-candidates` before any submission consideration.
-
-Create an exact-format upload CSV and manifest:
+Create the first candidate with `balanced` mode:
 
 ```bash
 python -m privhsd.cli create-submission \
-  --input data/public_dev/dynahate.csv \
-  --output data/outputs/dynahate.submission.csv \
+  --input INPUT.csv \
+  --output data/outputs/SUBMISSION.balanced.csv \
   --text-col text \
   --id-col id \
   --replace-text \
   --mode balanced \
-  --manifest data/outputs/dynahate.submission.manifest.json
+  --manifest data/outputs/SUBMISSION.balanced.manifest.json
 ```
 
-Validate an exact-format upload CSV:
+Validate exact shape:
 
 ```bash
 python -m privhsd.cli validate-submission \
-  --source data/public_dev/dynahate.csv \
-  --submission data/outputs/dynahate.submission.csv \
+  --source INPUT.csv \
+  --submission data/outputs/SUBMISSION.balanced.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/dynahate.submission.validation.json
+  --output data/outputs/SUBMISSION.balanced.validation.json
 ```
 
-`create-submission` requires `--replace-text` and writes the same columns in the
-same order as the source dataset. It supports repeatable `--text-col` for
-official formats with multiple text fields. The manifest records the command,
-git commit, input/output paths and SHA-256 hashes, mode, text columns,
-row-preservation validation, and local aggregate metrics. `validate-submission`
-checks row count, column set/order, ID order, metadata preservation, and helper
-columns; helper columns are rejected by default for upload mode.
-
-Compare Presidio as an optional detector baseline:
-
-```bash
-python -m privhsd.cli compare-presidio \
-  --input INPUT.csv \
-  --text-col text \
-  --id-col id \
-  --sample-size 100 \
-  --output data/outputs/presidio_compare.json
-```
-
-`compare-presidio` is optional through `privhsd[presidio]`. It reports overlap,
-PrivHSD-only counts, Presidio-only counts, false-positive risk on target/action
-cues, runtime, and dependency skips. It does not make Presidio part of core
-anonymization.
-
-Generate local LLM rewrite candidates for reranking only:
-
-```bash
-python -m privhsd.cli generate-llm-candidates \
-  --input INPUT.csv \
-  --output data/outputs/llm_candidates.csv \
-  --text-col text \
-  --id-col id \
-  --source-col source \
-  --label-col label \
-  --sample-size 25 \
-  --endpoint http://127.0.0.1:1234/v1/chat/completions \
-  --model local-model \
-  --report data/outputs/llm_candidates.report.json
-```
-
-`generate-llm-candidates` targets LM Studio or llama.cpp OpenAI-compatible local
-servers. It first requests JSON-schema structured output, falls back for servers
-that reject specific `response_format` variants, and tolerates LM
-Studio/OpenAI-compatible channel markers around the JSON object. When
-`--source-col` and `--label-col` are supplied, bounded samples are selected by
-source/label round-robin and the prompt receives source/label/target metadata as
-cue-preservation context, not as a classification instruction. The report
-includes `accepted_count`, `status_counts`, row IDs, validation checks, and
-`first_error`, but not raw text.
-
-The command asks for a JSON object with `privatized_text`, checks target,
-utility, action, and negation/modality cue retention, residual identifiers,
-style-risk increase, character retention, and length drift, writes accepted
-candidates to a candidate column, and directs the user to
-`rerank-candidates --candidate-col`. It does not submit raw LLM outputs
-directly.
-
-Benchmark a local LM Studio context labeler without rewriting text:
-
-```bash
-python -m privhsd.cli benchmark-lm-context \
-  --input data/public_dev/recommended_merged.csv \
-  --text-col text \
-  --id-col id \
-  --source-col source \
-  --label-col label \
-  --endpoint http://127.0.0.1:1234/v1/chat/completions \
-  --model MODEL_ID \
-  --sample-size 20 \
-  --output data/outputs/lm_context_benchmark.MODEL_ID.json
-```
-
-`benchmark-lm-context` tests local models as advisory context labelers, not
-rewriters. It tries strict JSON, tagged lines, word-list, and binary-tag output
-formats; tolerates common harmless wrappers such as fenced JSON, JSON arrays of
-tags, alias keys, boolean tag fields, and explicit empty structured outputs;
-records parse validity, latency, deterministic-tag agreement, and
-protected/maskable phrase counts; and writes only row IDs and aggregate labels,
-not raw text or raw model phrases. If the endpoint is unreachable, it writes a
-structured `blocked` report and exits successfully so optional LM Studio
-availability never blocks the deterministic pipeline. From WSL, LM Studio may
-be reachable through the Windows gateway, for example
-`http://172.21.96.1:1234/v1/chat/completions`, even when `127.0.0.1` refuses
-connections or a link-local address times out.
-
-Check conservative HSD cue retention:
-
-```bash
-python -m privhsd.cli check-hsd-cues \
-  --input data/outputs/dynahate.reranked.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --id-col id \
-  --output data/outputs/dynahate.reranked.cue_checks.json
-```
-
-`check-hsd-cues` reports target-term, utility-cue, action-term, and
-negation/modality retention by row ID. It is a conservative local fallback when
-HateXplain-style rationale models are unavailable.
-
-Rank rows for deterministic repair or selective Qwen semantic review:
-
-```bash
-python -m privhsd.cli semantic-triage-report \
-  --input data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.balanced.csv \
-  --text-col text \
-  --privatized-col text \
-  --id-col id \
-  --label-col label \
-  --source-col source \
-  --sample-size 20000 \
-  --sample-strategy source_label_round_robin \
-  --privacy-scan changed \
-  --classifier-model data/outputs/privhsd_classifier.pkl \
-  --output data/outputs/recommended_merged.semantic_triage.json \
-  --queue-output data/outputs/recommended_merged.semantic_triage.queue.csv
-```
-
-`semantic-triage-report` is the operational fallback layer between deterministic
-privatization and local SLM use. It always uses deterministic context tags and
-conservative cue checks, optionally adds trained local classifier confidence and
-margin checks, and writes a raw-text-free queue. Rows are routed to
-`repair_before_model_review` when hard cue/context/privacy regressions are
-detected, to `qwen_semantic_check` when ambiguity, quotation, counterspeech,
-negation, public-interest context, or classifier uncertainty deserves semantic
-labeling, and to `no_review` otherwise. This is how Qwen is used selectively
-without rewriting the dataset. `--privacy-scan changed` is the interactive
-default; use `--privacy-scan all` only for a slower audit-style CPU run.
-
-Compare original and exact-format protected CSVs by source-aware slices:
+Run slice regression when metadata columns exist:
 
 ```bash
 python -m privhsd.cli source-regression-report \
-  --original data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.balanced.csv \
+  --original INPUT.csv \
+  --protected data/outputs/SUBMISSION.balanced.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
   --group-col source \
   --group-col label \
   --group-col split \
-  --group-col platform \
-  --group-col type \
-  --output data/outputs/recommended_merged.balanced.source_regression.json
+  --output data/outputs/SUBMISSION.balanced.source_regression.json
 ```
 
-`source-regression-report` validates row alignment, computes identifier
-before/after counts, changed-text rate, target/utility/action/negation cue
-retention, deterministic context-tag loss, and source-aware rationale/span
-preservation. HateXplain rationale spans are parsed as token-index ranges;
-Toxic Spans rationale spans are parsed as character-offset ranges. Reports are
-aggregate-only and include row IDs for review queues, not raw text.
+## Optional Alternates
 
-Check whether metadata values leak into text columns:
+Use alternates only after the baseline passes validation.
 
-```bash
-python -m privhsd.cli check-metadata-leakage \
-  --input data/outputs/dynahate.reranked_presidio.full.csv \
-  --text-col text \
-  --text-col privatized_text \
-  --metadata-col id \
-  --id-col id \
-  --output data/outputs/dynahate.metadata_leakage.json
-```
+- `balanced --style-scrub`: more author-style pressure with the same core
+  masking policy.
+- `rerank-candidates`: row-local choice among `balanced`, `style_scrubbed`,
+  `privacy`, `target_generalized`, and supplied candidate columns.
+- `rerank-candidates --presidio-augment`: adds filtered Presidio spans for
+  likely names, locations, and durable dates while rejecting `NRP`, target, and
+  action overlaps.
+- `generate-llm-candidates` and `generate-dpmlm-candidates`: candidate-only
+  paths. Their raw outputs must feed reranking before any submission.
 
-`check-metadata-leakage` scans metadata values such as `id` or `author` against
-one or more text columns using exact and alphanumeric-normalized matching. It
-reports counts and row IDs only; raw metadata values are represented by short
-hashes. This is a direct leakage check, not a stylometric author-risk test. For
-official files shaped like `id,author,text,HS`, run this command for `id` and
-`author`, then run `evaluate-author-risk --author-col author` if each author
-has enough rows for train/dev splits.
+## Token-Policy Model
 
-## Local Metrics
-
-`privhsd evaluate`, anonymize audit summaries, and ablation reports use the same
-deterministic proxy metrics from `privhsd.metrics`. Existing compatibility keys
-such as `privacy_gain_mean`, `utility_cue_retention_mean`,
-`character_utility_retention_mean`, `proxy_tradeoff_mean`, and
-`identifier_counts` remain stable.
-
-Row-level metrics also include:
-
-- placeholder and mask density: `mask_density`, `placeholder_density`,
-  `placeholder_count`, `placeholder_counts_by_type`, and
-  `placeholder_character_count`
-- residual leakage indicators: `residual_identifier_count`,
-  `residual_direct_identifier_count`, `residual_quasi_identifier_count`, and
-  residual counts by entity type
-- quasi-identifier signals: before/after counts for `AGE`, `DATE`, `LOCATION`,
-  and `ORGANIZATION`, plus `quasi_identifier_flags`
-- target cue retention: target cue/category counts, literal target term
-  retention, and target category retention
-- warning lists: `privacy_warnings`, `overmasking_warnings`, and combined
-  `warnings`
-
-Aggregate metrics roll these fields up with totals, means, warning counts, and
-rows-with-warning counts. These are local explainability signals for comparing
-runs; they are not official challenge scores.
-
-## Data Contract
-
-Input CSV must have:
-
-- a text column, passed as `--text-col`
-- optionally an ID column, passed as `--id-col`
-
-Output CSV must:
-
-- preserve row count
-- preserve row order
-- preserve existing columns
-- preserve labels and metadata
-- add `privatized_text` unless `--replace-text` is explicitly used
-- optionally normalize author style with `--style-scrub` while preserving the
-  same row and metadata contract
-- optionally use `rerank-candidates` to choose among row-local deterministic
-  and supplied rewrite candidates without adding helper columns by default
-- official upload creation should use `create-submission --replace-text` so the
-  provided text columns are privatized in place and no helper columns are added
-
-## Modes
-
-`utility`
-
-Conservative privacy transformation. Masks direct identifiers and preserves
-target-group terms.
-
-`balanced`
-
-Default mode. Masks direct identifiers while preserving hate-speech cues. Use
-this mode first for official leaderboard submissions.
-
-`privacy`
-
-More aggressive. Also generalizes known target-group mentions into typed
-categories. Useful for policy demos, but it may reduce classifier utility.
-
-Target-group policy:
-
-- `utility` and `balanced` preserve target-group terms by default so downstream
-  hate-speech cues remain visible.
-- `privacy` and `--generalize-targets` generalize target-group terms into typed
-  categories.
-- Broad gender terms such as `woman`, `women`, `man`, `men`, `girl`, `girls`,
-  `boy`, and `boys` are context-gated before generalization. They are preserved
-  in neutral contexts and generalized only near hostile or exclusionary cues
-  such as `do not belong`, `should leave`, `deport`, `exclude`, `hate`, or
-  `worthless`.
-
-## Transformation Style
-
-Use typed placeholders:
+The token-policy model is not trained on private identity labels. It is trained
+on weak token-action labels produced by the local detectors and cue protectors:
 
 ```text
-[USER]
-[EMAIL]
-[PHONE]
-[URL]
-[ALIAS]
-[PERSON]
-[LOCATION]
-[ORG]
-[DATE]
-[ID]
-[TARGET_GROUP:category]
+KEEP
+MASK_IDENTIFIER
+GENERALIZE_CONTEXT
+PROTECT_TARGET
+PROTECT_HSD
+NORMALIZE_STYLE
+REVIEW
 ```
 
-Prefer typed placeholders over deletion because deletion destroys context.
+This means `PROTECT_TARGET` is supported by training data: target terms and
+target metadata become protected action labels, not text to memorize. External
+target-rich datasets can improve this class when they are normalized into the
+shared schema and evaluated as unseen data.
 
-## Design Rule
+Install dependencies:
 
-The core pipeline must work without LLMs. LLMs may be used later only as optional
-experiments or demo support, not as a required dependency for the challenge
-submission.
+```bash
+python -m pip install '.[token-policy]'
+```
 
-The base install remains dependency-free. Optional evaluator extras such as
-`privhsd[benchmark]` must not become required for `anonymize`.
+Train a CUDA RoBERTa policy:
 
-Optional Presidio, DPMLM, Hugging Face, or LLM-backed methods should be
-evaluated as candidate generators or comparison baselines. They should not
-replace the auditable deterministic default unless they improve measured
-author-risk reduction and preserve HSD utility.
+```bash
+python -m privhsd.cli train-token-policy \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --sample-size 30000 \
+  --sample-strategy action_source_balanced \
+  --model-name FacebookAI/roberta-base \
+  --output-dir data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda \
+  --report data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda.train.json \
+  --max-length 192 \
+  --epochs 1 \
+  --batch-size 32 \
+  --device cuda
+```
+
+Train grouped K-folds by repeating `--fold-index 0..4`:
+
+```bash
+python -m privhsd.cli train-token-policy \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --sample-size 30000 \
+  --sample-strategy action_source_balanced \
+  --model-name FacebookAI/roberta-base \
+  --fold-count 5 \
+  --fold-index 0 \
+  --output-dir data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold0.cuda \
+  --report data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold0.cuda.train.json \
+  --max-length 192 \
+  --epochs 1 \
+  --batch-size 32 \
+  --device cuda
+```
+
+Evaluate an equal RoBERTa plus HateBERT ensemble on external TweetEval data:
+
+```bash
+python -m privhsd.cli evaluate-token-policy-ensemble \
+  --input data/external_unseen/tweet_eval_hate_offensive_test.csv \
+  --text-col text \
+  --id-col id \
+  --model-dir data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda \
+  --model-dir data/outputs/token_policy_hatebert.action_balanced_train30000.cuda \
+  --output data/outputs/token_policy_ensemble.roberta_hatebert.tweet_eval_external.evaluate.json
+```
+
+Use predictions as a candidate helper only when a reranking/audit path accepts
+them:
+
+```bash
+python -m privhsd.cli predict-token-policy-ensemble \
+  --input INPUT.csv \
+  --text-col text \
+  --id-col id \
+  --model-dir data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda \
+  --model-dir data/outputs/token_policy_hatebert.action_balanced_train30000.cuda \
+  --output data/outputs/INPUT.token_policy_ensemble.predictions.json
+
+python -m privhsd.cli apply-token-policy-candidates \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.token_policy_candidates.csv \
+  --text-col text \
+  --id-col id \
+  --policy-predictions data/outputs/INPUT.token_policy_ensemble.predictions.json \
+  --candidate-col token_policy_candidate \
+  --audit data/outputs/INPUT.token_policy_candidates.audit.json
+```
+
+## Reporting Policy
+
+Generated reports should not print raw sensitive text. Durable docs should
+record aggregate metrics, row IDs, commands, commit hashes, and limitations.
+Raw CSVs, generated candidates, model weights, and JSON reports stay under
+ignored `data/`.

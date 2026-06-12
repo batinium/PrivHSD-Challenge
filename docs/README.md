@@ -1,54 +1,33 @@
 # Documentation Index
 
-This folder is split by purpose so local project documentation is not mixed
-with hackathon policy, research notes, or agent history.
+The documentation is intentionally small. Keep operational instructions,
+methodology, evidence, and pitch material here; keep raw data and generated run
+logs under ignored `data/`.
 
 ## Project Docs
 
-Use these for running and modifying the local codebase:
-
 - [project/quickstart.md](project/quickstart.md) - setup and common commands.
-- [project/pipeline_design.md](project/pipeline_design.md) - module map and CLI contract.
+- [project/pipeline_design.md](project/pipeline_design.md) - architecture and CLI map.
 - [project/real_data_playbook.md](project/real_data_playbook.md) - official CSV workflow.
 - [project/roadmap.md](project/roadmap.md) - current technical strategy.
-- [project/experiment_verdict.md](project/experiment_verdict.md) - compact evidence table.
-- [project/methodology_justification.md](project/methodology_justification.md) - method rationale.
-- [project/packaging.md](project/packaging.md) - install and build notes.
+- [project/experiment_verdict.md](project/experiment_verdict.md) - current evidence table.
+- [project/methodology_justification.md](project/methodology_justification.md) - detailed method rationale.
 
-## Challenge Material
+## Challenge Docs
 
-Use these for hackathon framing, submission rules, and presentation:
-
-- [challenge/challenge_requirements.md](challenge/challenge_requirements.md)
-- [challenge/official_submission_checklist.md](challenge/official_submission_checklist.md)
-- [challenge/score_log_template.md](challenge/score_log_template.md)
-- [challenge/human_rights_legal_test_plan.md](challenge/human_rights_legal_test_plan.md)
-- [challenge/final_pitch_outline.md](challenge/final_pitch_outline.md)
-- [challenge/dataset_plan.md](challenge/dataset_plan.md)
-- [challenge/webinar_notes.txt](challenge/webinar_notes.txt)
-
-## Research Notes
-
-Use these as background only; they are not the operational workflow:
-
-- [research/dataset_candidate_takeaways.md](research/dataset_candidate_takeaways.md)
-- [research/dp_text_privacy_literature_notes.md](research/dp_text_privacy_literature_notes.md)
-- [research/research_oss_tech.md](research/research_oss_tech.md)
-- [research/sjmeis_repo_takeaways.md](research/sjmeis_repo_takeaways.md)
-
-## Archive
-
-Historical agent handoffs, task boards, and continuation prompts were moved to
-[archive/agent_notes/](archive/agent_notes/). They are retained for provenance
-but are not the current source of truth.
+- [challenge/challenge_requirements.md](challenge/challenge_requirements.md) - challenge interpretation and timeline.
+- [challenge/official_submission_checklist.md](challenge/official_submission_checklist.md) - pre-upload checks.
+- [challenge/human_rights_legal_test_plan.md](challenge/human_rights_legal_test_plan.md) - legal and governance acceptance tests.
+- [challenge/final_pitch_outline.md](challenge/final_pitch_outline.md) - five-minute Dragon's Den story and demo plan.
 
 ## Current Workflow
 
-For testing a submission candidate:
-
-1. Create an exact-format candidate with `create-submission --replace-text`.
-2. Validate shape with `validate-submission`.
-3. Run `source-regression-report` and `check-hsd-cues`.
-4. Run `semantic-triage-report`.
-5. Send only the `qwen_semantic_check` queue to Qwen if needed.
-6. Compare official scores and record them in the score log template.
+1. Profile the dataset and verify text, ID, label, source, and author columns.
+2. Create `balanced` exact-format output with `create-submission --replace-text`.
+3. Validate shape with `validate-submission`.
+4. Run `source-regression-report`, cue checks, and author-risk checks when the
+   required columns exist.
+5. Compare alternates only after the baseline exists: style scrub, filtered
+   Presidio reranking, and token-policy advisory candidates.
+6. Record commands, commit hash, manifest paths, and official scores in a
+   dated run note under ignored `data/outputs/`, not in committed markdown.

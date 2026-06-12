@@ -19,7 +19,9 @@ input dataset
 We are building a preprocessing layer:
 
 - Input: CSV with a text column.
-- Output: same rows, same IDs, same labels, plus `privatized_text`.
+- Output: same rows, same IDs, same labels, and either an added
+  `privatized_text` column for local audit or text replaced in place for an
+  exact-format submission.
 - Audit: JSON file explaining every transformation.
 - Metrics: local proxy metrics for privacy gain and utility retention.
 

@@ -131,6 +131,8 @@ is not locally measurable on that file.
    `--presidio-augment`.
 4. If utility drops, do not add more masking. Inspect source/label/target slices
    and keep the least meaning-changing output.
+5. Use token-policy ensemble predictions as advisory evidence or reranker
+   candidates only after the exact-format baseline is already scored.
 
 Do not submit `privacy` or `--generalize-targets` as the first choice. Those can
 erase vulnerable-group evidence and make the legal story worse.
@@ -152,12 +154,12 @@ Prefer the candidate that:
 
 Do not start with:
 
-- training a new transformer;
+- training a new transformer before the deterministic baseline is validated;
 - using `source_id` as an author label;
 - raw Presidio replacement;
 - LLM rewriting as the direct output;
 - global binary label remapping across heterogeneous sources;
 - broad target generalization.
 
-Those are research paths. The official-data path is baseline, validate, score,
-diagnose, then narrowly tune.
+Those are research or alternate paths. The official-data path is baseline,
+validate, score, diagnose, then narrowly tune.

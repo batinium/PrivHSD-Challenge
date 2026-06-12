@@ -1,40 +1,50 @@
 # ContextSafe-HSD
 
-Local privacy-preserving text privatization for hate-speech detection datasets.
+ContextSafe-HSD is a local privacy-preserving text privatization pipeline for
+hate-speech detection datasets. It rewrites text to reduce direct identifiers,
+quasi-identifiers, and author-style signals while preserving the target,
+hostility, negation, and context cues that downstream HSD models or human
+reviewers need.
 
-The goal is to reduce author-identifying signal while preserving the semantic
-cues needed by downstream hate-speech detection. The repository is not trying
-to be the final hate-speech classifier.
+This repository is a preprocessing system, not a production hate-speech
+classifier and not an automated takedown tool.
 
-## Repository Layout
+## What Is In The System
 
 ```text
-contextsafe_hsd/     Branded public Python package alias
-privhsd/              Python package and CLI implementation
-tests/                Unit and regression tests
-docs/project/         Local project docs and testing workflow
-docs/challenge/       Hackathon rules, policy framing, submission notes
-docs/research/        Background research and experiment notes
-docs/archive/         Historical agent handoffs and run logs
-data/                 Ignored local datasets and generated outputs
+contextsafe_hsd/     Public Python package alias
+privhsd/             CLI and implementation
+tests/               Synthetic and regression tests
+docs/project/        Methodology, pipeline, evidence, and operating workflow
+docs/challenge/      Rules, rights framing, checklist, and pitch material
+data/                Ignored local datasets, models, and reports
 ```
 
-Start with [docs/README.md](docs/README.md), then use
-[docs/project/quickstart.md](docs/project/quickstart.md) and
-[docs/project/pipeline_design.md](docs/project/pipeline_design.md).
+Start with [docs/README.md](docs/README.md). For a full method explanation,
+read [docs/project/methodology_justification.md](docs/project/methodology_justification.md).
 
-## Core Test Workflow
-
-Run tests:
+## Install And Test
 
 ```bash
-.venv/bin/python -m pytest -q
+python -m pip install .
+python -m pytest -q
 ```
 
-Create an exact-format baseline candidate:
+Optional extras are installed only for the workflows that need them:
 
 ```bash
-.venv/bin/python -m privhsd.cli create-submission \
+python -m pip install '.[benchmark]'
+python -m pip install '.[presidio]'
+python -m pip install '.[token-policy]'
+```
+
+`.[token-policy]` uses PyTorch/Transformers and will use CUDA when the local
+PyTorch build sees a CUDA GPU.
+
+## Create An Exact-Format Candidate
+
+```bash
+python -m privhsd.cli create-submission \
   --input data/public_dev/recommended_merged.csv \
   --output data/outputs/recommended_merged.balanced.csv \
   --text-col text \
@@ -47,7 +57,7 @@ Create an exact-format baseline candidate:
 Validate upload shape:
 
 ```bash
-.venv/bin/python -m privhsd.cli validate-submission \
+python -m privhsd.cli validate-submission \
   --source data/public_dev/recommended_merged.csv \
   --submission data/outputs/recommended_merged.balanced.csv \
   --text-col text \
@@ -58,7 +68,7 @@ Validate upload shape:
 Run source-aware regression:
 
 ```bash
-.venv/bin/python -m privhsd.cli source-regression-report \
+python -m privhsd.cli source-regression-report \
   --original data/public_dev/recommended_merged.csv \
   --protected data/outputs/recommended_merged.balanced.csv \
   --original-text-col text \
@@ -72,66 +82,35 @@ Run source-aware regression:
   --output data/outputs/recommended_merged.balanced.source_regression.json
 ```
 
-Run semantic triage to decide whether Qwen is needed:
+## Current Evidence Snapshot
 
-```bash
-.venv/bin/python -m privhsd.cli semantic-triage-report \
-  --input data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.balanced.csv \
-  --text-col text \
-  --privatized-col text \
-  --id-col id \
-  --label-col label \
-  --source-col source \
-  --sample-size 20000 \
-  --sample-strategy source_label_round_robin \
-  --output data/outputs/recommended_merged.balanced.semantic_triage.json \
-  --queue-output data/outputs/recommended_merged.balanced.semantic_triage.queue.csv
-```
+- `balanced` remains the first exact-format submission candidate: deterministic,
+  auditable, target-preserving, and low-dependency.
+- On the merged public regression bundle, `balanced` reduced identifier
+  detections from 40,304 to 5 while preserving target and utility cues at
+  0.9999.
+- Source-aware regression adds slice checks by source, label, split, platform,
+  and type, with rationale/span preservation reported by row ID only.
+- A CUDA fine-tuned RoBERTa token-policy model reached dev macro F1 0.9061 on
+  weak token-action labels.
+- Grouped 5-fold RoBERTa token-policy training reached macro F1 mean 0.8977
+  with zero duplicate text overlap across folds.
+- On external TweetEval hate/offensive data, the equal RoBERTa plus HateBERT
+  ensemble reached macro F1 0.8837 and `PROTECT_TARGET` F1 0.8143 on weak
+  token-action labels.
 
-The triage report routes rows to:
+The token-policy models are advisory/reranking support. They do not replace
+the deterministic anonymizer unless an audited candidate path improves official
+privacy and utility scores.
 
-- `repair_before_model_review`
-- `qwen_semantic_check`
-- `no_review`
-
-Qwen should only be used on the semantic-review queue, not on the whole dataset.
-
-## Python Package API
-
-After `pip install .`, the installed command is `contextsafe-hsd`:
-
-```bash
-contextsafe-hsd create-submission --help
-contextsafe-hsd validate-submission --help
-```
-
-The Python API is available as `contextsafe_hsd`. The older `privhsd` import
-remains as a compatibility alias for local experiments.
+## Python API
 
 ```python
 from pathlib import Path
 
 import contextsafe_hsd as hsd
 
-summary = hsd.process_csv(
-    Path("INPUT.csv"),
-    Path("OUTPUT.privatized.csv"),
-    text_col="text",
-    id_col="id",
-    audit_path=Path("OUTPUT.audit.json"),
-    mode="balanced",
-)
-```
-
-For an exact-format challenge upload:
-
-```python
-from pathlib import Path
-
-import contextsafe_hsd as hsd
-
-manifest = hsd.create_submission(
+hsd.create_submission(
     Path("INPUT.csv"),
     Path("SUBMISSION.csv"),
     text_cols=["text"],
@@ -142,27 +121,8 @@ manifest = hsd.create_submission(
 )
 ```
 
-## Performance Notes
+## Data Policy
 
-- Deterministic masking, validation, context tags, and cue checks are CPU regex
-  workloads. GPU does not help these stages unless the algorithm is rewritten.
-- HF transformer probes use `--device auto` and will use CUDA when the Python
-  environment has CUDA-enabled PyTorch.
-- Qwen should run through LM Studio, which can use the GPU independently of the
-  local Python venv.
-- This venv currently has CPU-only PyTorch, so Python HF models will not use the
-  visible NVIDIA GPU until CUDA-enabled PyTorch is installed.
-- Use `semantic-triage-report --sample-size ...` for interactive testing and
-  reserve full semantic triage for overnight or a future parallelized run.
-
-## Robustness Policy
-
-- Deterministic masking is the base layer.
-- Cue checks catch target/action/negation/modality loss.
-- Source regression catches slice-specific regressions.
-- Optional trained classifiers provide confidence and margin uncertainty.
-- Qwen is a selective semantic checker or candidate source, never the default
-  dataset rewriter.
-
-Generated datasets, challenge data, and reports under `data/` are ignored by
-git. Keep raw sensitive examples out of markdown, commits, and issue comments.
+Downloaded datasets, generated CSVs, model weights, and reports under `data/`
+are ignored by git. Keep raw sensitive examples out of markdown, commits,
+issues, screenshots, and presentation material.

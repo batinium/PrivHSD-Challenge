@@ -1,16 +1,12 @@
 # Methodology Justification
 
-Date: 2026-06-11
+Date: 2026-06-12
 
 This note explains why the pipeline uses deterministic rules, lexicons,
-misspelling handling, optional Presidio/DPMLM/LLM candidates, and reranking.
-It is meant to support judge questions about provenance, redundancy, and the
-privacy/utility tradeoff.
-
-For the mentor-adjacent DP NLP literature map, see
-`docs/research/dp_text_privacy_literature_notes.md`. That companion note explains how
-DPMLM, word-level metric DP, privacy-budget allocation, LLM prompting,
-post-processing, and privacy evaluation papers map to the current pipeline.
+misspelling handling, optional Presidio/DPMLM/LLM candidates, token-policy
+fine-tuning, and reranking. It is meant to support judge questions about
+provenance, redundancy, and the privacy/utility tradeoff. The relevant research
+support is summarized in the references at the end of this file.
 
 For the human-rights and legal test framing, see
 `docs/challenge/human_rights_legal_test_plan.md`. That note maps ECtHR Article 10,
@@ -154,7 +150,8 @@ Current candidates include:
 - `target_generalized`,
 - optional filtered Presidio candidate,
 - optional local LLM candidate,
-- optional DPMLM candidate.
+- optional DPMLM candidate,
+- optional token-policy candidate.
 
 The reranker dominates the local benchmarks because no single transformation is
 best for every row. It can leave a row close to `balanced` when extra masking
@@ -171,6 +168,43 @@ Local evidence:
   delta to +0.0048 while preserving utility-cue retention at 1.0;
 - LLM and DPMLM candidates were generated, validated, and rejected by reranking
   when they did not beat deterministic alternatives.
+
+## Token-Policy Fine-Tuning
+
+The transformer training path is a token-action policy, not a raw text
+memorization objective. Training labels are weak labels generated from the
+existing deterministic policy and cue protectors:
+
+- `KEEP`;
+- `MASK_IDENTIFIER`;
+- `GENERALIZE_CONTEXT`;
+- `PROTECT_TARGET`;
+- `PROTECT_HSD`;
+- `NORMALIZE_STYLE`;
+- `REVIEW`.
+
+This is why `PROTECT_TARGET` can be supported by training. Target metadata,
+target lexicons, rationale spans, and context tags become token-level action
+labels that tell the model which spans to preserve. The model is not supplied
+with a separate database of private identities to memorize; it learns the
+policy boundary between maskable identity-like spans and protected HSD evidence.
+
+The current overfitting controls are:
+
+- grouped splits and grouped K-folds so duplicate normalized text does not leak
+  across train/dev;
+- `action_source_balanced` sampling so rare actions and rare sources are not
+  drowned out by `KEEP`;
+- class weighting with a maximum class-weight cap;
+- external unseen evaluation on TweetEval hate/offensive data;
+- ensemble comparison between a general RoBERTa base and HateBERT.
+
+The best current result is an equal RoBERTa plus HateBERT probability ensemble
+on external TweetEval: macro F1 0.8837, `PROTECT_TARGET` F1 0.8143,
+`PROTECT_HSD` F1 0.9808, and `MASK_IDENTIFIER` F1 0.9638. The role of this
+model is advisory: use it for uncertainty, candidate generation, and
+presentation evidence, while keeping deterministic validation and reranking in
+front of any final output.
 
 ## Authorship Identification Test
 

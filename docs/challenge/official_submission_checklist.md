@@ -1,44 +1,38 @@
 # Official Submission Checklist
 
-Use this before any leaderboard upload. Keep raw challenge examples out of this
-file, commit messages, screenshots, and issue comments.
+Use this before any leaderboard upload. Keep raw challenge examples out of
+commits, markdown, screenshots, and chat.
 
 ## Required Checks
 
-- `profile-dataset` has been run on the official CSV and the selected
-  text/ID/label columns are recorded.
 - `git status --short` has no unintended source changes.
 - `python -m pytest -q` passes.
+- `profile-dataset` has been run on the official CSV.
+- Text, ID, label, source, split, and author/user columns have been inspected.
+- Missing labels, unexpected labels, blank text, duplicate text, and odd columns
+  are recorded in an ignored run note.
 - The submission CSV was created with `create-submission --replace-text`.
 - `validate-submission` passes with no helper columns.
-- Optional Presidio output, if used, came through `rerank-candidates
-  --replace-text --presidio-augment`, not raw Presidio or direct entity
-  replacement.
-- Row count matches the source dataset.
-- Column set and column order match the source dataset.
-- ID order matches the source dataset when an ID column is available.
-- Label and metadata columns are unchanged.
-- Text columns are privatized in place.
+- Row count, column order, ID order, labels, and metadata match the source.
 - Manifest exists and records command, git commit, input/output hashes, mode,
   validation, and aggregate metrics.
-- `source-regression-report` has been run when source/label/split metadata is
-  available, so hard slices are checked before tuning.
-- Generated reports are under ignored `data/outputs/`.
-- No downloaded datasets, model weights, Hugging Face caches, or raw official
-  examples are staged for commit.
+- Generated reports, datasets, model weights, and run notes are under ignored
+  `data/outputs/` or `data/official/`.
+- No raw official examples or downloaded datasets are staged for commit.
 
 ## Evidence To Review
 
-- Local privacy/utility metrics.
-- Local utility benchmark if labels are available.
-- Author-risk report when an author column exists.
-- HSD cue retention report.
-- Source-aware regression report with context and rationale/span preservation.
-- HF utility report or structured skip.
-- LM Studio context-labeler benchmark or structured endpoint/model skip.
-- DPMLM spike report or structured blocker.
-- Presidio comparison report or structured skip.
-- Candidate-reranking audit when using reranked outputs.
+- Local privacy/utility aggregate metrics.
+- `source-regression-report` when source/label/split metadata exists.
+- HSD cue retention: target, utility, action, negation, and modality.
+- Rationale/span preservation when the dataset provides rationale metadata.
+- Author-risk report when an author/user column has repeated values.
+- Token-policy ensemble report if using it as advisory evidence or candidates.
+- Candidate-reranking audit if using reranked output.
+- Presidio comparison or filtered Presidio audit if using Presidio augmentation.
+
+LLM and DPMLM reports are optional research evidence. They are not required for
+a baseline upload and raw outputs must not be submitted directly.
 
 ## Recommended Commands
 
@@ -49,36 +43,34 @@ python -m privhsd.cli profile-dataset \
 
 python -m privhsd.cli create-submission \
   --input INPUT.csv \
-  --output data/outputs/SUBMISSION.csv \
+  --output data/outputs/SUBMISSION.balanced.csv \
   --text-col text \
   --id-col id \
   --replace-text \
   --mode balanced \
-  --manifest data/outputs/SUBMISSION.manifest.json
+  --manifest data/outputs/SUBMISSION.balanced.manifest.json
 
 python -m privhsd.cli validate-submission \
   --source INPUT.csv \
-  --submission data/outputs/SUBMISSION.csv \
+  --submission data/outputs/SUBMISSION.balanced.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/SUBMISSION.validation.json
+  --output data/outputs/SUBMISSION.balanced.validation.json
 
 python -m privhsd.cli source-regression-report \
   --original INPUT.csv \
-  --protected data/outputs/SUBMISSION.csv \
+  --protected data/outputs/SUBMISSION.balanced.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
   --group-col source \
   --group-col label \
-  --output data/outputs/SUBMISSION.source_regression.json
+  --output data/outputs/SUBMISSION.balanced.source_regression.json
 ```
 
 ## Decision Rule
 
-Submit `balanced` first unless official feedback shows a better tradeoff.
-Consider `rerank-candidates` when author-style risk needs more pressure and the
-exact-format validation plus utility/cue reports still pass. Treat
-`rerank-candidates --presidio-augment` as the current strongest alternate, but
-only after audit review confirms no target/action cue loss and
-`validate-submission` passes on the exact-format file.
+Submit `balanced` first unless official feedback proves a better tradeoff.
+Consider `rerank-candidates --presidio-augment` if privacy is weak and cue
+retention still passes. Use token-policy outputs as advisory candidates only
+when exact-format validation and reranking audit both pass.
