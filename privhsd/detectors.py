@@ -44,6 +44,10 @@ TAGS = {
     "AGE": "[AGE]",
 }
 
+LETTER_PATTERN = r"[^\W\d_]"
+NAME_WORD_PATTERN = rf"{LETTER_PATTERN}(?:[^\W\d_.'-]*{LETTER_PATTERN})?"
+NAME_PHRASE_PATTERN = rf"{NAME_WORD_PATTERN}(?:\s+{NAME_WORD_PATTERN}){{0,3}}"
+
 
 REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
     ("EMAIL", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)),
@@ -95,18 +99,49 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
 )
 
 
-PERSON_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
-    re.compile(
-        r"\b(?i:my name is|i am|i'm|this is|call me)\s+"
-        r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b"
+PERSON_CONTEXT_PATTERNS: Sequence[tuple[re.Pattern[str], bool]] = (
+    (
+        re.compile(
+            r"\b(?i:my name is|call me)\s+"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        True,
     ),
-    re.compile(
-        r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\s+"
-        r"(?:said|emailed|called|posted|replied|wrote)\b"
+    (
+        re.compile(
+            r"\b(?i:i am|i'm|this is)\s+"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        False,
     ),
-    re.compile(
-        r"\b(?:said|emailed|called|posted|replied|wrote)\s+"
-        r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b"
+    (
+        re.compile(
+            r"\b(?i:says|said|reports|reported|documented)\s+"
+            rf"({NAME_PHRASE_PATTERN})\s+"
+            r"(?:called|emailed|posted|replied|wrote|said)\b"
+        ),
+        False,
+    ),
+    (
+        re.compile(
+            rf"\b({NAME_PHRASE_PATTERN})\s+"
+            r"(?:said|emailed|called|posted|replied|wrote)\b"
+        ),
+        False,
+    ),
+    (
+        re.compile(
+            r"\b(?:said|emailed|called|posted|replied|wrote)\s+"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        False,
+    ),
+    (
+        re.compile(
+            r"\b(?i:poor|dear|mr|mrs|ms|dr)\.?\s+"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        False,
     ),
 )
 
@@ -122,13 +157,13 @@ ALIAS_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
 LOCATION_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
     re.compile(
         r"\b(?i:from|in|near|at)\s+"
-        r"([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})\b"
+        rf"({NAME_PHRASE_PATTERN})\b"
     ),
     re.compile(
         r"\b(?i:leave|left|leaving|visit|visited|visiting|"
         r"move\s+to|moved\s+to|return\s+to|go\s+back\s+to|"
         r"deport\s+to|deported\s+to)\s+"
-        r"([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})\b"
+        rf"({NAME_PHRASE_PATTERN})\b"
     ),
 )
 
@@ -143,6 +178,34 @@ KNOWN_LOCATION_TERMS: Sequence[str] = (
     "San Francisco",
     "Washington",
 )
+
+CONTEXT_NAME_STOP_WORDS = {
+    "and",
+    "are",
+    "at",
+    "but",
+    "called",
+    "emailed",
+    "from",
+    "in",
+    "is",
+    "like",
+    "looks",
+    "near",
+    "on",
+    "or",
+    "posted",
+    "replied",
+    "said",
+    "says",
+    "should",
+    "that",
+    "was",
+    "were",
+    "who",
+    "with",
+    "wrote",
+}
 
 
 TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
@@ -338,6 +401,20 @@ TARGET_GENERALIZATION_CONTEXT_CUES = (
     "worthless",
 )
 
+VARIANT_TRANSLATION = str.maketrans(
+    {
+        "0": "o",
+        "1": "i",
+        "3": "e",
+        "4": "a",
+        "5": "s",
+        "7": "t",
+        "@": "a",
+        "$": "s",
+    }
+)
+VARIANT_TOKEN_PATTERN = re.compile(r"#?[A-Za-z0-9_@$]{4,}")
+
 
 def contains_target_group_term(value: str) -> bool:
     """Return whether a candidate span is itself a protected target cue."""
@@ -348,6 +425,53 @@ def contains_target_group_term(value: str) -> bool:
             if re.search(pattern, lowered):
                 return True
     return False
+
+
+def trim_context_span(
+    text: str,
+    start: int,
+    end: int,
+    *,
+    require_titlecase: bool = False,
+    stop_at_connector: bool = False,
+) -> tuple[int, int, str]:
+    """Trim connector words from context-captured names/locations."""
+    value = text[start:end].strip()
+    leading = len(text[start:end]) - len(text[start:end].lstrip())
+    start += leading
+    end = start + len(value)
+    while value:
+        words = list(re.finditer(NAME_WORD_PATTERN, value))
+        if not words:
+            return start, start, ""
+        if require_titlecase:
+            if words[0].start() != 0:
+                return start, start, ""
+            last_end = 0
+            for word_match in words:
+                word = value[word_match.start() : word_match.end()]
+                if not word[:1].isupper():
+                    break
+                last_end = word_match.end()
+            if not last_end:
+                return start, start, ""
+            value = value[:last_end].rstrip()
+            end = start + len(value)
+            break
+        if stop_at_connector and len(words) > 1:
+            for word_match in words[1:]:
+                word = value[word_match.start() : word_match.end()].lower()
+                if word in CONTEXT_NAME_STOP_WORDS:
+                    value = value[: word_match.start()].rstrip()
+                    end = start + len(value)
+                    break
+        last = words[-1]
+        last_word = value[last.start() : last.end()].lower()
+        if last_word not in CONTEXT_NAME_STOP_WORDS:
+            break
+        value = value[: last.start()].rstrip()
+        end = start + len(value)
+    return start, end, value
 
 
 def regex_spans(text: str) -> list[Span]:
@@ -392,10 +516,18 @@ def known_location_spans(text: str) -> list[Span]:
 
 def context_spans(text: str) -> list[Span]:
     spans: list[Span] = []
-    for pattern in PERSON_CONTEXT_PATTERNS:
+    for pattern, allow_lowercase in PERSON_CONTEXT_PATTERNS:
         for match in pattern.finditer(text):
             start, end = match.span(1)
-            value = text[start:end]
+            start, end, value = trim_context_span(
+                text,
+                start,
+                end,
+                require_titlecase=not allow_lowercase,
+                stop_at_connector=allow_lowercase,
+            )
+            if not value:
+                continue
             if contains_target_group_term(value):
                 continue
             spans.append(
@@ -410,7 +542,14 @@ def context_spans(text: str) -> list[Span]:
     for pattern in LOCATION_CONTEXT_PATTERNS:
         for match in pattern.finditer(text):
             start, end = match.span(1)
-            value = text[start:end]
+            start, end, value = trim_context_span(
+                text,
+                start,
+                end,
+                require_titlecase=True,
+            )
+            if not value:
+                continue
             if value.lower() in {"the", "a", "an"} or contains_target_group_term(value):
                 continue
             spans.append(
@@ -426,6 +565,44 @@ def has_target_generalization_context(text: str, start: int, end: int) -> bool:
         if re.search(pattern, window):
             return True
     return False
+
+
+def compact_variant(value: str) -> str:
+    normalized = value.lower().translate(VARIANT_TRANSLATION)
+    compact = re.sub(r"[^a-z0-9]", "", normalized)
+    if not compact:
+        return ""
+    collapsed: list[str] = []
+    for character in compact:
+        if len(collapsed) >= 2 and collapsed[-1] == character and collapsed[-2] == character:
+            continue
+        collapsed.append(character)
+    return "".join(collapsed)
+
+
+def edit_distance_at_most_one(left: str, right: str) -> bool:
+    if left == right:
+        return True
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) == len(right):
+        mismatches = sum(1 for a, b in zip(left, right) if a != b)
+        return mismatches <= 1
+    if len(left) > len(right):
+        left, right = right, left
+    i = 0
+    j = 0
+    edits = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        j += 1
+    return True
 
 
 def hashtag_target_group_spans(text: str) -> list[Span]:
@@ -467,6 +644,45 @@ def hashtag_target_group_spans(text: str) -> list[Span]:
     return spans
 
 
+def variant_target_group_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for match in VARIANT_TOKEN_PATTERN.finditer(text):
+        raw_value = match.group(0)
+        normalized_value = compact_variant(raw_value.lstrip("#"))
+        if len(normalized_value) < 5:
+            continue
+        for category, terms in TARGET_GROUP_TERMS.items():
+            for term in terms:
+                normalized_term = compact_variant(term)
+                if len(normalized_term) < 5:
+                    continue
+                if not edit_distance_at_most_one(normalized_value, normalized_term):
+                    continue
+                if (
+                    term.lower() in CONTEXTUAL_TARGET_TERMS
+                    and not has_target_generalization_context(
+                        text,
+                        match.start(),
+                        match.end(),
+                    )
+                ):
+                    continue
+                if not has_target_generalization_context(text, match.start(), match.end()):
+                    continue
+                spans.append(
+                    Span(
+                        start=match.start(),
+                        end=match.end(),
+                        entity_type="TARGET_GROUP",
+                        text=raw_value,
+                        score=0.58,
+                        source="target_variant",
+                        category=category,
+                    )
+                )
+    return spans
+
+
 def target_group_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for category, terms in TARGET_GROUP_TERMS.items():
@@ -494,6 +710,7 @@ def target_group_spans(text: str) -> list[Span]:
                     )
                 )
     spans.extend(hashtag_target_group_spans(text))
+    spans.extend(variant_target_group_spans(text))
     return merge_spans(spans)
 
 
@@ -506,6 +723,7 @@ def span_priority(span: Span) -> tuple[int, float, int]:
         "known_location": 1,
         "target_dictionary": 0,
         "target_hashtag": 0,
+        "target_variant": 0,
     }.get(span.source, 0)
     return (span.end - span.start, span.score, source_priority)
 

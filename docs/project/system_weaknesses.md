@@ -17,6 +17,7 @@ workbench is exercised by someone outside the project.
 | LLM/DPMLM candidates are low-yield | They can drift semantically or lose cues. | Keep them candidate-only behind validation and reranking. |
 | Demo UX was missing | Policymakers and NGOs need to see responsible use, not just CLI output. | Build and rehearse the local Privacy Review Workbench. |
 | Raw text handling risk | Demoing sensitive text can accidentally leak examples into logs or docs. | Use synthetic examples in public demos and keep generated reports under ignored `data/`. |
+| Synthetic data bias | LLM-generated rows can overfit to one model's style and may contain incorrect span labels. | Use generated rows first as stress tests; promote to training only after dedupe, validation, and distribution checks. |
 
 ## Presentation Weaknesses
 
@@ -45,6 +46,8 @@ workbench is exercised by someone outside the project.
 ## Next Actions
 
 - Run the workbench on synthetic stress examples before the pitch.
+- Generate LM Studio stress cases into ignored `data/outputs/`, inspect missing
+  span summaries, and promote only vetted patterns into rules or training data.
 - Add CSV upload only after the paste-text path is stable.
 - Prepare a 60-second workbench demo clip in case live networking or local
   servers fail.

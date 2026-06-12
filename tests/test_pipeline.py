@@ -44,6 +44,16 @@ def test_context_person_masks_single_token_self_identification():
     assert "Muslims should leave" in result.text
 
 
+def test_context_person_masks_unicode_and_lowercase_self_identification():
+    text = "My name is ayşe and Muslims should leave Lagos."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "ayşe" not in result.text
+    assert "[PERSON]" in result.text
+    assert "Muslims should leave" in result.text
+    assert "[LOCATION]" in result.text
+
+
 def test_balanced_preserves_historical_victim_group_terms():
     text = "Alex Vale wrote that Holocaust survivors should be attacked."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))
@@ -113,6 +123,17 @@ def test_african_target_and_hashtag_target_are_detected():
     assert ("#StarvingAfricans", "race_or_ethnicity", "target_hashtag") in span_values
     assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
     assert "[LOCATION]" in privacy_result.text
+
+
+def test_target_typos_and_obfuscations_are_detected_near_hostile_context():
+    text = "Africanz should leave and n1ggers should leave."
+    spans = target_group_spans(text)
+    span_values = {(span.text, span.category, span.source) for span in spans}
+    privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert ("Africanz", "race_or_ethnicity", "target_variant") in span_values
+    assert ("n1ggers", "race_or_ethnicity", "target_variant") in span_values
+    assert privacy_result.text.count("[TARGET_GROUP:race_or_ethnicity]") == 2
 
 
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():

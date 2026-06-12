@@ -80,6 +80,31 @@ before averaging, so different subword tokenizers can vote on the same spans.
 - Keep target terms protected by default in the deterministic layer; neural
   models should learn that policy, not override it.
 
+### Synthetic Stress Generation
+
+- Use `scripts/generate_lm_studio_stress_cases.py` to batch-generate local
+  synthetic stress rows through LM Studio.
+- Example smoke command:
+
+```bash
+python scripts/generate_lm_studio_stress_cases.py \
+  --endpoint http://172.21.96.1:1234/v1/chat/completions \
+  --model gemma-4-e4b-uncensored-hauhaucs-aggressive \
+  --batches 1 \
+  --cases-per-batch 2 \
+  --use-presidio
+```
+
+- Treat generated rows as coverage probes first, not trusted training data.
+- Track missing expected privacy spans and missing expected target spans from
+  the script report.
+- Promote generated examples into training only after dedupe, label validation,
+  source balancing, and token-action distribution checks.
+- Avoid committing generated raw examples; keep JSONL and reports under ignored
+  `data/outputs/`.
+- Use `docs/project/evaluation_checklist.md` as the durable test matrix for
+  manual examples, generated stress cases, and demo rehearsals.
+
 ### Improve Winning Odds
 
 - Show that the system preserves civil-liberties context: counterspeech,
