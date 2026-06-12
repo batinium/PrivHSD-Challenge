@@ -668,6 +668,675 @@ without becoming a required dependency. Strict JSON is useful when it works,
 but small models should also be tested with simpler tagged-line, word-list, and
 binary-tag formats.
 
+### 3b. Role-Aware Token Policy Fine-Tuning
+
+Status: planned methodological extension. Do not replace the first official
+`balanced` submission with this. Implement only as an optional context scorer,
+review router, or reranker feature until it proves a better official
+privacy/HSD tradeoff.
+
+#### Goal
+
+Train a small token-level policy model that helps separate:
+
+```text
+HSD utility cues      -> preserve
+author identity cues  -> mask, generalize, normalize, or review
+```
+
+The model must not be a generative anonymizer and must not be a legal
+hate-speech classifier. It predicts token or span roles/actions. The existing
+deterministic pipeline, cue checks, exact-format validation, and reranker remain
+the final authority.
+
+The intended methodological claim:
+
+> We use public HSD datasets to learn a context-conditioned token policy for
+> privacy transformation. Labels, targets, and rationales teach which words
+> carry HSD utility; deterministic privacy detectors teach which spans carry
+> author/privacy risk. The learned policy proposes protect/mask/normalize/review
+> actions, while deterministic validators prevent target/action/negation loss.
+
+#### Model To Train
+
+Default model:
+
+```text
+FacebookAI/roberta-base
+```
+
+Link: <https://huggingface.co/FacebookAI/roberta-base>
+
+Why this default:
+
+- MIT license on the Hugging Face model card.
+- Case-sensitive, which matters because casing is an author-style signal and
+  can also carry social-media emphasis.
+- RoBERTa is intended to be fine-tuned for downstream tasks including token
+  classification.
+- It uses the same general Transformers stack already used by optional HF and
+  DPMLM experiments in this repo.
+- It is smaller and easier to explain than a large generative model.
+
+Training API:
+
+- Hugging Face token classification task guide:
+  <https://huggingface.co/docs/transformers/tasks/token_classification>
+- Use `AutoTokenizer` and `AutoModelForTokenClassification`.
+- Use offset mappings to align weak character/token labels to subword tokens.
+- Use `DataCollatorForTokenClassification` and `Trainer` if the optional
+  dependency stack is available.
+
+Optional domain ablation after the default works:
+
+```text
+cardiffnlp/twitter-roberta-base
+```
+
+Link: <https://huggingface.co/cardiffnlp/twitter-roberta-base>
+
+Why consider it:
+
+- It is a RoBERTa-base model trained on Twitter data.
+- The model card describes training on roughly 58M tweets and TweetEval usage.
+- The challenge datasets are largely short, noisy, social-media-like text.
+
+Why not default:
+
+- Add only after model-card/license review and after the RoBERTa-base path
+  works.
+- Its model card recommends replacing usernames and links with placeholders,
+  which can conflict with our need to identify handles/URLs as privacy spans.
+  If used, preserve original offset alignment and treat the preprocessing as a
+  model-input-only view, not as the output text.
+
+Optional later ablation:
+
+```text
+vinai/bertweet-base
+```
+
+Link: <https://huggingface.co/vinai/bertweet-base>
+
+Why consider it:
+
+- The model card describes BERTweet as a large-scale English Tweet model trained
+  with a RoBERTa-style procedure over a very large tweet corpus.
+
+Why defer:
+
+- More tweet-specific preprocessing/citation considerations.
+- More moving parts under hackathon time pressure.
+
+#### Data Available
+
+Use the normalized public bundle already downloaded locally:
+
+```text
+data/public_dev/recommended_merged.csv
+```
+
+Observed local shape on 2026-06-12:
+
+```text
+source rows:
+  dynahate                 41,144
+  measuring_hate_speech    39,565
+  davidson                 24,783
+  hatexplain               20,148
+  toxic_spans              16,100
+  hatemoji_build            5,912
+  convabuse                 4,185
+  hatemoji_check            3,930
+  hatecheck                 3,901
+
+top labels:
+  not_hate                 57,442
+  hate                     50,775
+  offensive                24,951
+  toxic                    16,019
+  ambiguous                 6,215
+  not_abuse                 3,544
+  abuse                       580
+  not_abusive                  81
+  ambiguous_abuse              61
+```
+
+The merged schema is:
+
+```text
+id,text,label,source,split,target,type,platform,source_id,severity,
+target_categories,rationale_spans,meta
+```
+
+Use source-aware sampling. Do not train on one undifferentiated label ontology.
+`hate`, `offensive`, `toxic`, `abuse`, `ambiguous`, and `not_hate` are
+source-aware context signals, not interchangeable legal labels.
+
+#### Corpus Use Plan
+
+Use `data/public_dev/recommended_merged.csv` as the primary corpus. It is
+already normalized and deduplicated enough for development. Do not train from
+the raw archived files unless the normalized merge has a bug or a source needs
+special parsing.
+
+Recommended source roles:
+
+| Source | Use in token policy |
+| --- | --- |
+| `dynahate` | Main hate/not-hate target/type signal; good first smoke source. |
+| `hatexplain` | Strongest target+rationale supervision for `PROTECT_TARGET` and `PROTECT_HSD`. |
+| `toxic_spans` | Character-span rationale supervision for toxic cue preservation. |
+| `hatecheck` | Functional guardrail for protected groups, negation, contrast, and non-hate cases. |
+| `hatemoji_build` / `hatemoji_check` | Emoji, leetspeak, perturbation, and style-robustness guardrails. |
+| `davidson` | Offensive-vs-hate contrast; useful for over-restriction and `REVIEW`. |
+| `measuring_hate_speech` | Target categories and severity; useful for multi-target/context hints. |
+| `convabuse` | Abuse/not-abuse/ambiguous-abuse contrast; useful for adjacent-label review. |
+
+Recommended splits:
+
+- `smoke_500`: source/label round-robin, used only for weak-label and tokenizer
+  alignment tests.
+- `smoke_5000`: source/label round-robin, used for relation-table and
+  scikit-learn token-action iteration.
+- `train_30000`: source/label round-robin, first transformer fine-tuning run.
+- `eval_guardrail`: hold out all or a fixed sample from `hatecheck`,
+  `hatemoji_check`, and high-rationale HateXplain/Toxic Spans rows.
+
+Do not collapse all labels into binary hate/not-hate for token-policy training.
+Use labels as context features and review-priority hints.
+
+#### Output Labels
+
+MVP action labels:
+
+```text
+KEEP
+MASK_IDENTIFIER
+GENERALIZE_CONTEXT
+PROTECT_TARGET
+PROTECT_HSD
+NORMALIZE_STYLE
+REVIEW
+```
+
+Optional role labels for reports or a later multitask model:
+
+```text
+TARGET_OF_HATE
+VICTIM_OR_PROTECTED_GROUP
+AUTHOR_SELF_DISCLOSURE
+QUOTED_OR_REPORTED_TARGET
+COUNTERSPEECH_TARGET
+PUBLIC_INTEREST_REFERENCE
+AUTHOR_IDENTIFIER
+AUTHOR_STYLE
+HATE_ACTION
+NEGATION_OR_MODALITY
+UNCERTAIN_CONTEXT
+```
+
+Do not start with a complex multitask head unless the action-label path works.
+The first implementation should train one token classification head over action
+labels and write role counts/reasons into the training report.
+
+#### Rights Constraints
+
+Hard constraints for all agents:
+
+- In `balanced` mode, target-group terms are preservation anchors, not masking
+  targets.
+- `PROTECT_TARGET` means keep the target term unchanged unless a human-reviewed
+  official rule later says otherwise.
+- Preserve historical-victim and vulnerable-group references by default.
+- Preserve hostile actions, threats, exclusion, dehumanization, negation, and
+  modality.
+- Preserve counterspeech and quote/report markers so victim-protective or
+  evidence-gathering speech is not converted into a false hate signal.
+- Do not use a `hate` label as permission to remove the target group.
+- Do not use a `not_hate` label as permission to ignore target/action/negation
+  preservation.
+- Author self-disclosures involving protected identity should route to `REVIEW`
+  or cautious generalization, not automatic target masking.
+
+Borderline example:
+
+```text
+"I am Muslim and I hate refugees"
+```
+
+Expected policy:
+
+```text
+I          KEEP
+am         KEEP
+Muslim     REVIEW or cautious GENERALIZE_CONTEXT  # author self-disclosure
+and        KEEP
+I          KEEP
+hate       PROTECT_HSD
+refugees   PROTECT_TARGET                         # target of hostility
+```
+
+The model should learn the difference between an author self-disclosure and a
+target of hostility. The deterministic validator must still prevent accidental
+target/action/negation removal.
+
+#### Weak Supervision
+
+Generate training labels from public data and existing deterministic rules.
+Manual token labeling is not required for the MVP.
+
+Weak label sources:
+
+- Direct identifier detectors create `MASK_IDENTIFIER`.
+- Quasi-identifier detectors create `GENERALIZE_CONTEXT`.
+- Target dictionaries create `PROTECT_TARGET`.
+- `target` and `target_categories` metadata reinforce `PROTECT_TARGET`.
+- Hate/action cue lexicons create `PROTECT_HSD`.
+- Threat, dehumanization, exclusion, negation, and modality terms create
+  `PROTECT_HSD`.
+- HateXplain token rationales create `PROTECT_HSD` unless they overlap a direct
+  identifier.
+- Toxic Spans character rationales create `PROTECT_HSD` unless they overlap a
+  direct identifier.
+- Counterspeech, quotation/reporting, and public-interest context markers
+  create `PROTECT_HSD` or `REVIEW`.
+- Hashtags, repeated punctuation, repeated letters, casing bursts, emoji, and
+  symbol bursts create `NORMALIZE_STYLE` unless they overlap protected HSD
+  cues.
+- `ambiguous`, `ambiguous_abuse`, `offensive`, `toxic`, `abuse`, `not_abuse`,
+  and `not_abusive` labels add review/context priority; they do not directly
+  create hate/non-hate decisions.
+
+Priority policy when labels conflict:
+
+```text
+direct handle/email/phone/url/id    -> MASK_IDENTIFIER
+target/action/negation/modality     -> PROTECT_TARGET or PROTECT_HSD
+author self-disclosure              -> REVIEW
+quasi identifier                    -> GENERALIZE_CONTEXT
+style marker                        -> NORMALIZE_STYLE
+otherwise                           -> KEEP
+```
+
+Special case: if a token is both a target-group term and a possible
+context-name/location candidate, prefer target protection in `balanced` unless
+there is a strong direct-identifier signal. Do not let weak person/location
+patterns erase vulnerable-group target evidence.
+
+#### Label-Feature Relation Table
+
+Before transformer fine-tuning, implement a transparent relation-table report.
+This gives an explainable "attention-like" feature-importance layer and can
+feed reranking even if transformer training is skipped.
+
+Proposed command:
+
+```bash
+contextsafe-hsd label-feature-report \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --source-col source \
+  --label-col label \
+  --target-col target \
+  --target-categories-col target_categories \
+  --rationale-col rationale_spans \
+  --output data/outputs/recommended_merged.label_feature_report.json
+```
+
+Report rows should aggregate, without raw text examples:
+
+```text
+feature_hash
+feature_preview_safe     optional short feature only if non-sensitive and not official
+feature_type             unigram, bigram, char_ngram, target_span, action_span,
+                         negation, rationale_span, style_marker, identifier
+source
+label_or_label_set
+row_count_with_feature
+total_occurrences
+mean_tfidf
+document_frequency
+label_frequency
+log_odds_or_pmi
+mean_span_length
+position_bucket
+suggested_policy         protect, mask_if_identifier, normalize, review, neutral
+reason_codes
+```
+
+Do not include raw official examples. For official data, prefer hashes, counts,
+row IDs, and safe feature categories over literal text dumps.
+
+#### Implementation Tasks
+
+Add a new optional module:
+
+```text
+privhsd/token_policy.py
+```
+
+Add optional dependency extra in `pyproject.toml`:
+
+```toml
+token-policy = [
+  "transformers>=4.40",
+  "torch>=2.1",
+  "datasets>=2.19",
+  "evaluate>=0.4",
+  "seqeval>=1.2",
+]
+```
+
+Add CLI commands:
+
+```text
+train-token-policy
+predict-token-policy
+apply-token-policy-candidates
+label-feature-report
+```
+
+MVP command shapes:
+
+```bash
+contextsafe-hsd train-token-policy \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --source-col source \
+  --label-col label \
+  --target-col target \
+  --target-categories-col target_categories \
+  --rationale-col rationale_spans \
+  --model-name FacebookAI/roberta-base \
+  --sample-size 30000 \
+  --sample-strategy source_label_round_robin \
+  --max-length 192 \
+  --epochs 1 \
+  --batch-size 8 \
+  --output-dir data/outputs/token_policy_roberta_base \
+  --report data/outputs/token_policy_roberta_base.train.json
+```
+
+```bash
+contextsafe-hsd predict-token-policy \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --source-col source \
+  --label-col label \
+  --target-col target \
+  --target-categories-col target_categories \
+  --rationale-col rationale_spans \
+  --model-dir data/outputs/token_policy_roberta_base \
+  --sample-size 1000 \
+  --output data/outputs/token_policy_roberta_base.predictions.json
+```
+
+```bash
+contextsafe-hsd apply-token-policy-candidates \
+  --input data/public_dev/recommended_merged.csv \
+  --output data/outputs/recommended_merged.token_policy_candidates.csv \
+  --text-col text \
+  --id-col id \
+  --policy-predictions data/outputs/token_policy_roberta_base.predictions.json \
+  --candidate-col token_policy_candidate \
+  --audit data/outputs/recommended_merged.token_policy_candidates.audit.json
+```
+
+`apply-token-policy-candidates` must not write final official output directly.
+It writes candidate text or candidate action columns for reranking. Final
+submission still goes through `create-submission`, `rerank-candidates`, and
+`validate-submission`.
+
+#### Tokenization And Alignment
+
+Implementation requirements:
+
+- Use the raw original text as the label source.
+- Tokenize with the model tokenizer using `return_offsets_mapping=True`.
+- Add a metadata prefix only if needed:
+
+  ```text
+  <source=dynahate> <label=hate> <target=religion> original text...
+  ```
+
+- If a metadata prefix is used, assign `-100` labels to all prefix tokens so
+  they do not contribute to token loss.
+- Align text-token labels to model subwords by character offsets.
+- Assign `-100` to special tokens.
+- For subword tokens that overlap a labeled character span, assign the span's
+  action label.
+- For subword tokens that do not overlap any action span, assign `KEEP`.
+- Store the label map in model metadata:
+
+  ```json
+  {
+    "KEEP": 0,
+    "MASK_IDENTIFIER": 1,
+    "GENERALIZE_CONTEXT": 2,
+    "PROTECT_TARGET": 3,
+    "PROTECT_HSD": 4,
+    "NORMALIZE_STYLE": 5,
+    "REVIEW": 6
+  }
+  ```
+
+- Preserve a model card/report locally with model name, revision if available,
+  data source counts, weak-label policy, training args, and limitations.
+
+#### Inference Policy
+
+The trained model is advisory. Convert model predictions to action spans, then
+apply deterministic guardrails:
+
+- Deterministic direct identifiers always mask.
+- Deterministic target/action/negation/modality protections override model
+  `MASK_IDENTIFIER` in `balanced` mode unless the token is a direct identifier
+  such as email/handle/phone/URL.
+- If model confidence is low or roles conflict, route to `REVIEW`.
+- The model may add style-normalization pressure but cannot delete protected
+  HSD cues.
+- The model may penalize reranker candidates that lose high-probability
+  `PROTECT_TARGET` or `PROTECT_HSD` spans.
+- The model may promote candidates that mask high-probability
+  `MASK_IDENTIFIER` or `GENERALIZE_CONTEXT` spans.
+- Final candidate must pass:
+  - exact-format validation,
+  - cue checks,
+  - source regression,
+  - residual privacy metrics.
+
+#### Qwen Fallback For Uncertain Rows
+
+Qwen remains the last-resort semantic review path, not the default model and
+not the final rewriter.
+
+Use Qwen only after deterministic and token-policy signals have already narrowed
+the queue:
+
+```text
+balanced/reranked candidate
+  -> deterministic cue/privacy checks
+  -> role-aware token-policy predictions
+  -> semantic-triage-report
+  -> qwen_semantic_check queue only
+  -> candidate validation/reranking
+  -> exact-format validation
+```
+
+Rows should enter the Qwen queue when:
+
+- the token-policy model emits low-confidence `REVIEW`;
+- protected-target and author-self-disclosure roles conflict;
+- target/action/negation cues appear to be lost;
+- context tags such as counterspeech, quotation/reporting, or public-interest
+  criticism are present and the transformation changed the row;
+- source labels are ambiguous or adjacent (`ambiguous`, `offensive`, `toxic`,
+  `abuse`) and deterministic checks are not enough;
+- residual privacy warnings remain after deterministic masking.
+
+Qwen output must be treated as advisory:
+
+- It may propose semantic tags, uncertainty reasons, or one candidate rewrite.
+- It must not decide legal hate speech.
+- It must not change labels or metadata.
+- It must not directly overwrite the official output.
+- Any rewrite must pass target/action/negation retention, residual privacy
+  checks, length-drift checks, reranking, and exact-format validation.
+
+If Qwen does not improve official or bounded local tradeoff on the review
+queue, keep it as a demo/evidence path only.
+
+#### Immediate Testing Order
+
+Start testing without transformer fine-tuning:
+
+1. Verify corpus availability and schema:
+
+   ```bash
+   head -1 data/public_dev/recommended_merged.csv
+   python -m privhsd.cli profile-dataset \
+     --input data/public_dev/recommended_merged.csv \
+     --text-col text \
+     --id-col id \
+     --label-col label \
+     --source-col source \
+     --output data/outputs/recommended_merged.profile.refresh.json
+   ```
+
+2. Run a very small existing weak token-action baseline first. Do not start at
+   30k during interactive development:
+
+   ```bash
+   contextsafe-hsd train-token-action-tagger \
+     --input data/public_dev/recommended_merged.csv \
+     --text-col text \
+     --id-col id \
+     --sample-size 500 \
+     --model data/outputs/token_action_tagger.smoke500.pkl \
+     --output data/outputs/token_action_tagger.smoke500.json
+   ```
+
+3. If the 500-row smoke is sane, run a 5k source/label baseline or update
+   `train-token-action-tagger` to support source/label round-robin sampling.
+   Keep 30k as a batch job:
+
+   ```bash
+   contextsafe-hsd train-token-action-tagger \
+     --input data/public_dev/recommended_merged.csv \
+     --text-col text \
+     --id-col id \
+     --sample-size 5000 \
+     --model data/outputs/token_action_tagger.smoke5000.pkl \
+     --output data/outputs/token_action_tagger.smoke5000.json
+   ```
+
+4. Implement `label-feature-report` and inspect whether the relation table
+   finds useful protect/mask/review signals by source and label.
+5. Implement weak-label dataset export for token policy training and test it on
+   a tiny sample first. Verify target terms are labeled `PROTECT_TARGET`.
+6. Load `FacebookAI/roberta-base` as `AutoModelForTokenClassification` with
+   seven labels and run a 100-row overfit smoke test before any large run.
+7. Train a bounded sample (`sample-size 30000`, one epoch) only after tokenizer
+   alignment and guardrail tests pass.
+8. Feed predictions into candidate/reranking reports, not into official output.
+9. Use Qwen only for the final uncertain queue produced by semantic triage.
+
+When heading home / before model downloads:
+
+- `FacebookAI/roberta-base` is already cached locally in this environment; still
+  confirm cache before relying on offline mode.
+- Do not download all optional models at once. Start with RoBERTa-base.
+- Download `cardiffnlp/twitter-roberta-base` only after the RoBERTa-base
+  training loop and guardrail tests work.
+- Defer `vinai/bertweet-base` until tweet-specific preprocessing is worth the
+  complexity.
+- Keep all model outputs, checkpoints, and reports under ignored `data/outputs/`
+  or the Hugging Face cache. Do not commit them.
+
+#### Evaluation
+
+Token-policy model metrics:
+
+- token accuracy;
+- macro-F1;
+- per-action precision/recall/F1/support;
+- confusion matrix;
+- especially report recall for:
+  - `MASK_IDENTIFIER`,
+  - `PROTECT_TARGET`,
+  - `PROTECT_HSD`,
+  - `REVIEW`.
+
+Pipeline metrics after applying token-policy candidates through reranking:
+
+- target cue retention;
+- action cue retention;
+- negation/modality retention;
+- rationale-span retention;
+- residual direct identifiers;
+- residual quasi identifiers;
+- changed-text rate;
+- character retention;
+- source/label slice regressions;
+- local utility model agreement where available;
+- runtime and model size.
+
+Acceptance criteria before using it as an official alternate:
+
+- `balanced` remains the first official submission.
+- Token-policy candidate must not reduce target/action/negation retention
+  versus `balanced`.
+- It must not mask target-group terms in `balanced` mode.
+- It must reduce residual privacy/style risk or improve official tradeoff.
+- It must pass exact-format validation.
+- It must provide a clear report explaining what it changed and why.
+
+Stop criteria:
+
+- If the model mostly learns the weak rules without adding useful decisions,
+  keep it as evidence only.
+- If it masks target groups, hostile actions, negation, or counterspeech,
+  reject it.
+- If runtime or dependency cost is too high for the challenge, keep the
+  relation table and scikit-learn weak tagger instead.
+- If official metrics do not improve after one bounded alternate submission,
+  do not scale it.
+
+#### Agent Instruction
+
+Use this task prompt for a future coding agent:
+
+```text
+Implement the planned role-aware token policy as an optional extension.
+Do not change the default balanced submission path.
+
+Start with label-feature-report and a weak-label dataset builder over
+data/public_dev/recommended_merged.csv. Then add train-token-policy using
+FacebookAI/roberta-base with AutoModelForTokenClassification. Align weak
+character/token action labels to tokenizer offsets. Save model artifacts and
+reports only under ignored data/outputs/.
+
+The model predicts token actions, not final text. It is advisory only. Add
+predict-token-policy and apply-token-policy-candidates so predictions can feed
+reranking or semantic triage. Enforce hard constraints: never mask target-group
+terms in balanced mode, preserve target/action/negation/modality, and route
+author self-disclosure conflicts to REVIEW. Add focused tests for weak-label
+generation, tokenizer alignment, metadata-prefix label masking, and guardrails.
+
+Use Qwen only as a last-resort semantic checker for the uncertain review queue.
+Do not use Qwen on the full dataset and do not let Qwen directly overwrite final
+submission text.
+
+Run ruff, vulture, pytest, and bounded sample reports. Document model link,
+revision, training args, source/label counts, per-action metrics, and
+limitations. Do not commit model weights, raw official examples, downloaded
+datasets, or generated output.
+```
+
 ### 4. Hugging Face Utility Evaluator
 
 Status: implemented as `privhsd hf-model-registry` and

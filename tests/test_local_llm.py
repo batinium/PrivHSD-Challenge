@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 from urllib import error
 
@@ -290,21 +291,15 @@ def test_response_text_extracts_json_from_lm_studio_markers():
 
 
 def test_post_chat_completion_falls_back_when_response_format_rejected(monkeypatch):
-    class FakeResponse:
+    class FakeResponse(io.BytesIO):
         def __init__(self, payload):
-            self.payload = payload
+            super().__init__(json.dumps(payload).encode("utf-8"))
 
         def __enter__(self):
             return self
 
         def __exit__(self, _exc_type, _exc, _traceback):
             return False
-
-        def read(self):
-            return json.dumps(self.payload).encode("utf-8")
-
-        def close(self):
-            pass
 
     calls = []
 
