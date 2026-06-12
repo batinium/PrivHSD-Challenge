@@ -83,7 +83,16 @@ privhsd check-hsd-cues
 privhsd semantic-triage-report
 privhsd source-regression-report
 privhsd check-metadata-leakage
+privhsd label-feature-report
+privhsd train-token-policy
+privhsd evaluate-token-policy
+privhsd evaluate-token-policy-ensemble
+privhsd predict-token-policy
+privhsd predict-token-policy-ensemble
+privhsd apply-token-policy-candidates
 privhsd prepare-dynahate
+privhsd prepare-recommended-datasets
+privhsd prepare-tweet-eval-unseen
 ```
 
 Core `privhsd anonymize` remains dependency-light and does not require
@@ -94,6 +103,438 @@ Hugging Face utility probes are optional through `privhsd[hf-utility]`.
 The local `.venv` now has optional HF, Presidio/spaCy, DPMLM, and
 scikit-learn experiment dependencies installed for bounded runs; these remain
 outside core runtime requirements.
+
+## Latest Token-Policy Fine-Tuning State
+
+Role-aware token policy was implemented on 2026-06-12 as an optional extension,
+not a replacement for the `balanced` submission path. New module:
+`privhsd/token_policy.py`.
+
+Merged CSV validation before training:
+
+- `data/public_dev/recommended_merged.csv`: 159,668 rows
+- required columns present: `id`, `text`, `label`, `source`
+- no blank text/labels/source/IDs
+- no duplicate merged IDs
+- no invalid source/label pairs across the known nine public sources
+- `meta` parsed as JSON for all rows
+- optional missing fields are source-specific: `severity`, `target_categories`,
+  `rationale_spans`, `target`, `split`, and `type`
+
+Artifacts from smoke checks:
+
+```text
+data/outputs/recommended_merged.profile.refresh.json
+data/outputs/token_action_tagger.smoke500.json
+data/outputs/token_action_tagger.smoke500.pkl
+data/outputs/recommended_merged.label_feature_report.smoke500.json
+data/outputs/token_policy_roberta_base.smoke120/
+data/outputs/token_policy_roberta_base.smoke120.train.json
+data/outputs/token_policy_roberta_base.smoke120.predictions.sample40.json
+data/outputs/recommended_merged.token_policy_candidates.smoke40.csv
+data/outputs/recommended_merged.token_policy_candidates.smoke40.audit.json
+```
+
+Smoke results:
+
+- focused token-policy/action tests: `11 passed`
+- full repo suite: `131 passed, 1 skipped`
+- 500-row label-feature report used source/label round-robin sampling and
+  emitted all expected action classes, with feature values hashed
+- RoBERTa smoke run used `FacebookAI/roberta-base` revision
+  `e2da8e2f811d1448a5b465c236feacd80ffbac7b`, CPU, 120 sampled rows, two
+  capped train steps, and saved/reloaded successfully
+- sample prediction/candidate handoff preserved all 159,668 rows and changed 6
+  candidate cells in the smoke helper output
+
+CUDA correction:
+
+- Initial 30k run used CPU because the venv had `torch 2.12.0+cpu`;
+  `torch.version.cuda` was `None` and `torch.cuda.is_available()` was `False`.
+- Host GPU was visible through `nvidia-smi`: NVIDIA GeForce RTX 5090 Laptop GPU,
+  driver CUDA 13.2.
+- Replaced CPU torch with `torch 2.12.0+cu130` from the official PyTorch CUDA
+  13.0 index.
+- Verified CUDA tensor matmul and a two-step CUDA smoke fine-tune.
+
+Completed bounded CUDA run:
+
+```text
+Command: privhsd train-token-policy --sample-size 30000 --sample-strategy source_label_round_robin --max-length 192 --epochs 1 --batch-size 32 --device cuda
+Output dir: data/outputs/token_policy_roberta_base.train30000.cuda
+Report: data/outputs/token_policy_roberta_base.train30000.cuda.train.json
+Log: data/outputs/logs/token_policy_roberta_base.train30000.cuda.log
+```
+
+Result:
+
+```text
+runtime_seconds: 160.8453
+device: cuda
+train_steps: 797
+train_loss: 0.1188
+dev_accuracy: 0.9831
+dev_macro_f1: 0.7875
+```
+
+Per-action dev F1:
+
+```text
+KEEP: 0.9902
+MASK_IDENTIFIER: 0.9870
+GENERALIZE_CONTEXT: 0.7333
+PROTECT_TARGET: 0.9704
+PROTECT_HSD: 0.8556
+NORMALIZE_STYLE: 0.9759
+REVIEW: 0.0 on 14 dev tokens
+```
+
+Post-CUDA-install full test suite: `131 passed, 1 skipped`.
+
+## Improved Token-Policy Replication Recipe
+
+To reduce overfitting and improve rare-action learning, use action/source-aware
+sampling instead of plain source/label round-robin:
+
+```bash
+.venv/bin/python -m privhsd.cli train-token-policy \
+  --input data/public_dev/recommended_merged.csv \
+  --text-col text \
+  --id-col id \
+  --source-col source \
+  --label-col label \
+  --target-col target \
+  --target-categories-col target_categories \
+  --rationale-col rationale_spans \
+  --model-name FacebookAI/roberta-base \
+  --sample-size 30000 \
+  --sample-strategy action_source_balanced \
+  --split-strategy grouped_text \
+  --class-weighting capped_inverse_sqrt \
+  --max-class-weight 6 \
+  --max-length 192 \
+  --epochs 1 \
+  --batch-size 32 \
+  --device cuda \
+  --output-dir data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda \
+  --report data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda.train.json \
+  --log-steps 50
+```
+
+Why these settings:
+
+- `action_source_balanced`: profiles the merged CSV and selects rows that cover
+  rare token actions such as `REVIEW`, `GENERALIZE_CONTEXT`, `MASK_IDENTIFIER`,
+  `PROTECT_TARGET`, `PROTECT_HSD`, and `NORMALIZE_STYLE`, while preserving
+  source/label coverage.
+- `grouped_text`: keeps normalized duplicate text groups on only one side of
+  train/dev to reduce leakage and inflated validation metrics.
+- `capped_inverse_sqrt`: upweights rare action labels without making rare-label
+  gradients unstable.
+- `max-class-weight 6`: caps rare-action weights.
+
+Smoke artifact proving sampler behavior:
+
+```text
+data/outputs/token_policy_roberta_base.action_balanced_smoke800.train.json
+```
+
+The smoke profiled all 159,668 rows, selected 800 rows, included 115 rows with
+`REVIEW`, and produced zero grouped-text duplicate overlap between train/dev.
+
+Completed improved CUDA run:
+
+```text
+Report: data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda.train.json
+Model dir: data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda
+Log: data/outputs/logs/token_policy_roberta_base.action_balanced_train30000.cuda.log
+runtime_seconds: 160.511
+device: cuda
+train_steps: 797
+train_loss: 0.1829
+dev_accuracy: 0.9739
+dev_macro_f1: 0.9061
+```
+
+Per-action dev F1:
+
+```text
+KEEP: 0.9847
+MASK_IDENTIFIER: 0.9818
+GENERALIZE_CONTEXT: 0.8173
+PROTECT_TARGET: 0.8665
+PROTECT_HSD: 0.8425
+NORMALIZE_STYLE: 0.9680
+REVIEW: 0.8818 on 103 dev tokens
+```
+
+Selection report highlights:
+
+```text
+profiled_rows: 159,668
+selected_rows: 30,000
+selected REVIEW rows: 623
+selected MASK_IDENTIFIER rows: 5,281
+selected GENERALIZE_CONTEXT rows: 2,960
+selected PROTECT_TARGET rows: 10,043
+selected PROTECT_HSD rows: 14,432
+selected NORMALIZE_STYLE rows: 6,117
+grouped_text duplicate_group_overlap_count: 0
+```
+
+Internal unseen holdout from rows not selected by the action-balanced 30k run:
+
+```text
+Heldout CSV: data/outputs/recommended_merged.unseen_action_balanced5000.csv
+Selection manifest: data/outputs/recommended_merged.unseen_action_balanced5000.selection.json
+Evaluation: data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda.unseen5000.evaluate.json
+heldout_rows: 5,000
+overlap_with_training_indices: 0
+device: cuda
+accuracy: 0.9739
+macro_f1: 0.7767
+```
+
+Per-action heldout F1:
+
+```text
+KEEP: 0.9851
+MASK_IDENTIFIER: 0.9771
+GENERALIZE_CONTEXT: 0.8161
+PROTECT_TARGET: 0.8481
+PROTECT_HSD: 0.8464
+NORMALIZE_STYLE: 0.9638
+REVIEW: 0.0, support 0
+```
+
+The lower heldout macro-F1 is mostly an artifact of no `REVIEW` support in the
+remaining 5,000-row slice; the action-balanced 30k selection intentionally
+consumed all available rare-review rows.
+
+Grouped K-fold support was added to `train-token-policy` with
+`--fold-count` and `--fold-index`. Use grouped K-fold for robustness evidence,
+not for a final ensemble unless official scoring shows that multiple saved
+policies are worth the complexity.
+
+Replication command used for five folds:
+
+```bash
+for fold in 0 1 2 3 4; do
+  .venv/bin/python -m privhsd.cli train-token-policy \
+    --input data/public_dev/recommended_merged.csv \
+    --text-col text --id-col id \
+    --source-col source --label-col label \
+    --target-col target --target-categories-col target_categories \
+    --rationale-col rationale_spans \
+    --model-name FacebookAI/roberta-base \
+    --sample-size 30000 \
+    --sample-strategy action_source_balanced \
+    --split-strategy grouped_text \
+    --fold-count 5 \
+    --fold-index "$fold" \
+    --class-weighting capped_inverse_sqrt \
+    --max-class-weight 6 \
+    --max-length 192 \
+    --epochs 1 \
+    --batch-size 32 \
+    --device cuda \
+    --output-dir "data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold${fold}.cuda" \
+    --report "data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold${fold}.cuda.train.json" \
+    --log-steps 100
+done
+```
+
+K-fold artifacts:
+
+```text
+data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold0.cuda.train.json
+data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold1.cuda.train.json
+data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold2.cuda.train.json
+data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold3.cuda.train.json
+data/outputs/token_policy_roberta_base.action_balanced_kfold5_fold4.cuda.train.json
+data/outputs/token_policy_roberta_base.action_balanced_kfold5.summary.json
+```
+
+K-fold aggregate:
+
+```text
+dev_accuracy mean/std/min/max: 0.9733 / 0.0049 / 0.9656 / 0.9804
+dev_macro_f1 mean/std/min/max: 0.8977 / 0.0152 / 0.8809 / 0.9194
+train_loss mean/std: 0.1904 / 0.0008
+dev_loss mean/std: 0.0764 / 0.0132
+runtime_seconds mean/std: 155.0087 / 0.2195 per fold
+duplicate_group_overlap_total: 0
+```
+
+K-fold per-action F1 mean/std:
+
+```text
+KEEP: 0.9844 / 0.0029
+MASK_IDENTIFIER: 0.9768 / 0.0139
+GENERALIZE_CONTEXT: 0.8224 / 0.0526
+PROTECT_TARGET: 0.9087 / 0.0170
+PROTECT_HSD: 0.8226 / 0.0291
+NORMALIZE_STYLE: 0.9617 / 0.0090
+REVIEW: 0.8071 / 0.0682
+```
+
+External unseen dataset support was added through `prepare-tweet-eval-unseen`,
+which fetches fixed Hugging Face Dataset Viewer splits from
+`cardiffnlp/tweet_eval` and normalizes them to the common CSV schema. Current
+artifact:
+
+```text
+CSV: data/external_unseen/tweet_eval_hate_offensive_test.csv
+Manifest: data/external_unseen/tweet_eval_hate_offensive_test.manifest.json
+Rows: 3,830
+Sources: tweet_eval_hate 2,970; tweet_eval_offensive 860
+Labels: tweet_eval_hate hate 1,252 / not_hate 1,718; tweet_eval_offensive offensive 240 / not_hate 620
+```
+
+Important label note: initial normalization mapped TweetEval `non-hate` to
+`non_hate`; this was corrected to `not_hate`, covered by a regression test, and
+the current manifest records the local repair because HF returned a 429 during
+the immediate refetch.
+
+External evaluation command:
+
+```bash
+.venv/bin/python -m privhsd.cli evaluate-token-policy \
+  --input data/external_unseen/tweet_eval_hate_offensive_test.csv \
+  --model-dir data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda \
+  --text-col text --id-col id \
+  --source-col source --label-col label \
+  --target-col target --target-categories-col target_categories \
+  --rationale-col rationale_spans \
+  --batch-size 64 \
+  --output data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda.tweet_eval_external.evaluate.json
+```
+
+External TweetEval result:
+
+```text
+accuracy: 0.9844
+macro_f1: 0.8581
+KEEP F1: 0.9893
+MASK_IDENTIFIER F1: 0.9710
+GENERALIZE_CONTEXT F1: 0.7699
+PROTECT_TARGET F1: 0.6672
+PROTECT_HSD F1: 0.9526
+NORMALIZE_STYLE F1: 0.9897
+REVIEW F1: 0.6667 on 2 support tokens
+```
+
+Interpretation: external transfer is strong for identifiers, HSD cues, and
+style markers. `PROTECT_TARGET` drops because TweetEval lacks the rich target
+metadata available in the merged public bundle, so target spans must come mostly
+from dictionaries.
+
+HateBERT backbone comparison added after the RoBERTa run:
+
+```text
+Model: GroNLP/hateBERT
+HF revision: ab7a2d40f6c973cb57e63f23bfa2b51d981d028c
+License tag: apache-2.0
+Task setup: same 30k action-balanced token-policy fine-tune, CUDA, one epoch
+Report: data/outputs/token_policy_hatebert.action_balanced_train30000.cuda.train.json
+Model dir: data/outputs/token_policy_hatebert.action_balanced_train30000.cuda
+Log: data/outputs/logs/token_policy_hatebert.action_balanced_train30000.cuda.log
+External eval: data/outputs/token_policy_hatebert.action_balanced_train30000.cuda.tweet_eval_external.evaluate.json
+```
+
+Internal dev result:
+
+```text
+runtime_seconds: 159.1268
+train_loss: 0.1965
+accuracy: 0.9689
+macro_f1: 0.8908
+KEEP F1: 0.9814
+MASK_IDENTIFIER F1: 0.9666
+GENERALIZE_CONTEXT F1: 0.7071
+PROTECT_TARGET F1: 0.9209
+PROTECT_HSD F1: 0.8161
+NORMALIZE_STYLE F1: 0.9709
+REVIEW F1: 0.8727
+```
+
+External TweetEval result for HateBERT:
+
+```text
+accuracy: 0.9767
+macro_f1: 0.8254
+KEEP F1: 0.9825
+MASK_IDENTIFIER F1: 0.9173
+GENERALIZE_CONTEXT F1: 0.6122
+PROTECT_TARGET F1: 0.7964
+PROTECT_HSD F1: 0.9815
+NORMALIZE_STYLE F1: 0.9877
+REVIEW F1: 0.5000 on 2 support tokens
+```
+
+Comparison against the prior RoBERTa action-balanced single run:
+
+```text
+Internal macro-F1: HateBERT 0.8908 vs RoBERTa 0.9061
+Internal PROTECT_TARGET F1: HateBERT 0.9209 vs RoBERTa 0.8665
+External macro-F1: HateBERT 0.8254 vs RoBERTa 0.8581
+External PROTECT_TARGET F1: HateBERT 0.7964 vs RoBERTa 0.6672
+External PROTECT_HSD F1: HateBERT 0.9815 vs RoBERTa 0.9526
+External MASK_IDENTIFIER F1: HateBERT 0.9173 vs RoBERTa 0.9710
+```
+
+Verdict: HateBERT is a strong candidate when optimizing target/HSD protection,
+especially on external transfer. RoBERTa remains stronger overall and for
+identifier/generalization behavior. The next experiment should either train
+with target-rich external rows or combine backbones as reranker features rather
+than replacing the deterministic anonymizer.
+
+RoBERTa+HateBERT ensemble support was added after the backbone comparison:
+
+```text
+Commands:
+  evaluate-token-policy-ensemble
+  predict-token-policy-ensemble
+Mode used: mean_prob
+Members:
+  data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda
+  data/outputs/token_policy_hatebert.action_balanced_train30000.cuda
+```
+
+The ensemble aligns each model's subword probabilities back to original
+regex-token spans, then combines probabilities. This avoids invalid logit
+averaging across different tokenizers.
+
+External TweetEval equal-weight ensemble:
+
+```text
+Report: data/outputs/token_policy_ensemble.roberta_hatebert.tweet_eval_external.evaluate.json
+runtime_seconds: 78.6174
+accuracy: 0.9879
+macro_f1: 0.8837
+KEEP F1: 0.9931
+MASK_IDENTIFIER F1: 0.9638
+GENERALIZE_CONTEXT F1: 0.7903
+PROTECT_TARGET F1: 0.8143
+PROTECT_HSD F1: 0.9808
+NORMALIZE_STYLE F1: 0.9768
+REVIEW F1: 0.6667 on 2 support tokens
+```
+
+External TweetEval weighted ensemble with RoBERTa 1.0 and HateBERT 1.2:
+
+```text
+Report: data/outputs/token_policy_ensemble.roberta1_hatebert1p2.tweet_eval_external.evaluate.json
+runtime_seconds: 72.9744
+accuracy: 0.9843
+macro_f1: 0.8734
+PROTECT_TARGET F1: 0.8131
+```
+
+Verdict: use equal weights for now. It preserved most of RoBERTa's identifier
+strength while gaining target/HSD behavior from HateBERT.
+
+Post-change full test suite: `141 passed, 1 skipped`.
 
 ## Webinar Correction
 

@@ -8,3 +8,5 @@ dist/
 *.egg-info/
 data/public_dev/
 data/outputs/
+data/external_unseen/
+data/temp/

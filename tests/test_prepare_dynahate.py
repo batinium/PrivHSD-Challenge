@@ -3,6 +3,7 @@ import json
 
 from privhsd.datasets import (
     COMMON_DATASET_FIELDNAMES,
+    canonical_tweet_eval_label,
     merge_normalized_datasets,
     normalize_convabuse,
     normalize_dynahate,
@@ -24,6 +25,12 @@ def write_csv(path, fieldnames, rows, delimiter=","):
         writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter=delimiter)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def test_canonical_tweet_eval_label_maps_non_hate_to_not_hate():
+    assert canonical_tweet_eval_label("hate", "non-hate") == "not_hate"
+    assert canonical_tweet_eval_label("offensive", "non-offensive") == "not_hate"
+    assert canonical_tweet_eval_label("offensive", "offensive") == "offensive"
 
 
 def test_normalize_dynahate_shape(tmp_path):

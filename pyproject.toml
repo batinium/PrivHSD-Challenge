@@ -27,6 +27,13 @@ dpmlm = ["dpmlm>=1.1.2"]
 hf-utility = ["transformers>=4.40", "torch>=2.1"]
 presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
 token-actions = ["scikit-learn>=1.3"]
+token-policy = [
+  "transformers>=4.40",
+  "torch>=2.1",
+  "datasets>=2.19",
+  "evaluate>=0.4",
+  "seqeval>=1.2",
+]
 
 [project.scripts]
 contextsafe-hsd = "privhsd.cli:main"

@@ -104,6 +104,10 @@ DEFAULT_MEASURING_HATE_SPEECH_PARQUET_ALIAS = (
     "hf://datasets/ucberkeley-dlab/measuring-hate-speech@~parquet/default/"
     "train/0000.parquet"
 )
+DEFAULT_TWEET_EVAL_DATASET = "cardiffnlp/tweet_eval"
+DEFAULT_TWEET_EVAL_CONFIGS = ["hate", "offensive"]
+DEFAULT_TWEET_EVAL_SPLIT = "test"
+DEFAULT_HF_DATASET_VIEWER_ENDPOINT = "https://datasets-server.huggingface.co"
 DEFAULT_RECOMMENDED_DATASETS = [
     "dynahate",
     "hatecheck",
@@ -258,6 +262,177 @@ def common_row(
         "rationale_spans": str(rationale_spans or ""),
         "meta": compact_json(meta or {}),
     }
+
+
+def hf_dataset_viewer_json(
+    endpoint: str,
+    path: str,
+    params: dict[str, Any],
+    *,
+    timeout: int = 120,
+) -> dict[str, Any]:
+    query = urllib.parse.urlencode(params)
+    url = f"{endpoint.rstrip('/')}/{path.lstrip('/')}?{query}"
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def hf_dataset_viewer_rows(
+    *,
+    dataset: str,
+    config: str,
+    split: str,
+    page_size: int,
+    max_rows: int | None,
+    request_delay: float,
+    endpoint: str = DEFAULT_HF_DATASET_VIEWER_ENDPOINT,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if page_size < 1:
+        raise ValueError("page_size must be positive")
+    output_rows: list[dict[str, Any]] = []
+    features: list[dict[str, Any]] = []
+    offset = 0
+    total_rows: int | None = None
+    while total_rows is None or offset < total_rows:
+        if max_rows is not None and len(output_rows) >= max_rows:
+            break
+        length = page_size
+        if max_rows is not None:
+            length = min(length, max_rows - len(output_rows))
+        payload = hf_dataset_viewer_json(
+            endpoint,
+            "rows",
+            {
+                "dataset": dataset,
+                "config": config,
+                "split": split,
+                "offset": offset,
+                "length": length,
+            },
+        )
+        features = payload.get("features", features)
+        page_rows = payload.get("rows", [])
+        total_rows = int(payload.get("num_rows_total", len(page_rows)))
+        if not page_rows:
+            break
+        output_rows.extend(page_rows)
+        offset += len(page_rows)
+        if request_delay > 0:
+            time.sleep(request_delay)
+    return output_rows, features
+
+
+def class_label_name(features: list[dict[str, Any]], label: Any) -> str:
+    try:
+        label_index = int(label)
+    except (TypeError, ValueError):
+        return str(label)
+    for feature in features:
+        if feature.get("name") != "label":
+            continue
+        label_type = feature.get("type", {})
+        names = label_type.get("names")
+        if isinstance(names, list) and 0 <= label_index < len(names):
+            return str(names[label_index])
+    return str(label)
+
+
+def canonical_tweet_eval_label(config: str, label_name: str) -> str:
+    normalized = label_name.strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"non_hate", "non_hateful", "not_hate"}:
+        return "not_hate"
+    if config == "offensive" and normalized in {"non_offensive", "not_offensive"}:
+        return "not_hate"
+    return canonical_hate_label(normalized)
+
+
+def prepare_tweet_eval_unseen(
+    *,
+    output_path: Path,
+    manifest_path: Path | None = None,
+    dataset: str = DEFAULT_TWEET_EVAL_DATASET,
+    configs: list[str] | None = None,
+    split: str = DEFAULT_TWEET_EVAL_SPLIT,
+    max_rows_per_config: int | None = None,
+    page_size: int = 100,
+    request_delay: float = 0.0,
+    endpoint: str = DEFAULT_HF_DATASET_VIEWER_ENDPOINT,
+) -> dict[str, Any]:
+    selected_configs = configs or list(DEFAULT_TWEET_EVAL_CONFIGS)
+    allowed_configs = set(DEFAULT_TWEET_EVAL_CONFIGS)
+    unknown = [config for config in selected_configs if config not in allowed_configs]
+    if unknown:
+        raise ValueError(f"unsupported TweetEval config(s): {', '.join(unknown)}")
+
+    rows: list[dict[str, str]] = []
+    label_counts: dict[str, Counter[str]] = {}
+    source_counts: Counter[str] = Counter()
+    for config in selected_configs:
+        page_rows, features = hf_dataset_viewer_rows(
+            dataset=dataset,
+            config=config,
+            split=split,
+            page_size=page_size,
+            max_rows=max_rows_per_config,
+            request_delay=request_delay,
+            endpoint=endpoint,
+        )
+        source = f"tweet_eval_{config}"
+        label_counts[source] = Counter()
+        for page_row in page_rows:
+            row_idx = page_row.get("row_idx")
+            raw = page_row.get("row", {})
+            label_name = class_label_name(features, raw.get("label"))
+            label = canonical_tweet_eval_label(config, label_name)
+            label_counts[source][label] += 1
+            source_counts[source] += 1
+            rows.append(
+                common_row(
+                    row_id=f"{source}:{split}:{row_idx}",
+                    text=raw.get("text", ""),
+                    label=label,
+                    source=source,
+                    split=split,
+                    type_=config,
+                    platform="twitter",
+                    source_id=row_idx,
+                    meta={
+                        "portal": "huggingface_dataset_viewer",
+                        "dataset": dataset,
+                        "config": config,
+                        "split": split,
+                        "row_idx": row_idx,
+                        "source_label": raw.get("label"),
+                        "source_label_name": label_name,
+                    },
+                )
+            )
+
+    row_count = write_common_rows(output_path, rows)
+    result = {
+        "artifact_type": "external_unseen_dataset",
+        "portal": "huggingface_dataset_viewer",
+        "dataset": dataset,
+        "configs": selected_configs,
+        "split": split,
+        "output": str(output_path),
+        "row_count": row_count,
+        "source_counts": dict(sorted(source_counts.items())),
+        "label_counts": {
+            source: dict(sorted(counts.items()))
+            for source, counts in sorted(label_counts.items())
+        },
+        "fieldnames": COMMON_DATASET_FIELDNAMES,
+        "max_rows_per_config": max_rows_per_config,
+        "page_size": page_size,
+    }
+    if manifest_path:
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return result
 
 
 def normalize_dynahate(raw_path: Path, output_path: Path) -> int:
@@ -1259,6 +1434,40 @@ def add_prepare_recommended_parser(
     )
     parser.add_argument("--measuring-page-size", type=int, default=100)
     parser.add_argument("--measuring-request-delay", type=float, default=0.1)
+
+
+def add_prepare_tweet_eval_unseen_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    parser = subparsers.add_parser(
+        "prepare-tweet-eval-unseen",
+        help="Fetch TweetEval hate/offensive test splits as an external unseen set.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("data/external_unseen/tweet_eval_hate_offensive_test.csv"),
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=Path("data/external_unseen/tweet_eval_hate_offensive_test.manifest.json"),
+    )
+    parser.add_argument(
+        "--config",
+        dest="configs",
+        action="append",
+        choices=DEFAULT_TWEET_EVAL_CONFIGS,
+        help="TweetEval config to fetch. Repeatable. Defaults to hate and offensive.",
+    )
+    parser.add_argument("--split", default=DEFAULT_TWEET_EVAL_SPLIT)
+    parser.add_argument(
+        "--max-rows-per-config",
+        type=int,
+        help="Optional cap for smoke tests.",
+    )
+    parser.add_argument("--page-size", type=int, default=100)
+    parser.add_argument("--request-delay", type=float, default=0.0)
 
 
 def main(argv: list[str] | None = None) -> int:
