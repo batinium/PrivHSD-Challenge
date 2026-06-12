@@ -74,6 +74,19 @@ This CSV stores the prompt, raw model response, parsed row labels, expected
 privacy/target annotations, local detector outputs, and weak token-action
 labels. It is still synthetic and must be curated before training.
 
+If the one-stream rate is too slow, shard safely into separate CSV files rather
+than letting multiple processes append to one CSV:
+
+```bash
+python scripts/generate_lm_studio_challenge_corpus.py \
+  --output data/outputs/synthetic_challenge_corpus.part01.csv \
+  --request-index-offset 25000 \
+  --id-prefix synthetic_lmstudio_p01 \
+  --target-count 25000
+```
+
+Use a separate `--status`, `--report`, and `--errors` path per shard.
+
 ## Regression Gates
 
 Run these before pushing detector or workbench changes:

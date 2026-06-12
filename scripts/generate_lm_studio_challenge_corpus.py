@@ -218,6 +218,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--seed", type=int, default=20260612)
+    parser.add_argument(
+        "--request-index-offset",
+        type=int,
+        default=0,
+        help="Global request-index offset for sharded generation.",
+    )
+    parser.add_argument("--id-prefix", default="synthetic_lmstudio")
     parser.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--max-consecutive-errors", type=int, default=50)
     parser.add_argument("--retry-sleep", type=float, default=5.0)
@@ -630,6 +637,7 @@ def build_row(
     scenario: dict[str, Any],
     request_index: int,
     model: str,
+    id_prefix: str,
 ) -> tuple[dict[str, str], list[str]]:
     errors: list[str] = []
     text = re.sub(r"\s+", " ", str(parsed.get("text", "") or "")).strip()
@@ -663,7 +671,7 @@ def build_row(
     errors.extend(pii_errors)
     errors.extend(target_errors)
     errors.extend(rationale_errors)
-    row_id = f"synthetic_lmstudio_{request_index:06d}"
+    row_id = f"{id_prefix}_{request_index:06d}"
     meta = {
         "generator": "lm_studio",
         "model": model,
@@ -751,6 +759,7 @@ def status_payload(
         "artifact_type": "synthetic_challenge_corpus_status",
         "output": str(args.output),
         "target_count": args.target_count,
+        "request_index_offset": args.request_index_offset,
         "existing_rows_at_start": existing_rows,
         "written_this_run": written,
         "total_rows_estimate": total_rows,
@@ -797,7 +806,7 @@ def main() -> int:
     last_row_id: str | None = None
 
     try:
-        request_index = existing_rows
+        request_index = args.request_index_offset + existing_rows
         while existing_rows + written < args.target_count:
             if STOP_REQUESTED or args.stop_file.exists():
                 break
@@ -823,6 +832,7 @@ def main() -> int:
                     scenario=scenario,
                     request_index=request_index,
                     model=args.model,
+                    id_prefix=args.id_prefix,
                 )
                 if row["text_hash"] in existing_hashes:
                     duplicate_count += 1
