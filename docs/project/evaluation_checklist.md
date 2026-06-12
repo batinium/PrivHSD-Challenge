@@ -38,7 +38,7 @@ build:
 
 ## Generated Stress Cases
 
-Use LM Studio generation as a coverage probe first:
+Use the small LM Studio stress generator as a coverage probe first:
 
 ```bash
 python scripts/generate_lm_studio_stress_cases.py \
@@ -53,6 +53,26 @@ Inspect the report for `missing_expected_privacy_spans` and
 `missing_expected_target_spans`. Promote a generated pattern into training only
 after dedupe, label validation, source balancing, and token-action distribution
 checks.
+
+For a large challenge-oriented corpus, use the resumable one-row-per-request
+generator:
+
+```bash
+python scripts/generate_lm_studio_challenge_corpus.py \
+  --endpoint http://172.21.96.1:1234/v1/chat/completions \
+  --model gemma-4-e4b-uncensored-hauhaucs-aggressive \
+  --target-count 100000 \
+  --temperature 0.8 \
+  --heartbeat-every 25 \
+  --output data/outputs/synthetic_challenge_corpus.csv \
+  --errors data/outputs/synthetic_challenge_corpus.errors.jsonl \
+  --report data/outputs/synthetic_challenge_corpus.report.json \
+  --status data/outputs/synthetic_challenge_corpus.status.json
+```
+
+This CSV stores the prompt, raw model response, parsed row labels, expected
+privacy/target annotations, local detector outputs, and weak token-action
+labels. It is still synthetic and must be curated before training.
 
 ## Regression Gates
 

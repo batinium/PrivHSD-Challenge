@@ -164,6 +164,33 @@ def toxic_spans(parsed: Any, text: str) -> list[RationaleSpan]:
     return merge_rationale_spans(spans)
 
 
+def char_offset_spans(parsed: Any, text: str) -> list[RationaleSpan]:
+    ranges: list[tuple[int, int]] = []
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if isinstance(parsed, (list, tuple)):
+        for item in parsed:
+            if isinstance(item, dict):
+                start = coerce_int(item.get("start"))
+                end = coerce_int(item.get("end"))
+                if start is not None and end is not None:
+                    ranges.append((start, end))
+                continue
+            pair = pair_like(item)
+            if pair is not None:
+                ranges.append(pair)
+
+    spans: list[RationaleSpan] = []
+    for start, end in ranges:
+        if end <= start:
+            end = start + 1
+        start = max(0, min(start, len(text)))
+        end = max(start, min(end, len(text)))
+        if end > start:
+            spans.append(RationaleSpan(start, end, "char_offset_range"))
+    return merge_rationale_spans(spans)
+
+
 def merge_rationale_spans(spans: list[RationaleSpan]) -> list[RationaleSpan]:
     if not spans:
         return []
@@ -196,6 +223,8 @@ def parse_rationale_spans(
         return hatexplain_spans(parsed, text)
     if source_name == "toxic_spans":
         return toxic_spans(parsed, text)
+    if source_name.startswith("synthetic_") or source_name == "synthetic":
+        return char_offset_spans(parsed, text)
     return []
 
 

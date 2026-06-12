@@ -38,6 +38,18 @@ def test_toxic_spans_ignores_invalid_negative_offsets():
     assert spans == []
 
 
+def test_synthetic_rationale_spans_accept_char_offset_dicts():
+    spans = parse_rationale_spans(
+        source="synthetic_lmstudio_privhsd",
+        raw_value='[{"start": 6, "end": 11, "label": "action"}]',
+        text="Group leave now",
+    )
+
+    assert [(span.start, span.end, span.source_kind) for span in spans] == [
+        (6, 11, "char_offset_range")
+    ]
+
+
 def test_rationale_report_tracks_placeholder_overlap_without_raw_text():
     report = rationale_row_report(
         row_index=1,
