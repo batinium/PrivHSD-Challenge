@@ -1,5 +1,8 @@
 # Current Handoff
 
+Archived note: this file is historical. Use [../../README.md](../../README.md)
+and [../../project/roadmap.md](../../project/roadmap.md) for current workflow.
+
 Date: 2026-06-12
 
 ## Repo State
@@ -16,14 +19,7 @@ Branch:
 main
 ```
 
-Untracked files:
-
-```text
-Webinar.txt
-```
-
-`Webinar.txt` is untracked and 45,675 bytes; do not commit it unless explicitly
-requested. The webinar slide screenshots are outside the repo at:
+The webinar slide screenshots are outside the repo at:
 
 ```text
 /mnt/c/Users/noutr/Downloads/Ss
@@ -32,20 +28,20 @@ requested. The webinar slide screenshots are outside the repo at:
 Do not commit downloaded datasets, official challenge data, or generated
 `data/outputs/` artifacts.
 
-`prompt.md` contains the self-contained continuation prompt for the next model
-run/testing phase and is intended to be tracked.
+`docs/archive/agent_notes/prompt_lm_studio.md` contains the historical
+self-contained continuation prompt for the LM Studio testing phase.
 
 ## Read First
 
-1. `docs/challenge_requirements.md`
-2. `docs/roadmap.md`
-3. `docs/pipeline_design.md`
-4. `docs/methodology_justification.md`
-5. `agents/task_board.md`
-6. `agents/coding_rules.md`
+1. `docs/challenge/challenge_requirements.md`
+2. `docs/project/roadmap.md`
+3. `docs/project/pipeline_design.md`
+4. `docs/project/methodology_justification.md`
+5. `docs/archive/agent_notes/task_board.md`
+6. `docs/archive/agent_notes/coding_rules.md`
 
-Use `docs/experiment_verdict.md`, `docs/pipeline_design.md`, and
-`docs/roadmap.md` for current experiment results and implementation direction.
+Use `docs/project/experiment_verdict.md`, `docs/project/pipeline_design.md`, and
+`docs/project/roadmap.md` for current experiment results and implementation direction.
 Keep this handoff short.
 
 ## Current System
@@ -84,6 +80,7 @@ privhsd compare-presidio
 privhsd generate-llm-candidates
 privhsd benchmark-lm-context
 privhsd check-hsd-cues
+privhsd semantic-triage-report
 privhsd source-regression-report
 privhsd check-metadata-leakage
 privhsd prepare-dynahate
@@ -154,7 +151,7 @@ Important slide takeaways:
   validation, metadata preservation checks, file hashes, git commit, command,
   mode, and metrics in the manifest.
 - A08/A22: final pitch/demo outline and human-rights judging narrative in
-  `docs/final_pitch_outline.md`.
+  `docs/challenge/final_pitch_outline.md`.
 - A14: optional Presidio comparison baseline with overlap, detector-only counts,
   false-positive risk on HSD cues, runtime, and structured dependency skips.
 - A15: optional neural utility evaluator path via the Hugging Face registry and
@@ -170,7 +167,7 @@ Important slide takeaways:
 - Metadata leakage checker: `check-metadata-leakage` scans values such as `id`
   and `author` against text columns with exact and normalized matching.
 - A23: official submission checklist in
-  `docs/official_submission_checklist.md`.
+  `docs/challenge/official_submission_checklist.md`.
 - A30: bounded Hugging Face utility evaluator runs on
   `data/outputs/dynahate.reranked.csv`; default probes passed sample 25 and
   sample 100, Toxic-BERT passed sample 25, and HateXplain variants produced
@@ -199,7 +196,22 @@ Important slide takeaways:
   JSON, tagged, word-list, and binary-tag parsing. The early 2026-06-12 run
   wrote structured blocker reports because localhost refused the connection and
   the Tailscale endpoint timed out. Later the user provided the reachable
-  endpoint `http://169.254.83.107:1234`.
+  endpoint `http://169.254.83.107:1234`; during the later WSL run that
+  link-local endpoint stopped accepting TCP, and the working WSL endpoint was
+  `http://172.21.96.1:1234`.
+- A44: source/label-aware Qwen candidate generation. `generate-llm-candidates`
+  now accepts `--source-col` and `--label-col`, samples by source/label
+  round-robin, sends metadata as cue-preservation context, and rejects rewrite
+  candidates that lose action or negation/modality cues. `qwen/qwen3-4b-2507`
+  accepted 43/80 source/label-stratified candidates, but reranking selected
+  Qwen for only 1/80 rows, so it remains optional candidate evidence rather
+  than a baseline replacement.
+- A45: semantic triage fallback layer. `semantic-triage-report` ranks
+  already-privatized rows into `repair_before_model_review`,
+  `qwen_semantic_check`, and `no_review` using deterministic context tags,
+  conservative cue checks, source labels, and optional trained local classifier
+  confidence/margin. The Qwen stratified 80-row fallback run selected 21 rows
+  for review: 2 hard repair rows and 19 Qwen semantic-check rows.
 
 Latest merged public artifacts:
 
@@ -211,8 +223,19 @@ data/outputs/recommended_merged.balanced.validation.json
 data/outputs/recommended_merged.balanced.source_regression.json
 data/outputs/lm_context_benchmark.summary.json
 data/outputs/lm_context_benchmark.tailscale.blocked.json
-data/outputs/lm_context_benchmark.qwen3-0.6b.smoke5.json
-data/outputs/lm_context_benchmark.ministral-3-3b.smoke3.json
+data/outputs/lm_context_benchmark.liquid-lfm2-1.2b.sample20.gateway.json
+data/outputs/lm_context_benchmark.mistralai-ministral-3-3b.sample100.gateway.json
+data/outputs/lm_context_benchmark.nvidia-nemotron-3-nano-4b.sample20.gateway.json
+data/outputs/lm_context_benchmark.qwen-qwen3-4b-2507.sample20.gateway.json
+data/outputs/lm_context_benchmark.qwen-qwen3-4b-2507.sample100.labelaware.json
+data/outputs/recommended_merged.qwen_stratified80.qwen_experiment_summary.json
+data/outputs/recommended_merged.qwen_stratified80.semantic_triage.json
+```
+
+Latest verification:
+
+```text
+.venv/bin/python -m pytest -q -> 118 passed, 1 skipped in 4.34s
 ```
 
 Latest source-aware merged report summary:
@@ -227,10 +250,12 @@ Latest source-aware merged report summary:
 - negation/modality retention: 0.9989
 - rationale span retention: 0.9998, with 47,729/47,740 spans preserved
 
-Reachable LM Studio endpoint:
+LM Studio endpoint findings:
 
 ```text
-http://169.254.83.107:1234
+http://169.254.83.107:1234  initially reachable, later timed out from WSL
+http://172.21.96.1:1234     reachable from WSL for /v1/models and chat
+http://127.0.0.1:1234       connection refused from WSL
 ```
 
 Confirmed `/v1/models` IDs:
@@ -260,16 +285,24 @@ text-embedding-nomic-embed-text-v1.5
 openai/gpt-oss-20b
 ```
 
-LM context smoke results so far:
+LM context benchmark conclusion:
 
-- `qwen3-0.6b` sample 5: endpoint reachable, 0/5 parseable outputs across
-  JSON/tagged/word-list/binary modes, runtime 25.5117s.
-- `mistralai/ministral-3-3b` sample 3: 2/3 parsed via JSON, p50 latency
-  2.6031s, p95 12.2023s, deterministic-tag agreement mean 0.0, 2 maskable cue
-  violations. Treat as weak smoke evidence only.
-
-Next agent should not treat those as comprehensive LM results. Run controlled
-model groups through `benchmark-lm-context` and update aggregate leaderboards.
+- Parser was hardened for fenced JSON, JSON arrays, alias keys, boolean tag
+  fields, and explicit empty structured outputs.
+- Smoke/sample20/sample100 reports are aggregated in
+  `data/outputs/lm_context_benchmark.summary.json`.
+- Best parse/speed candidates still failed the utility/safety bar:
+  - `liquid/lfm2-1.2b` sample20: parse-valid 1.0, p50 0.3051s, rows/sec
+    2.2848, agreement 0.0625, 3 maskable cue violations.
+  - `mistralai/ministral-3-3b` sample100: parse-valid 1.0, p50 1.1017s,
+    rows/sec 0.9268, agreement 0.1525, 9 maskable cue violations.
+  - `qwen/qwen3-4b-2507` sample20: parse-valid 1.0, p50 0.8756s, rows/sec
+    0.8739, agreement 0.1663, 3 maskable cue violations.
+  - `nvidia/nemotron-3-nano-4b` sample20: parse-valid 0.25, agreement 0.4133
+    on only five parsed rows.
+- Decision: do not integrate LM Studio context labels into deterministic rules
+  or reranking yet. Keep deterministic context/rationale/cue checks as the
+  trusted signal and treat local LMs as optional exploratory diagnostics.
 
 Recent commits:
 
@@ -287,14 +320,14 @@ Latest base suite:
 
 ```text
 .venv/bin/python -m pytest -q
-115 passed, 1 skipped
+116 passed, 1 skipped
 ```
 
 Latest optional classifier suite:
 
 ```text
 .venv/bin/python -m pytest -q
-115 passed, 1 skipped
+116 passed, 1 skipped
 ```
 
 Latest overnight focused suite:
@@ -490,11 +523,11 @@ Older LLM, DPMLM, HF, classifier, ablation, and comparison runs were moved to
 
 ## Next Work
 
-Follow `docs/roadmap.md`.
+Follow `docs/project/roadmap.md`.
 
 Recommended next sequence while official files are unavailable:
 
-1. Review `docs/experiment_verdict.md` for the compact decision table.
+1. Review `docs/project/experiment_verdict.md` for the compact decision table.
 2. Use `rerank-candidates --presidio-augment` as the strongest alternate after
    the first `balanced` official submission.
 3. A36 follow-up: use the weak token-action tagger as a reranker/scorer feature

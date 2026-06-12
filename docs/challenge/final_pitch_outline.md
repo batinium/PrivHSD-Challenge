@@ -32,11 +32,11 @@ python -m privhsd.cli create-submission \
    raw Presidio is dependency-heavy and false-positive-prone on HSD cues,
    filtered Presidio can safely feed reranking, and DPMLM is candidate-only
    because bounded real-model reranking did not select it.
-6. For methodology questions, point to `docs/methodology_justification.md`:
+6. For methodology questions, point to `docs/project/methodology_justification.md`:
    lexicons are justified by challenge labels, observed audit failures, and
    target-identity/stylometry literature rather than arbitrary word lists.
 7. For DPMLM and mentor-literature questions, point to
-   `docs/dp_text_privacy_literature_notes.md`: the literature supports
+   `docs/research/dp_text_privacy_literature_notes.md`: the literature supports
    selective privacy pressure, protected utility cues, post-processing,
    reranking, and adversarial privacy evaluation rather than blindly replacing
    the pipeline with DPMLM.
@@ -82,14 +82,23 @@ separately.
   reranking selected the Presidio candidate for 6,085 rows and improved local
   macro-F1 delta to +0.0048.
 - Local LLM candidate generation works through LM Studio after JSON-schema
-  compatibility hardening, but `openai/gpt-oss-20b` accepted only 3/10 sample
-  candidates and reranking selected none of them over deterministic candidates.
+  compatibility hardening. The current path can send source/label metadata to
+  protect contextual cues and rejects candidates with target, utility, action,
+  or negation/modality cue loss before reranking. A Qwen 3
+  `qwen/qwen3-4b-2507` stratified 80-row run accepted 43 candidates and
+  rejected 37 by checks; reranking selected Qwen for only 1/80 rows, while the
+  final reranked sample had zero residual identifiers and zero conservative HSD
+  cue-loss rows. This supports Qwen as an optional candidate source, not as a
+  direct submission path.
 - Local LM context-labeler benchmarking is implemented separately from rewrite
   generation. Initial localhost/Tailscale checks produced structured blockers;
-  the later reachable endpoint `http://169.254.83.107:1234` exposed 22 model
-  IDs. Tiny smokes are mixed and not yet comprehensive: `qwen3-0.6b` produced
-  0/5 parseable outputs, while `mistralai/ministral-3-3b` parsed 2/3 rows via
-  JSON but had poor deterministic-tag agreement and maskable cue violations.
+  the link-local endpoint later timed out from WSL, and the working gateway was
+  `http://172.21.96.1:1234`. Parser hardening improved format compliance, but
+  the measured context-labeler results are not good enough to integrate:
+  `mistralai/ministral-3-3b` parsed 100/100 rows with p50 latency 1.1017s, but
+  deterministic-tag agreement was only 0.1525 and it produced 9 maskable cue
+  violations. The faster `liquid/lfm2-1.2b` sample20 had agreement 0.0625 and
+  3 maskable cue violations. Keep LM context labels exploratory only.
 - DPMLM now has a protected-token candidate generator with
   `FacebookAI/roberta-base`; the safe default accepted 0/8 first-sample rows,
   while a looser sample accepted 11/12 but reranking selected 0 DPMLM

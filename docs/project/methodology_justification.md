@@ -8,12 +8,12 @@ It is meant to support judge questions about provenance, redundancy, and the
 privacy/utility tradeoff.
 
 For the mentor-adjacent DP NLP literature map, see
-`docs/dp_text_privacy_literature_notes.md`. That companion note explains how
+`docs/research/dp_text_privacy_literature_notes.md`. That companion note explains how
 DPMLM, word-level metric DP, privacy-budget allocation, LLM prompting,
 post-processing, and privacy evaluation papers map to the current pipeline.
 
 For the human-rights and legal test framing, see
-`docs/human_rights_legal_test_plan.md`. That note maps ECtHR Article 10,
+`docs/challenge/human_rights_legal_test_plan.md`. That note maps ECtHR Article 10,
 Articles 8/13/14, Delfi, Google LLC v. Russia, the Council of Europe Framework
 Convention on AI, and HUDERIA into concrete acceptance criteria for this proof
 of concept.

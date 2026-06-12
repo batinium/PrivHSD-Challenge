@@ -23,6 +23,7 @@ HF_UTILITY_WARNING = (
 DEFAULT_SAMPLE_SIZE = 100
 DEFAULT_DROP_THRESHOLD = 0.25
 DEFAULT_DECISION_THRESHOLD = 0.5
+DEFAULT_DEVICE = "auto"
 
 
 class HfUtilityError(ValueError):
@@ -246,6 +247,38 @@ def skipped_model_result(
     }
 
 
+def resolve_device(device: str) -> tuple[int | str, str]:
+    requested = str(device or DEFAULT_DEVICE).strip().lower()
+    if requested in {"cpu", "-1"}:
+        return -1, "cpu"
+    if requested == "auto":
+        try:
+            import torch
+        except Exception:
+            return -1, "cpu"
+        if torch.cuda.is_available():
+            return 0, "cuda:0"
+        return -1, "cpu"
+    if requested.startswith("cuda"):
+        try:
+            import torch
+        except Exception as exc:
+            raise HfUtilityError(
+                "CUDA was requested but torch is unavailable or CPU-only"
+            ) from exc
+        if not torch.cuda.is_available():
+            raise HfUtilityError(
+                "CUDA was requested but torch.cuda.is_available() is false"
+            )
+        if ":" in requested:
+            return int(requested.split(":", 1)[1]), requested
+        return 0, "cuda:0"
+    try:
+        return int(requested), f"cuda:{int(requested)}"
+    except ValueError:
+        return requested, requested
+
+
 def score_with_model(
     hf: dict[str, Any],
     model: HfUtilityModel,
@@ -257,7 +290,16 @@ def score_with_model(
     decision_threshold: float,
 ) -> dict[str, Any]:
     start = time.perf_counter()
-    device_arg: int | str = -1 if device == "cpu" else device
+    try:
+        device_arg, resolved_device = resolve_device(device)
+    except HfUtilityError as exc:
+        return skipped_model_result(
+            model.model_id,
+            reason="device_unavailable",
+            detail=str(exc),
+            device=device,
+            sample_size=len(samples),
+        )
     try:
         classifier = hf["pipeline"](
             model.task,
@@ -272,7 +314,7 @@ def score_with_model(
             model.model_id,
             reason="model_load_failed",
             detail=str(exc),
-            device=device,
+            device=resolved_device,
             sample_size=len(samples),
         )
 
@@ -292,7 +334,7 @@ def score_with_model(
             model.model_id,
             reason="model_inference_failed",
             detail=str(exc),
-            device=device,
+            device=resolved_device,
             sample_size=len(samples),
         )
 
@@ -309,7 +351,7 @@ def score_with_model(
             model.model_id,
             reason="unexpected_model_output",
             detail="pipeline returned a different number of rows than requested",
-            device=device,
+            device=resolved_device,
             sample_size=len(samples),
         )
 
@@ -343,7 +385,7 @@ def score_with_model(
         "model": model.model_id,
         "status": "ok",
         "revision": pipeline_revision(classifier),
-        "device": device,
+        "device": resolved_device,
         "runtime_seconds": rounded(runtime),
         "sample_size": len(samples),
         "score_drift": {
@@ -381,7 +423,7 @@ def run_hf_utility_evaluation(
     output_path: Path | None = None,
     model_ids: list[str] | None = None,
     sample_size: int | None = DEFAULT_SAMPLE_SIZE,
-    device: str = "cpu",
+    device: str = DEFAULT_DEVICE,
     batch_size: int = 8,
     drop_threshold: float = DEFAULT_DROP_THRESHOLD,
     decision_threshold: float = DEFAULT_DECISION_THRESHOLD,

@@ -1,14 +1,18 @@
 # Agent Workspace
 
+Archived note: these files are historical coordination notes, not current
+project documentation. Use [../../README.md](../../README.md) for the current
+docs index.
+
 This folder is for coding-agent coordination. Agents should read this file
 before making changes.
 
 ## Required Reading
 
 1. `current_handoff.md`
-2. `../docs/challenge_requirements.md`
-3. `../docs/roadmap.md`
-4. `../docs/pipeline_design.md`
+2. `../../challenge/challenge_requirements.md`
+3. `../../project/roadmap.md`
+4. `../../project/pipeline_design.md`
 5. `coding_rules.md`
 6. `task_board.md`
 

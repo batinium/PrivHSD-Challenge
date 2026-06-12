@@ -2,7 +2,7 @@
 
 Date: 2026-06-11
 
-Use `docs/roadmap.md` for current priorities. This file is a compact research
+Use `docs/project/roadmap.md` for current priorities. This file is a compact research
 appendix for agents that need source context.
 
 ## Current Interpretation

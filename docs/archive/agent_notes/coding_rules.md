@@ -41,7 +41,7 @@ Add tests when changing:
 
 ## Documentation Rules
 
-Update `docs/pipeline_design.md` when changing:
+Update `docs/project/pipeline_design.md` when changing:
 
 - CLI arguments
 - output columns
@@ -49,5 +49,5 @@ Update `docs/pipeline_design.md` when changing:
 - audit schema
 - module responsibilities
 
-Update `agents/task_board.md` when completing or changing a task.
+Update `docs/archive/agent_notes/task_board.md` when completing or changing a task.
 

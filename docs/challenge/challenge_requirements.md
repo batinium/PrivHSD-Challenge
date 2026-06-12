@@ -75,7 +75,7 @@ It should pass these legal-design checks:
   targeting, threats, large semantic drift, uncertain context, and any
   moderation consequence beyond dataset anonymisation.
 
-See `docs/human_rights_legal_test_plan.md` for the detailed ECtHR,
+See `docs/challenge/human_rights_legal_test_plan.md` for the detailed ECtHR,
 Framework Convention, and HUDERIA mapping.
 
 ## Webinar Method Notes

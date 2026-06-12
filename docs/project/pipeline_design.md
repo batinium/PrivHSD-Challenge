@@ -231,16 +231,19 @@ python -m privhsd.cli evaluate-hf-utility \
   --privatized-col privatized_text \
   --id-col id \
   --label-col label \
+  --device auto \
   --sample-size 100 \
   --output data/outputs/dynahate.hf_utility.json
 ```
 
 `evaluate-hf-utility` is optional through `privhsd[hf-utility]`. It defaults to
 the approved Dynabench and CardiffNLP probes, reports model ID, revision when
-available, device, runtime, sample size, score drift, threshold agreement, and
-row IDs with large utility drops. Missing dependencies, model-load failures, and
-inference failures are recorded as structured skips rather than making
-`privhsd anonymize` depend on Hugging Face.
+available, resolved device, runtime, sample size, score drift, threshold
+agreement, and row IDs with large utility drops. `--device auto` uses CUDA when
+the Python environment has CUDA-enabled PyTorch; otherwise it falls back to CPU.
+Missing dependencies, model-load failures, unavailable CUDA, and inference
+failures are recorded as structured skips rather than making `privhsd anonymize`
+depend on Hugging Face.
 
 Generate row-local candidates and choose the best privacy/HSD tradeoff:
 
@@ -369,6 +372,8 @@ python -m privhsd.cli generate-llm-candidates \
   --output data/outputs/llm_candidates.csv \
   --text-col text \
   --id-col id \
+  --source-col source \
+  --label-col label \
   --sample-size 25 \
   --endpoint http://127.0.0.1:1234/v1/chat/completions \
   --model local-model \
@@ -378,13 +383,19 @@ python -m privhsd.cli generate-llm-candidates \
 `generate-llm-candidates` targets LM Studio or llama.cpp OpenAI-compatible local
 servers. It first requests JSON-schema structured output, falls back for servers
 that reject specific `response_format` variants, and tolerates LM
-Studio/OpenAI-compatible channel markers around the JSON object. The report
-includes `accepted_count`, `status_counts`, `detail`, and `first_error`.
+Studio/OpenAI-compatible channel markers around the JSON object. When
+`--source-col` and `--label-col` are supplied, bounded samples are selected by
+source/label round-robin and the prompt receives source/label/target metadata as
+cue-preservation context, not as a classification instruction. The report
+includes `accepted_count`, `status_counts`, row IDs, validation checks, and
+`first_error`, but not raw text.
 
-The command asks for a JSON object with `privatized_text`, checks target/action
-cue retention and length drift, writes accepted candidates to a candidate
-column, and directs the user to `rerank-candidates --candidate-col`. It does not
-submit raw LLM outputs directly.
+The command asks for a JSON object with `privatized_text`, checks target,
+utility, action, and negation/modality cue retention, residual identifiers,
+style-risk increase, character retention, and length drift, writes accepted
+candidates to a candidate column, and directs the user to
+`rerank-candidates --candidate-col`. It does not submit raw LLM outputs
+directly.
 
 Benchmark a local LM Studio context labeler without rewriting text:
 
@@ -403,11 +414,16 @@ python -m privhsd.cli benchmark-lm-context \
 
 `benchmark-lm-context` tests local models as advisory context labelers, not
 rewriters. It tries strict JSON, tagged lines, word-list, and binary-tag output
-formats; records parse validity, latency, deterministic-tag agreement, and
+formats; tolerates common harmless wrappers such as fenced JSON, JSON arrays of
+tags, alias keys, boolean tag fields, and explicit empty structured outputs;
+records parse validity, latency, deterministic-tag agreement, and
 protected/maskable phrase counts; and writes only row IDs and aggregate labels,
 not raw text or raw model phrases. If the endpoint is unreachable, it writes a
 structured `blocked` report and exits successfully so optional LM Studio
-availability never blocks the deterministic pipeline.
+availability never blocks the deterministic pipeline. From WSL, LM Studio may
+be reachable through the Windows gateway, for example
+`http://172.21.96.1:1234/v1/chat/completions`, even when `127.0.0.1` refuses
+connections or a link-local address times out.
 
 Check conservative HSD cue retention:
 
@@ -423,6 +439,36 @@ python -m privhsd.cli check-hsd-cues \
 `check-hsd-cues` reports target-term, utility-cue, action-term, and
 negation/modality retention by row ID. It is a conservative local fallback when
 HateXplain-style rationale models are unavailable.
+
+Rank rows for deterministic repair or selective Qwen semantic review:
+
+```bash
+python -m privhsd.cli semantic-triage-report \
+  --input data/public_dev/recommended_merged.csv \
+  --protected data/outputs/recommended_merged.balanced.csv \
+  --text-col text \
+  --privatized-col text \
+  --id-col id \
+  --label-col label \
+  --source-col source \
+  --sample-size 20000 \
+  --sample-strategy source_label_round_robin \
+  --privacy-scan changed \
+  --classifier-model data/outputs/privhsd_classifier.pkl \
+  --output data/outputs/recommended_merged.semantic_triage.json \
+  --queue-output data/outputs/recommended_merged.semantic_triage.queue.csv
+```
+
+`semantic-triage-report` is the operational fallback layer between deterministic
+privatization and local SLM use. It always uses deterministic context tags and
+conservative cue checks, optionally adds trained local classifier confidence and
+margin checks, and writes a raw-text-free queue. Rows are routed to
+`repair_before_model_review` when hard cue/context/privacy regressions are
+detected, to `qwen_semantic_check` when ambiguity, quotation, counterspeech,
+negation, public-interest context, or classifier uncertainty deserves semantic
+labeling, and to `no_review` otherwise. This is how Qwen is used selectively
+without rewriting the dataset. `--privacy-scan changed` is the interactive
+default; use `--privacy-scan all` only for a slower audit-style CPU run.
 
 Compare original and exact-format protected CSVs by source-aware slices:
 

@@ -7,7 +7,7 @@ You are working in:
 ```
 
 Work autonomously. Do not stop at planning. Implement, run, measure, document,
-and keep `agents/overnight_progress.md` updated. Stop only when the success
+and keep `docs/archive/agent_notes/overnight_progress.md` updated. Stop only when the success
 criteria below are met or a hard blocker is documented.
 
 ## Mission
@@ -35,16 +35,16 @@ automated takedown system, and not a legal decision system.
 
 Start by reading:
 
-1. `agents/current_handoff.md`
-2. `agents/overnight_progress.md`
-3. `agents/task_board.md`
-4. `agents/coding_rules.md`
-5. `docs/roadmap.md`
-6. `docs/pipeline_design.md`
-7. `docs/methodology_justification.md`
-8. `docs/real_data_playbook.md`
-9. `docs/official_submission_checklist.md`
-10. `docs/final_pitch_outline.md`
+1. `docs/archive/agent_notes/current_handoff.md`
+2. `docs/archive/agent_notes/overnight_progress.md`
+3. `docs/archive/agent_notes/task_board.md`
+4. `docs/archive/agent_notes/coding_rules.md`
+5. `docs/project/roadmap.md`
+6. `docs/project/pipeline_design.md`
+7. `docs/project/methodology_justification.md`
+8. `docs/project/real_data_playbook.md`
+9. `docs/challenge/official_submission_checklist.md`
+10. `docs/challenge/final_pitch_outline.md`
 
 Then inspect the relevant implementation:
 
@@ -232,7 +232,7 @@ Do not delete or reset user changes. Do not use destructive git commands.
 Keep updating:
 
 ```text
-agents/overnight_progress.md
+docs/archive/agent_notes/overnight_progress.md
 ```
 
 Update it:
@@ -379,14 +379,14 @@ git status --short
 
 Update:
 
-- `agents/overnight_progress.md`
-- `agents/current_handoff.md`
-- `agents/task_board.md`
-- `docs/roadmap.md`
-- `docs/pipeline_design.md` if CLI/report behavior changes
-- `docs/final_pitch_outline.md` if model evidence changes the story
-- `docs/methodology_justification.md` if context/rationale logic changes
-- `docs/official_submission_checklist.md` if required checks change
+- `docs/archive/agent_notes/overnight_progress.md`
+- `docs/archive/agent_notes/current_handoff.md`
+- `docs/archive/agent_notes/task_board.md`
+- `docs/project/roadmap.md`
+- `docs/project/pipeline_design.md` if CLI/report behavior changes
+- `docs/challenge/final_pitch_outline.md` if model evidence changes the story
+- `docs/project/methodology_justification.md` if context/rationale logic changes
+- `docs/challenge/official_submission_checklist.md` if required checks change
 
 ## Success Criteria
 
@@ -423,7 +423,7 @@ Stop only if:
 - the same blocker recurs after at least three serious workaround attempts;
 - no other useful model, parser, deterministic-rule, or documentation work can
   proceed;
-- `agents/overnight_progress.md` records the exact command, error, attempted
+- `docs/archive/agent_notes/overnight_progress.md` records the exact command, error, attempted
   workarounds, and next action.
 
 ## Final Summary Requirements

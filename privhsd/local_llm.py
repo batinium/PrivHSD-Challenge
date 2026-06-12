@@ -64,9 +64,13 @@ def protected_cues_for_text(text: str) -> dict[str, Any]:
     }
 
 
-def prompt_messages(text: str) -> list[dict[str, str]]:
+def prompt_messages(
+    text: str,
+    metadata: dict[str, str] | None = None,
+) -> list[dict[str, str]]:
     protected = protected_cues_for_text(text)
     max_candidate_characters = max(len(text) + 20, int(len(text) * 1.4))
+    row_metadata = metadata or {}
     return [
         {
             "role": "system",
@@ -75,6 +79,10 @@ def prompt_messages(text: str) -> list[dict[str, str]]:
                 "hate-speech-detection dataset. Rewrite only author/style-bearing "
                 "surface cues. Preserve target groups, hateful action cues, "
                 "negation, threats, modality, and core meaning. The "
+                "source and label are metadata for cue preservation, not a "
+                "request to classify the text. Do not collapse offensive, toxic, "
+                "abuse, ambiguous, counterspeech, quoted, reported, or public "
+                "interest text into generic hate. "
                 "privatized_text field must contain only the replacement text, "
                 "not analysis, labels, apologies, or explanations. Keep it close "
                 "to the original length and do not add new claims. Return only "
@@ -87,6 +95,7 @@ def prompt_messages(text: str) -> list[dict[str, str]]:
             "content": json.dumps(
                 {
                     "text": text,
+                    "metadata": row_metadata,
                     "protected_cues": protected,
                     "constraints": {
                         "original_character_count": len(text),
@@ -98,6 +107,35 @@ def prompt_messages(text: str) -> list[dict[str, str]]:
             ),
         },
     ]
+
+
+def select_sample_indices(
+    rows: list[dict[str, str]],
+    *,
+    sample_size: int,
+    source_col: str | None,
+    label_col: str | None,
+) -> set[int]:
+    if sample_size <= 0 or sample_size >= len(rows):
+        return set(range(1, len(rows) + 1))
+    if not source_col and not label_col:
+        return set(range(1, min(sample_size, len(rows)) + 1))
+    buckets: dict[tuple[str, str], list[int]] = {}
+    for index, row in enumerate(rows, start=1):
+        key = (
+            str(row.get(source_col, "") or "<blank>") if source_col else "<all>",
+            str(row.get(label_col, "") or "<blank>") if label_col else "<all>",
+        )
+        buckets.setdefault(key, []).append(index)
+    selected: list[int] = []
+    keys = sorted(buckets)
+    cursor = 0
+    while len(selected) < sample_size and any(buckets.values()):
+        key = keys[cursor % len(keys)]
+        if buckets[key]:
+            selected.append(buckets[key].pop(0))
+        cursor += 1
+    return set(selected)
 
 
 def post_chat_completion(
@@ -204,6 +242,8 @@ def run_local_llm_candidates(
     *,
     text_col: str,
     id_col: str | None = None,
+    source_col: str | None = None,
+    label_col: str | None = None,
     candidate_col: str = "llm_candidate",
     report_path: Path | None = None,
     endpoint: str = DEFAULT_ENDPOINT,
@@ -219,13 +259,22 @@ def run_local_llm_candidates(
         raise LocalLlmError(f"{input_path}: missing text column {text_col!r}")
     if id_col and id_col not in fieldnames:
         raise LocalLlmError(f"{input_path}: missing id column {id_col!r}")
+    if source_col and source_col not in fieldnames:
+        raise LocalLlmError(f"{input_path}: missing source column {source_col!r}")
+    if label_col and label_col not in fieldnames:
+        raise LocalLlmError(f"{input_path}: missing label column {label_col!r}")
     if sample_size < 0:
         raise LocalLlmError("--sample-size must be non-negative")
     output_fieldnames = list(fieldnames)
     if candidate_col not in output_fieldnames:
         output_fieldnames.append(candidate_col)
 
-    limit = len(rows) if sample_size <= 0 else min(sample_size, len(rows))
+    selected_indices = select_sample_indices(
+        rows,
+        sample_size=sample_size,
+        source_col=source_col,
+        label_col=label_col,
+    )
     output_rows = []
     audit_rows: list[dict[str, Any]] = []
     accepted_count = 0
@@ -237,13 +286,25 @@ def run_local_llm_candidates(
         row_status = "not_requested"
         checks: dict[str, Any] | None = None
         detail = None
-        if row_index <= limit:
+        if row_index in selected_indices:
             original = str(row.get(text_col, "") or "")
+            metadata = {
+                key: str(row.get(key, "") or "")
+                for key in (
+                    source_col,
+                    label_col,
+                    "target",
+                    "target_categories",
+                    "type",
+                    "platform",
+                )
+                if key and key in fieldnames
+            }
             try:
                 response = post_chat_completion(
                     endpoint=endpoint,
                     model=model,
-                    messages=prompt_messages(original),
+                    messages=prompt_messages(original, metadata),
                     timeout=timeout,
                 )
                 proposed = response_text(response)
@@ -266,7 +327,7 @@ def run_local_llm_candidates(
                 first_error = first_error or detail
         output_row[candidate_col] = candidate
         output_rows.append(output_row)
-        if row_index <= limit:
+        if row_index in selected_indices:
             audit_rows.append(
                 {
                     "row_index": row_index,
@@ -297,13 +358,17 @@ def run_local_llm_candidates(
         "columns": {
             "text_col": text_col,
             "id_col": id_col,
+            "source_col": source_col,
+            "label_col": label_col,
             "candidate_col": candidate_col,
         },
         "sample": {
             "requested_sample_size": sample_size,
-            "sample_size": limit,
+            "sample_size": len(selected_indices),
             "source_row_count": len(rows),
-            "strategy": "first_n_rows",
+            "strategy": (
+                "source_label_round_robin" if source_col or label_col else "first_n_rows"
+            ),
         },
         "accepted_count": accepted_count,
         "status_counts": status_counts,

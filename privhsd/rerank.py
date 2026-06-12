@@ -17,8 +17,10 @@ from .presidio_augment import (
     load_presidio_analyzer,
 )
 from .style import (
+    ACTION_TERMS,
     EMOJI_PATTERN,
     HASHTAG_PATTERN,
+    NEGATION_MODALITY_TERMS,
     REPEATED_LETTER_PATTERN,
     REPEATED_PUNCTUATION_PATTERN,
     SIGNATURE_PATTERNS,
@@ -112,6 +114,22 @@ def length_drift(original: str, candidate: str) -> float:
     return abs(len(candidate) - len(original)) / denominator
 
 
+def cue_term_count(text: str, terms: set[str]) -> int:
+    lowered = text.lower()
+    count = 0
+    for term in terms:
+        pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
+        count += len(re.findall(pattern, lowered))
+    return count
+
+
+def cue_retention(original: str, candidate: str, terms: set[str]) -> float:
+    before = cue_term_count(original, terms)
+    if before == 0:
+        return 1.0
+    return cue_term_count(candidate, terms) / before
+
+
 def validate_rewrite_candidate(
     original: str,
     candidate: str,
@@ -131,6 +149,12 @@ def validate_rewrite_candidate(
     drift = length_drift(original, candidate)
     original_style_risk = style_risk_count(original)
     candidate_style_risk = style_risk_count(candidate)
+    action_retention = cue_retention(original, candidate, ACTION_TERMS)
+    negation_modality_retention = cue_retention(
+        original,
+        candidate,
+        NEGATION_MODALITY_TERMS,
+    )
 
     if reject_unchanged and original == candidate:
         reasons.append("unchanged")
@@ -138,6 +162,10 @@ def validate_rewrite_candidate(
         reasons.append("target_cue_loss")
     if metrics["utility_cue_retention"] < min_utility_retention:
         reasons.append("utility_cue_loss")
+    if action_retention < 1.0:
+        reasons.append("action_cue_loss")
+    if negation_modality_retention < 1.0:
+        reasons.append("negation_modality_loss")
     if metrics["character_utility_retention"] < min_character_retention:
         reasons.append("low_character_retention")
     if drift > max_length_drift:
@@ -159,6 +187,8 @@ def validate_rewrite_candidate(
         "reasons": reasons,
         "target_cue_retention": metrics["target_cue_retention"],
         "utility_cue_retention": metrics["utility_cue_retention"],
+        "action_cue_retention": rounded(action_retention),
+        "negation_modality_retention": rounded(negation_modality_retention),
         "character_utility_retention": metrics["character_utility_retention"],
         "length_drift": rounded(drift),
         "privacy_identifier_count_before": metrics["privacy_identifier_count_before"],

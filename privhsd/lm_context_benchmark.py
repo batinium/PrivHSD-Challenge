@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 import json
 from pathlib import Path
+import re
 import socket
 import statistics
 import time
@@ -23,6 +24,30 @@ DEFAULT_TIMEOUT = 20.0
 DEFAULT_MAX_TOKENS = 192
 DEFAULT_MODES = ("json", "tagged", "word_lists", "binary_tags")
 VALID_UNCERTAINTY = {"low", "medium", "high"}
+JSON_KEY_ALIASES = {
+    "context_tags": ("context_tags", "tags", "labels"),
+    "protected_phrases": (
+        "protected_phrases",
+        "protected_words",
+        "protect",
+        "must_protect",
+    ),
+    "maskable_phrases": ("maskable_phrases", "maskable_words", "mask", "maskable"),
+    "reason_codes": ("reason_codes", "reasons"),
+}
+BINARY_TAG_KEYS = {
+    "protected_target": "protected_target",
+    "historical_victim_group": "historical_victim_group",
+    "hostile_action": "hostile_action",
+    "negation": "negated_hate",
+    "negated_hate": "negated_hate",
+    "counterspeech": "counterspeech",
+    "quoted_or_reported": "quoted_or_reported",
+    "quote": "quoted_or_reported",
+    "threat": "threat",
+    "exclusion": "exclusion",
+    "dehumanization": "dehumanization",
+}
 
 
 class LmContextBenchmarkError(ValueError):
@@ -53,6 +78,10 @@ def clean_list_value(value: Any) -> list[str]:
         items = value.replace(";", ",").split(",")
     elif isinstance(value, list):
         items = value
+    elif isinstance(value, dict):
+        items = [key for key, enabled in value.items() if truthy(enabled)]
+    elif isinstance(value, bool):
+        return []
     else:
         return []
     result = []
@@ -61,6 +90,12 @@ def clean_list_value(value: Any) -> list[str]:
         if text:
             result.append(text)
     return result
+
+
+def truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"yes", "true", "1", "y"}
 
 
 def normalize_tags(tags: list[str]) -> list[str]:
@@ -75,25 +110,53 @@ def normalize_tags(tags: list[str]) -> list[str]:
     return normalized
 
 
-def parse_json_object(content: str) -> dict[str, Any]:
-    decoder = json.JSONDecoder()
+def unfence(content: str) -> str:
     stripped = content.strip()
+    fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", stripped, flags=re.I | re.S)
+    return fence.group(1).strip() if fence else stripped
+
+
+def parse_json_value(content: str) -> Any:
+    decoder = json.JSONDecoder()
+    stripped = unfence(content)
     try:
-        value = json.loads(stripped)
+        return json.loads(stripped)
     except json.JSONDecodeError:
-        value = None
-    if isinstance(value, dict):
-        return value
+        pass
     for start, character in enumerate(stripped):
-        if character != "{":
+        if character not in "{[":
             continue
         try:
             value, _ = decoder.raw_decode(stripped[start:])
         except json.JSONDecodeError:
             continue
-        if isinstance(value, dict):
+        if isinstance(value, (dict, list)):
             return value
-    raise LmContextBenchmarkError("content did not contain a JSON object")
+    raise LmContextBenchmarkError("content did not contain JSON")
+
+
+def parse_json_object(content: str) -> dict[str, Any]:
+    value = parse_json_value(content)
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list):
+        return {"context_tags": value}
+    raise LmContextBenchmarkError("JSON content was not an object or list")
+
+
+def first_present(mapping: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in mapping:
+            return mapping[key]
+    return None
+
+
+def tags_from_json_object(value: dict[str, Any]) -> list[str]:
+    tags = clean_list_value(first_present(value, JSON_KEY_ALIASES["context_tags"]))
+    for key, tag in BINARY_TAG_KEYS.items():
+        if key in value and truthy(value[key]):
+            tags.append(tag)
+    return tags
 
 
 def parsed_result(
@@ -104,13 +167,21 @@ def parsed_result(
     maskable_phrases: list[str] | None = None,
     uncertainty: str | None = None,
     reason_codes: list[str] | None = None,
+    explicit_empty: bool = False,
 ) -> dict[str, Any]:
     normalized_tags = normalize_tags(tags)
-    if not normalized_tags and not protected_phrases and not maskable_phrases:
-        raise LmContextBenchmarkError("parsed output had no usable fields")
     uncertainty_value = str(uncertainty or "").strip().lower()
     if uncertainty_value not in VALID_UNCERTAINTY:
         uncertainty_value = "unknown"
+    if (
+        not normalized_tags
+        and not protected_phrases
+        and not maskable_phrases
+        and not reason_codes
+        and uncertainty_value == "unknown"
+        and not explicit_empty
+    ):
+        raise LmContextBenchmarkError("parsed output had no usable fields")
     return {
         "mode": mode,
         "context_tags": normalized_tags,
@@ -125,13 +196,23 @@ def parsed_result(
 
 def parse_json_mode(content: str) -> dict[str, Any]:
     value = parse_json_object(content)
+    known_keys = set(BINARY_TAG_KEYS)
+    for aliases in JSON_KEY_ALIASES.values():
+        known_keys.update(aliases)
     return parsed_result(
         mode="json",
-        tags=clean_list_value(value.get("context_tags")),
-        protected_phrases=clean_list_value(value.get("protected_phrases")),
-        maskable_phrases=clean_list_value(value.get("maskable_phrases")),
+        tags=tags_from_json_object(value),
+        protected_phrases=clean_list_value(
+            first_present(value, JSON_KEY_ALIASES["protected_phrases"])
+        ),
+        maskable_phrases=clean_list_value(
+            first_present(value, JSON_KEY_ALIASES["maskable_phrases"])
+        ),
         uncertainty=str(value.get("uncertainty", "")),
-        reason_codes=clean_list_value(value.get("reason_codes")),
+        reason_codes=clean_list_value(
+            first_present(value, JSON_KEY_ALIASES["reason_codes"])
+        ),
+        explicit_empty=any(key in value for key in known_keys),
     )
 
 
@@ -150,6 +231,7 @@ def line_map(content: str) -> dict[str, str]:
 
 def parse_tagged_mode(content: str) -> dict[str, Any]:
     fields = line_map(content)
+    expected = {"tags", "protect", "maskable", "uncertainty", "reasons"}
     return parsed_result(
         mode="tagged",
         tags=clean_list_value(fields.get("tags", "")),
@@ -157,11 +239,19 @@ def parse_tagged_mode(content: str) -> dict[str, Any]:
         maskable_phrases=clean_list_value(fields.get("maskable", "")),
         uncertainty=fields.get("uncertainty"),
         reason_codes=clean_list_value(fields.get("reasons", "")),
+        explicit_empty=bool(expected & set(fields)),
     )
 
 
 def parse_word_lists_mode(content: str) -> dict[str, Any]:
     fields = line_map(content)
+    expected = {
+        "context_tags",
+        "protected_words",
+        "maskable_words",
+        "uncertainty",
+        "reason_codes",
+    }
     return parsed_result(
         mode="word_lists",
         tags=clean_list_value(fields.get("context_tags", "")),
@@ -169,26 +259,15 @@ def parse_word_lists_mode(content: str) -> dict[str, Any]:
         maskable_phrases=clean_list_value(fields.get("maskable_words", "")),
         uncertainty=fields.get("uncertainty"),
         reason_codes=clean_list_value(fields.get("reason_codes", "")),
+        explicit_empty=bool(expected & set(fields)),
     )
 
 
 def parse_binary_tags_mode(content: str) -> dict[str, Any]:
     fields = line_map(content)
     tags: list[str] = []
-    binary_map = {
-        "protected_target": "protected_target",
-        "hostile_action": "hostile_action",
-        "negation": "negated_hate",
-        "negated_hate": "negated_hate",
-        "counterspeech": "counterspeech",
-        "quoted_or_reported": "quoted_or_reported",
-        "quote": "quoted_or_reported",
-        "threat": "threat",
-        "exclusion": "exclusion",
-        "dehumanization": "dehumanization",
-    }
-    for key, tag in binary_map.items():
-        if fields.get(key, "").strip().lower() in {"yes", "true", "1"}:
+    for key, tag in BINARY_TAG_KEYS.items():
+        if truthy(fields.get(key, "")):
             tags.append(tag)
     return parsed_result(
         mode="binary_tags",
@@ -196,6 +275,9 @@ def parse_binary_tags_mode(content: str) -> dict[str, Any]:
         protected_phrases=clean_list_value(fields.get("protect", "")),
         maskable_phrases=clean_list_value(fields.get("mask", "")),
         uncertainty=fields.get("uncertainty"),
+        explicit_empty=bool(
+            (set(BINARY_TAG_KEYS) | {"protect", "mask", "uncertainty"}) & set(fields)
+        ),
     )
 
 
@@ -222,7 +304,11 @@ def phrase_has_protected_cue(phrase: str) -> bool:
     return any(term in lowered for term in PROTECTED_CUE_TERMS)
 
 
-def prompt_messages(text: str, mode: str) -> list[dict[str, str]]:
+def prompt_messages(
+    text: str,
+    mode: str,
+    metadata: dict[str, str] | None = None,
+) -> list[dict[str, str]]:
     mode_instruction = {
         "json": (
             "Return only valid JSON with context_tags, protected_phrases, "
@@ -242,6 +328,7 @@ def prompt_messages(text: str, mode: str) -> list[dict[str, str]]:
             "plus protect= and mask=."
         ),
     }[mode]
+    row_metadata = metadata or {}
     return [
         {
             "role": "system",
@@ -250,10 +337,24 @@ def prompt_messages(text: str, mode: str) -> list[dict[str, str]]:
                 "Do not rewrite text. Identify target/action/negation/context "
                 "phrases that must remain semantically visible, and identifier "
                 "or style phrases that may be maskable. Be brief. "
+                "Use source and label metadata only to preserve context; do not "
+                "collapse offensive, toxic, abuse, ambiguous, counterspeech, "
+                "quoted/reported, or public-interest expression into generic hate. "
+                "Never mark target, action, threat, negation, quotation, rationale, "
+                "or counterspeech cues as maskable. "
+                "Allowed context tags are: "
+                + ", ".join(CONTEXT_TAGS)
+                + ". Use [] or no for absent fields. "
                 + mode_instruction
             ),
         },
-        {"role": "user", "content": text},
+        {
+            "role": "user",
+            "content": json.dumps(
+                {"text": text, "metadata": row_metadata},
+                ensure_ascii=False,
+            ),
+        },
     ]
 
 
@@ -405,7 +506,22 @@ def run_lm_context_benchmark(
                 content = post_chat_completion(
                     endpoint=endpoint,
                     model=model,
-                    messages=prompt_messages(text, mode),
+                    messages=prompt_messages(
+                        text,
+                        mode,
+                        {
+                            key: str(row.get(key, "") or "")
+                            for key in (
+                                source_col,
+                                label_col,
+                                "target",
+                                "target_categories",
+                                "type",
+                                "platform",
+                            )
+                            if key and key in fieldnames
+                        },
+                    ),
                     timeout=timeout,
                     max_tokens=max_tokens,
                 )

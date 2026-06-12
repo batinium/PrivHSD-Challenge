@@ -22,6 +22,19 @@ def write_rows(path):
         writer.writerows(rows)
 
 
+def write_mixed_rows(path):
+    rows = [
+        ("1", "First hate row from @one about Muslims.", "hate", "a"),
+        ("2", "Second hate row from @two about refugees.", "hate", "a"),
+        ("3", "First not-hate row from @three.", "not_hate", "a"),
+        ("4", "First toxic row from @four.", "toxic", "b"),
+    ]
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["id", "text", "label", "source"])
+        writer.writerows(rows)
+
+
 def read_rows(path):
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
@@ -96,6 +109,58 @@ def test_local_llm_candidate_generation_accepts_schema_checked_candidate(
     assert "text" not in result["rows"][0]
 
 
+def test_local_llm_candidate_generation_can_sample_source_label_round_robin(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "candidates.csv"
+    write_mixed_rows(source)
+    requested_texts = []
+
+    def fake_post(**kwargs):
+        payload = json.loads(kwargs["messages"][1]["content"])
+        requested_texts.append(payload["text"])
+        assert payload["metadata"]["source"]
+        assert payload["metadata"]["label"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "privatized_text": payload["text"].replace("@", ""),
+                                "preserved_cues": [],
+                                "notes": "handle normalized",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+
+    result = run_local_llm_candidates(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        source_col="source",
+        label_col="label",
+        sample_size=3,
+    )
+
+    rows = read_rows(output)
+    assert result["sample"]["strategy"] == "source_label_round_robin"
+    assert result["accepted_count"] == 3
+    assert len(requested_texts) == 3
+    assert rows[0]["llm_candidate"]
+    assert rows[2]["llm_candidate"]
+    assert rows[3]["llm_candidate"]
+    assert rows[1]["llm_candidate"] == ""
+
+
 def test_local_llm_candidate_generation_skips_when_endpoint_fails(
     monkeypatch,
     tmp_path,
@@ -165,6 +230,45 @@ def test_local_llm_candidate_generation_rejects_cue_loss(monkeypatch, tmp_path):
     assert "target_cue_loss" in result["rows"][0]["checks"]["reasons"]
     assert result["status_counts"] == {"rejected_by_checks": 1}
     assert rows[0]["llm_candidate"] == ""
+
+
+def test_local_llm_candidate_generation_rejects_negation_loss(monkeypatch, tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "candidates.csv"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["id", "text", "label"])
+        writer.writerow(["1", "Do not attack Muslims.", "not_hate"])
+
+    def fake_post(**_kwargs):
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "privatized_text": "attack Muslims.",
+                                "preserved_cues": ["Muslims"],
+                                "notes": "bad negation loss",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+
+    result = run_local_llm_candidates(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        sample_size=1,
+    )
+
+    assert result["rows"][0]["status"] == "rejected_by_checks"
+    assert "negation_modality_loss" in result["rows"][0]["checks"]["reasons"]
 
 
 def test_response_text_extracts_json_from_lm_studio_markers():

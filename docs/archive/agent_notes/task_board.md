@@ -43,16 +43,18 @@ Status values: `todo`, `in_progress`, `done`, `blocked`.
 | A35 | todo | unassigned | Document whether any attention/fine-tuning approach improves the measured privacy/HSD tradeoff enough to justify complexity, dependencies, and rights/audit risks. |
 | A36 | done | Codex | Add weak token-action tagger training experiment with optional scikit-learn extra, CLI, tests, and sample-5,000 Dynahate report. |
 | A37 | done | Codex | Add filtered Presidio augmentation to anonymize, rerank, and submission paths; full Dynahate rerank selected Presidio candidate for 6,085 rows with macro-F1 delta +0.0048. |
-| A38 | done | Codex | Map mentor-adjacent DP NLP papers from Consensus and primary paper pages to concrete PrivHSD design choices in `docs/dp_text_privacy_literature_notes.md`. |
+| A38 | done | Codex | Map mentor-adjacent DP NLP papers from Consensus and primary paper pages to concrete PrivHSD design choices in `docs/research/dp_text_privacy_literature_notes.md`. |
 | A39 | todo | unassigned | Add optional adversarial LLM reconstruction/privacy-judge report only as secondary evidence after deterministic leakage, author-risk, cue, and official metrics. |
 | A40 | removed | Codex | Shareable system design paper and PDF were removed to declutter; use the canonical pipeline, methodology, and roadmap docs until a new paper is drafted. |
 | A41 | done | Codex | Add source-aware original/protected regression reporting with grouped privacy, cue, context, warning, and rationale/span preservation metrics. |
 | A42 | done | Codex | Add deterministic advisory context tags and source-aware rationale/span parsing for HateXplain token ranges and Toxic Spans character ranges. |
 | A43 | done | Codex | Add LM Studio context-labeler benchmark with JSON/tagged/word-list/binary parse modes and structured endpoint blocker reports. |
+| A44 | done | Codex | Add source/label-aware Qwen candidate prompting and strict action/negation cue validation; Qwen 3 tested as an optional candidate source, not a deterministic replacement. |
+| A45 | done | Codex | Add semantic triage report to route rows to hard repair, selective Qwen semantic checking, or no review using deterministic context/cue checks plus optional trained classifier confidence. |
 
 ## Current Priority
 
-Read `docs/roadmap.md` first. The key correction from the webinar is that the
+Read `docs/project/roadmap.md` first. The key correction from the webinar is that the
 task is not simple PII removal. The privacy adversary is authorship
 identification, while the utility target is hate-speech detection. Presidio is
 useful as a comparison baseline but fails as a complete solution. DPMLM-style
@@ -80,10 +82,21 @@ Recommended next sequence:
    deterministic/reranked outputs.
 7. A34/A35: run transformer fine-tuning/attention experiments only as optional
    evidence, then document whether they improve the tradeoff.
-8. LM Studio is reachable at `http://169.254.83.107:1234`; run
-   `benchmark-lm-context` across the local small models before using any
-   advisory LLM signal in reranking.
-9. When official files arrive, return to exact-format submission and
+8. LM Studio context-labeler stress tests are complete for the local
+   small/medium candidates. From WSL, use
+   `http://172.21.96.1:1234/v1/chat/completions` rather than the stale
+   link-local endpoint. Current benchmark evidence does not support using LM
+   context labels in reranking; see
+   `data/outputs/lm_context_benchmark.summary.json`. Qwen 3 can be used only as
+   a guarded optional rewrite-candidate source through
+   `generate-llm-candidates --source-col source --label-col label` followed by
+   `rerank-candidates`; see
+   `data/outputs/recommended_merged.qwen_stratified80.qwen_experiment_summary.json`.
+9. Use `semantic-triage-report` after candidate generation to avoid sending the
+   whole dataset to Qwen. It provides the fallback policy: repair hard
+   regressions first, then ask Qwen only about ambiguous or low-confidence
+   semantic rows.
+10. When official files arrive, return to exact-format submission and
    leaderboard-driven iterations.
 
 ## Non-Negotiables

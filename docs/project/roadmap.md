@@ -117,11 +117,79 @@ http://169.254.83.107:1234
 `microsoft/phi-4-mini-reasoning`, `mistralai/ministral-3-3b`,
 `qwen/qwen3-4b`, `nvidia/nemotron-3-nano-4b`,
 `qwen/qwen3-4b-2507`, several Gemma variants, `openai/gpt-oss-20b`,
-and embedding models. Tiny smoke results are not yet comprehensive:
-`qwen3-0.6b` sample 5 had 0/5 parseable outputs across all four modes, while
-`mistralai/ministral-3-3b` sample 3 parsed 2/3 via JSON but had deterministic
-tag agreement mean 0.0 and 2 maskable cue violations. Next step is controlled
-model-group stress testing, not direct integration.
+and embedding models. During the later WSL benchmark run, that link-local
+endpoint stopped accepting TCP; the working WSL endpoint was:
+
+```text
+http://172.21.96.1:1234
+```
+
+The parser was hardened for harmless wrappers and variants such as fenced JSON,
+JSON arrays of tags, alias keys, boolean tag fields, and explicit empty
+structured outputs. Controlled smoke/sample20/sample100 reports are aggregated
+in `data/outputs/lm_context_benchmark.summary.json`. The best parse/speed
+candidates still failed the utility/safety bar:
+
+| Model | Sample | Parse valid | p50 latency | Rows/sec | Agreement | Maskable cue violations |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `liquid/lfm2-1.2b` | 20 | 1.0 | 0.3051s | 2.2848 | 0.0625 | 3 |
+| `mistralai/ministral-3-3b` | 100 | 1.0 | 1.1017s | 0.9268 | 0.1525 | 9 |
+| `qwen/qwen3-4b-2507` | 20 | 1.0 | 0.8756s | 0.8739 | 0.1663 | 3 |
+| `nvidia/nemotron-3-nano-4b` | 20 | 0.25 | 1.2649s | 0.0748 | 0.4133 | 0 |
+
+Decision: do not integrate LM Studio context labels into deterministic rules or
+reranking yet. Use deterministic context/rationale/cue checks as the trusted
+signal; keep local LM context labels as optional exploratory diagnostics.
+
+Qwen 3 candidate-generation integration was tested on 2026-06-12 through the
+working WSL LM Studio gateway:
+
+```text
+http://172.21.96.1:1234/v1/chat/completions
+```
+
+The tested model was `qwen/qwen3-4b-2507`. The code path now sends
+source/label metadata to `generate-llm-candidates`, uses source/label
+round-robin sampling, and rejects rewrite candidates that lose target, utility,
+action, or negation/modality cues. A label-aware context benchmark parsed
+100/100 rows with p50 latency 0.7684s and 1.204 rows/sec, but deterministic-tag
+agreement remained low at 0.2226 and there was 1 maskable cue violation. On a
+source/label-stratified 80-row candidate run, Qwen accepted 43 candidates and
+rejected 37 by checks; rejection reasons included unchanged output, target cue
+loss, residual direct identifiers, length drift, utility cue loss, and action
+cue loss. Reranking selected `rewrite:qwen_candidate` for only 1/80 rows, with
+`balanced` selected for 50 and `style_scrubbed` for 29. The final reranked
+sample had zero residual identifiers and zero conservative HSD cue-loss rows,
+with action and negation/modality retention both at 1.0.
+
+Decision: Qwen is safe enough only as a constrained optional candidate source
+behind strict validation and reranking. It should not replace the deterministic
+baseline, and it should be considered for an official alternate only if upload
+budget allows. Summary artifact:
+`data/outputs/recommended_merged.qwen_stratified80.qwen_experiment_summary.json`.
+
+Semantic triage was added after the Qwen experiment to make the fallback policy
+explicit. The new `semantic-triage-report` command does not rewrite text or call
+Qwen. It ranks already-privatized rows into `repair_before_model_review`,
+`qwen_semantic_check`, and `no_review` using deterministic context tags,
+conservative cue checks, optional trained classifier confidence/margin, and
+source labels. On the Qwen stratified 80-row sample, deterministic fallback
+triage selected 21 rows for review: 2 hard repair rows due to lost
+quoted/reported context and 19 rows for selective Qwen semantic checking. The
+artifact is:
+`data/outputs/recommended_merged.qwen_stratified80.semantic_triage.json`.
+
+A larger 20,000-row source/label-stratified exact-format triage sample completed
+in 38.92s on one CPU core with `--privacy-scan changed`. It selected 4,887 rows
+for review: 84 hard repair rows, 4,803 Qwen semantic-check rows, and 15,113
+no-review rows. The report returned the top 500 review rows and truncated the
+remaining 4,387. This confirms that triage should be sampled or parallelized for
+interactive use; full semantic triage is an overnight CPU job unless the
+deterministic regex/context layer is rewritten for parallelism.
+
+Decision: this is the robust path. Deterministic masking remains the safe
+baseline, a trained model supplies confidence/margin uncertainty when available,
+and Qwen is consulted only on the semantic review queue.
 
 Bounded model-backed evidence added on 2026-06-11:
 
@@ -284,7 +352,7 @@ Do not train a new attention mechanism first. The available data is better used
 for evaluation, reranking, and small calibration tests. The practical plan is:
 
 The mentor-adjacent DP NLP literature review in
-`docs/dp_text_privacy_literature_notes.md` supports this direction: DPMLM and
+`docs/research/dp_text_privacy_literature_notes.md` supports this direction: DPMLM and
 word-level metric DP are serious candidate baselines, but the strongest
 defensible architecture is selective cue protection, privacy-pressure
 allocation, post-processing/reranking, and empirical adversarial evaluation.
@@ -375,7 +443,7 @@ Recommended order:
    - use useful small-model output as teacher data or reranker features only
      after deterministic validators pass
    - write aggregate model leaderboards under `data/outputs/` and progress
-     notes under `agents/overnight_progress.md`
+     notes under `docs/archive/agent_notes/overnight_progress.md`
 7. Reranking on the merged bundle:
    - run bounded source-stratified samples first, then full merged reranking if
      runtime is acceptable
@@ -473,7 +541,7 @@ Longer-running optional paths:
 
 For every experiment, write outputs under ignored `data/outputs/`, avoid raw
 official examples, keep downloaded weights/caches out of git, and update
-`agents/current_handoff.md` with concise aggregate results.
+`docs/archive/agent_notes/current_handoff.md` with concise aggregate results.
 
 Scaling note from the first full merged run: `create-submission` completed and
 validated exact format on 159,668 rows, but it performs all row transformations
@@ -711,8 +779,11 @@ rewrite text. It benchmarks local LM Studio models as advisory context labelers
 using strict JSON, tagged-line, word-list, and binary-tag formats, then reports
 parse validity, latency, agreement with deterministic context tags, protected
 phrase counts, maskable phrase counts, and blocker details. The 2026-06-12 run
-could not reach localhost or the Tailscale endpoint, so it wrote structured
-blocked reports and continued with deterministic reporting.
+could not reach localhost or the Tailscale endpoint, and later found that the
+WSL-reachable LM Studio endpoint was `http://172.21.96.1:1234` rather than the
+stale link-local address. The benchmark summary found no model suitable for
+integration: the best parser-compliant models had low deterministic-tag
+agreement and some maskable protected-cue violations.
 
 ### 7. Exact-Format Submission Validator
 
@@ -771,7 +842,7 @@ This makes Presidio evidence in the pitch rather than a fragile dependency.
 ## Judging Strategy
 
 Status: a compact final pitch/demo outline and human-rights framing live in
-`docs/final_pitch_outline.md`.
+`docs/challenge/final_pitch_outline.md`.
 
 The final demo should show:
 

@@ -1,4 +1,4 @@
-"""Command-line interface for the PrivHSD pipeline."""
+"""Command-line interface for the ContextSafe-HSD pipeline."""
 
 from __future__ import annotations
 
@@ -47,6 +47,7 @@ from .dpmlm_candidates import (
     run_dpmlm_candidates,
 )
 from .hf_utility import (
+    DEFAULT_DEVICE as DEFAULT_HF_DEVICE,
     DEFAULT_DROP_THRESHOLD,
     DEFAULT_SAMPLE_SIZE,
     HfUtilityError,
@@ -73,6 +74,19 @@ from .metadata_leakage import MetadataLeakageError, scan_metadata_leakage
 from .presidio_compare import PresidioCompareError, run_presidio_comparison
 from .presidio_augment import PresidioAugmentError
 from .rerank import RerankError, run_candidate_reranking
+from .semantic_triage import (
+    DEFAULT_CONFIDENCE_DROP as DEFAULT_TRIAGE_CONFIDENCE_DROP,
+    DEFAULT_LOW_CONFIDENCE as DEFAULT_TRIAGE_LOW_CONFIDENCE,
+    DEFAULT_LOW_MARGIN as DEFAULT_TRIAGE_LOW_MARGIN,
+    DEFAULT_MAX_REVIEW_ROWS as DEFAULT_TRIAGE_MAX_REVIEW_ROWS,
+    DEFAULT_PRIVACY_SCAN as DEFAULT_TRIAGE_PRIVACY_SCAN,
+    DEFAULT_SAMPLE_SIZE as DEFAULT_TRIAGE_SAMPLE_SIZE,
+    DEFAULT_SAMPLE_STRATEGY as DEFAULT_TRIAGE_SAMPLE_STRATEGY,
+    PRIVACY_SCAN_MODES,
+    SAMPLE_STRATEGIES,
+    SemanticTriageError,
+    run_semantic_triage_report,
+)
 from .source_report import SourceReportError, run_source_regression_report
 from .submission import SubmissionError, create_submission, validate_submission
 from .token_actions import (
@@ -85,7 +99,7 @@ from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="privhsd")
+    parser = argparse.ArgumentParser(prog="contextsafe-hsd")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     profile = subparsers.add_parser(
@@ -203,7 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Approved HF model ID. Repeat to evaluate multiple models.",
     )
     hf_utility.add_argument("--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE)
-    hf_utility.add_argument("--device", default="cpu")
+    hf_utility.add_argument("--device", default=DEFAULT_HF_DEVICE)
     hf_utility.add_argument("--batch-size", type=int, default=8)
     hf_utility.add_argument(
         "--drop-threshold",
@@ -386,6 +400,8 @@ def build_parser() -> argparse.ArgumentParser:
     llm_candidates.add_argument("--output", type=Path, required=True)
     llm_candidates.add_argument("--text-col", required=True)
     llm_candidates.add_argument("--id-col")
+    llm_candidates.add_argument("--source-col")
+    llm_candidates.add_argument("--label-col")
     llm_candidates.add_argument("--candidate-col", default="llm_candidate")
     llm_candidates.add_argument("--report", type=Path)
     llm_candidates.add_argument("--endpoint", default=DEFAULT_LLM_ENDPOINT)
@@ -406,6 +422,70 @@ def build_parser() -> argparse.ArgumentParser:
     cue_checks.add_argument("--id-col")
     cue_checks.add_argument("--output", type=Path)
     cue_checks.add_argument("--retention-threshold", type=float, default=1.0)
+
+    semantic_triage = subparsers.add_parser(
+        "semantic-triage-report",
+        help="Rank rows for deterministic repair or selective Qwen semantic review.",
+    )
+    semantic_triage.add_argument("--input", type=Path, required=True)
+    semantic_triage.add_argument(
+        "--protected",
+        type=Path,
+        help="Optional exact-format protected CSV to compare against --input.",
+    )
+    semantic_triage.add_argument("--text-col", required=True)
+    semantic_triage.add_argument("--privatized-col", default="privatized_text")
+    semantic_triage.add_argument("--id-col")
+    semantic_triage.add_argument("--label-col")
+    semantic_triage.add_argument("--source-col")
+    semantic_triage.add_argument("--output", type=Path)
+    semantic_triage.add_argument("--queue-output", type=Path)
+    semantic_triage.add_argument(
+        "--classifier-model",
+        type=Path,
+        help="Optional trained local classifier artifact for confidence/margin triage.",
+    )
+    semantic_triage.add_argument(
+        "--low-confidence",
+        type=float,
+        default=DEFAULT_TRIAGE_LOW_CONFIDENCE,
+    )
+    semantic_triage.add_argument(
+        "--low-margin",
+        type=float,
+        default=DEFAULT_TRIAGE_LOW_MARGIN,
+    )
+    semantic_triage.add_argument(
+        "--confidence-drop",
+        type=float,
+        default=DEFAULT_TRIAGE_CONFIDENCE_DROP,
+    )
+    semantic_triage.add_argument(
+        "--max-review-rows",
+        type=int,
+        default=DEFAULT_TRIAGE_MAX_REVIEW_ROWS,
+    )
+    semantic_triage.add_argument(
+        "--sample-size",
+        type=int,
+        default=DEFAULT_TRIAGE_SAMPLE_SIZE,
+        help="Rows to scan; 0 means all rows.",
+    )
+    semantic_triage.add_argument(
+        "--sample-strategy",
+        choices=sorted(SAMPLE_STRATEGIES),
+        default=DEFAULT_TRIAGE_SAMPLE_STRATEGY,
+    )
+    semantic_triage.add_argument("--retention-threshold", type=float, default=1.0)
+    semantic_triage.add_argument(
+        "--privacy-scan",
+        choices=sorted(PRIVACY_SCAN_MODES),
+        default=DEFAULT_TRIAGE_PRIVACY_SCAN,
+        help=(
+            "How often to run expensive privacy metrics during triage. "
+            "'changed' is the fast default; use 'all' for the slow audit path."
+        ),
+    )
 
     source_report = subparsers.add_parser(
         "source-regression-report",
@@ -712,7 +792,7 @@ def main(argv: list[str] | None = None) -> int:
                 text_cols=args.text_cols,
                 id_col=args.id_col,
                 manifest_path=args.manifest,
-                command=["privhsd", *raw_argv],
+                command=["contextsafe-hsd", *raw_argv],
                 mode=args.mode,
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
@@ -743,6 +823,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.output,
                 text_col=args.text_col,
                 id_col=args.id_col,
+                source_col=args.source_col,
+                label_col=args.label_col,
                 candidate_col=args.candidate_col,
                 report_path=args.report,
                 endpoint=args.endpoint,
@@ -761,6 +843,27 @@ def main(argv: list[str] | None = None) -> int:
                 id_col=args.id_col,
                 output_path=args.output,
                 retention_threshold=args.retention_threshold,
+            )
+        elif args.command == "semantic-triage-report":
+            result = run_semantic_triage_report(
+                args.input,
+                protected_path=args.protected,
+                text_col=args.text_col,
+                privatized_col=args.privatized_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                source_col=args.source_col,
+                output_path=args.output,
+                queue_output_path=args.queue_output,
+                classifier_model=args.classifier_model,
+                low_confidence=args.low_confidence,
+                low_margin=args.low_margin,
+                confidence_drop=args.confidence_drop,
+                max_review_rows=args.max_review_rows,
+                retention_threshold=args.retention_threshold,
+                privacy_scan=args.privacy_scan,
+                sample_size=args.sample_size,
+                sample_strategy=args.sample_strategy,
             )
         elif args.command == "source-regression-report":
             result = run_source_regression_report(
@@ -888,6 +991,7 @@ def main(argv: list[str] | None = None) -> int:
         PresidioAugmentError,
         PresidioCompareError,
         RerankError,
+        SemanticTriageError,
         SourceReportError,
         SubmissionError,
         TokenActionError,

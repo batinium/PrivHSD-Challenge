@@ -1,187 +1,168 @@
-# PrivHSD Challenge
+# ContextSafe-HSD
 
-Privacy-preserving text privatization for hate speech detection datasets.
+Local privacy-preserving text privatization for hate-speech detection datasets.
 
-This repository is a fresh implementation for the PrivHSD hackathon track. The
-goal is not to build the main hate speech classifier. The goal is to transform
-text so privacy-sensitive details are reduced while hate-speech detection cues
-remain useful.
+The goal is to reduce author-identifying signal while preserving the semantic
+cues needed by downstream hate-speech detection. The repository is not trying
+to be the final hate-speech classifier.
 
-The webinar framing is stricter than simple PII removal: reduce
-author-identifying signals while preserving hate-speech detection signal.
+## Repository Layout
 
 ```text
-CSV with text
-  -> privacy-preserving transformation
-  -> CSV with privatized_text
-  -> audit JSON and local proxy metrics
+contextsafe_hsd/     Branded public Python package alias
+privhsd/              Python package and CLI implementation
+tests/                Unit and regression tests
+docs/project/         Local project docs and testing workflow
+docs/challenge/       Hackathon rules, policy framing, submission notes
+docs/research/        Background research and experiment notes
+docs/archive/         Historical agent handoffs and run logs
+data/                 Ignored local datasets and generated outputs
 ```
 
-## Start Here
+Start with [docs/README.md](docs/README.md), then use
+[docs/project/quickstart.md](docs/project/quickstart.md) and
+[docs/project/pipeline_design.md](docs/project/pipeline_design.md).
 
-- [docs/README.md](docs/README.md) - documentation index.
-- [docs/challenge_requirements.md](docs/challenge_requirements.md) - what the challenge expects.
-- [docs/roadmap.md](docs/roadmap.md) - current strategy and next technical bets.
-- [docs/pipeline_design.md](docs/pipeline_design.md) - active implementation contract.
-- [docs/dataset_plan.md](docs/dataset_plan.md) - public and official dataset plan.
-- [docs/quickstart.md](docs/quickstart.md) - commands for running the pipeline.
-- [docs/score_log_template.md](docs/score_log_template.md) - official submission score log template.
-- [agents/README.md](agents/README.md) - instructions for coding agents.
-- [agents/task_board.md](agents/task_board.md) - implementation task board.
-
-## Current Implementation
-
-The active package is `privhsd/`. The default path is deterministic and does
-not require LLM calls or optional ML dependencies. See
-[docs/pipeline_design.md](docs/pipeline_design.md) for the module map and
-[docs/packaging.md](docs/packaging.md) for wheel/install usage.
-
-## Quick Run
+## Core Test Workflow
 
 Run tests:
 
 ```bash
-python -m pytest -q
+.venv/bin/python -m pytest -q
 ```
 
-Prepare the recommended public test dataset:
+Create an exact-format baseline candidate:
 
 ```bash
-python -m privhsd.cli prepare-dynahate --download \
-  --raw data/public_dev/dynahate_raw.csv \
-  --output data/public_dev/dynahate.csv
-```
-
-Privatize a CSV:
-
-```bash
-python -m privhsd.cli anonymize \
-  --input data/public_dev/dynahate.csv \
-  --output data/outputs/dynahate.privatized.csv \
+.venv/bin/python -m privhsd.cli create-submission \
+  --input data/public_dev/recommended_merged.csv \
+  --output data/outputs/recommended_merged.balanced.csv \
   --text-col text \
   --id-col id \
-  --audit data/outputs/dynahate.audit.json \
-  --mode balanced
+  --replace-text \
+  --mode balanced \
+  --manifest data/outputs/recommended_merged.balanced.manifest.json
 ```
 
-After `python -m pip install .`, use the console command directly:
+Validate upload shape:
 
 ```bash
-privhsd anonymize \
-  --input INPUT.csv \
-  --output OUTPUT.privatized.csv \
+.venv/bin/python -m privhsd.cli validate-submission \
+  --source data/public_dev/recommended_merged.csv \
+  --submission data/outputs/recommended_merged.balanced.csv \
   --text-col text \
   --id-col id \
-  --audit OUTPUT.audit.json \
-  --mode balanced
+  --output data/outputs/recommended_merged.balanced.validation.json
 ```
 
-Evaluate local proxy metrics:
+Run source-aware regression:
 
 ```bash
-python -m privhsd.cli evaluate \
-  --input data/outputs/dynahate.privatized.csv \
-  --text-col text \
-  --privatized-col privatized_text \
-  --output data/outputs/dynahate.metrics.json
+.venv/bin/python -m privhsd.cli source-regression-report \
+  --original data/public_dev/recommended_merged.csv \
+  --protected data/outputs/recommended_merged.balanced.csv \
+  --original-text-col text \
+  --protected-text-col text \
+  --id-col id \
+  --group-col source \
+  --group-col label \
+  --group-col split \
+  --group-col platform \
+  --group-col type \
+  --output data/outputs/recommended_merged.balanced.source_regression.json
 ```
 
-The metrics report includes privacy/utility proxy scores, placeholder density,
-residual identifier counts, quasi-identifier flags, target cue retention, and
-privacy or over-masking warnings.
-
-Committed synthetic PII stress fixtures under `tests/fixtures/` cover handles,
-emails, phone numbers, URLs, IP addresses, dates, names, locations,
-schools/organizations, IDs, aliases, and direct-plus-quasi identifier
-combinations without using official challenge examples.
-
-Optionally benchmark downstream utility loss with a local classifier:
+Run semantic triage to decide whether Qwen is needed:
 
 ```bash
-python -m pip install '.[benchmark]'
-python -m privhsd.cli benchmark-utility \
-  --input data/outputs/dynahate.privatized.csv \
+.venv/bin/python -m privhsd.cli semantic-triage-report \
+  --input data/public_dev/recommended_merged.csv \
+  --protected data/outputs/recommended_merged.balanced.csv \
   --text-col text \
-  --privatized-col privatized_text \
-  --label-col label \
-  --id-col id \
-  --output data/outputs/dynahate.utility_benchmark.json
-```
-
-The utility benchmark is a relative proxy for privatization impact. It is not
-the project’s core classifier and does not replace the official evaluator.
-
-Optionally train a local baseline classifier:
-
-```bash
-python -m pip install '.[classifier]'
-python -m privhsd.cli train-classifier \
-  --input data/public_dev/dynahate.csv \
-  --text-col text \
-  --label-col label \
-  --id-col id \
-  --model data/outputs/dynahate.classifier.pkl \
-  --output data/outputs/dynahate.classifier.train.json
-python -m privhsd.cli evaluate-classifier \
-  --input data/public_dev/dynahate.csv \
-  --model data/outputs/dynahate.classifier.pkl \
-  --text-col text \
-  --label-col label \
-  --id-col id \
-  --output data/outputs/dynahate.classifier.evaluate.json
-python -m privhsd.cli predict-classifier \
-  --input data/outputs/dynahate.privatized.csv \
-  --model data/outputs/dynahate.classifier.pkl \
-  --text-col privatized_text \
-  --id-col id \
-  --output data/outputs/dynahate.classifier.predictions.csv
-```
-
-The classifier commands are local scikit-learn baselines. Prediction CSVs
-preserve input rows and metadata, then add `predicted_label` and
-`predicted_confidence`.
-
-Compare all built-in privatization variants:
-
-```bash
-python -m privhsd.cli ablate \
-  --input data/public_dev/dynahate.csv \
-  --text-col text \
+  --privatized-col text \
   --id-col id \
   --label-col label \
-  --output data/outputs/dynahate.ablation.json \
-  --output-dir data/outputs/dynahate_ablation
+  --source-col source \
+  --sample-size 20000 \
+  --sample-strategy source_label_round_robin \
+  --output data/outputs/recommended_merged.balanced.semantic_triage.json \
+  --queue-output data/outputs/recommended_merged.balanced.semantic_triage.queue.csv
 ```
 
-The ablation report compares `identity`, `regex_only`, `balanced`, `privacy`,
-and `balanced_with_targets`. It includes local proxy metrics for every variant
-and records `utility_benchmark_skipped` when the optional benchmark dependency
-is unavailable.
+The triage report routes rows to:
 
-## Modes
+- `repair_before_model_review`
+- `qwen_semantic_check`
+- `no_review`
 
-- `utility`: conservative privacy masking.
-- `balanced`: default; preserve hate-speech utility while masking identifiers.
-- `privacy`: more aggressive; can generalize known target-group mentions.
+Qwen should only be used on the semantic-review queue, not on the whole dataset.
 
-Use `balanced` first for official evaluator submissions.
+## Python Package API
 
-## Current Roadmap
+After `pip install .`, the installed command is `contextsafe-hsd`:
 
-Next implementation work should wait for the official data unless a new
-official score exposes a specific weakness. On official `id,author,text,HS`
-style files:
+```bash
+contextsafe-hsd create-submission --help
+contextsafe-hsd validate-submission --help
+```
 
-- run metadata leakage checks for `id` and `author`
-- create and validate a first exact-format `balanced` submission
-- run author-risk evaluation when author labels repeat enough for a classifier
-- try `rerank-candidates --replace-text --presidio-augment` as the strongest
-  audited alternate
-- keep Presidio, DPMLM, and specialized LLM rewriting as optional candidates,
-  not default dependencies
+The Python API is available as `contextsafe_hsd`. The older `privhsd` import
+remains as a compatibility alias for local experiments.
 
-## Agent Rule
+```python
+from pathlib import Path
 
-Coding agents should read [agents/README.md](agents/README.md) before changing
-code. The sibling `../ContextSafe-HSD` project is reference material only; this
-repo is the active challenge implementation.
+import contextsafe_hsd as hsd
+
+summary = hsd.process_csv(
+    Path("INPUT.csv"),
+    Path("OUTPUT.privatized.csv"),
+    text_col="text",
+    id_col="id",
+    audit_path=Path("OUTPUT.audit.json"),
+    mode="balanced",
+)
+```
+
+For an exact-format challenge upload:
+
+```python
+from pathlib import Path
+
+import contextsafe_hsd as hsd
+
+manifest = hsd.create_submission(
+    Path("INPUT.csv"),
+    Path("SUBMISSION.csv"),
+    text_cols=["text"],
+    id_col="id",
+    manifest_path=Path("SUBMISSION.manifest.json"),
+    replace_text=True,
+    mode="balanced",
+)
+```
+
+## Performance Notes
+
+- Deterministic masking, validation, context tags, and cue checks are CPU regex
+  workloads. GPU does not help these stages unless the algorithm is rewritten.
+- HF transformer probes use `--device auto` and will use CUDA when the Python
+  environment has CUDA-enabled PyTorch.
+- Qwen should run through LM Studio, which can use the GPU independently of the
+  local Python venv.
+- This venv currently has CPU-only PyTorch, so Python HF models will not use the
+  visible NVIDIA GPU until CUDA-enabled PyTorch is installed.
+- Use `semantic-triage-report --sample-size ...` for interactive testing and
+  reserve full semantic triage for overnight or a future parallelized run.
+
+## Robustness Policy
+
+- Deterministic masking is the base layer.
+- Cue checks catch target/action/negation/modality loss.
+- Source regression catches slice-specific regressions.
+- Optional trained classifiers provide confidence and margin uncertainty.
+- Qwen is a selective semantic checker or candidate source, never the default
+  dataset rewriter.
+
+Generated datasets, challenge data, and reports under `data/` are ignored by
+git. Keep raw sensitive examples out of markdown, commits, and issue comments.

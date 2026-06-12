@@ -71,6 +71,24 @@ def test_lm_context_parsers_accept_fallback_formats():
     assert parsed_binary["protected_phrase_count"] == 2
 
 
+def test_lm_context_json_parser_accepts_common_wrappers_and_variants():
+    fenced = parse_json_mode(
+        '```json\n{"protected_target": true, "protect": ["Muslims"], '
+        '"mask": [], "uncertainty": "low"}\n```'
+    )
+    array_tags = parse_json_mode('["protected-target", "negation"]')
+    explicit_empty = parse_json_mode(
+        '{"context_tags": [], "protected_phrases": [], '
+        '"maskable_phrases": [], "uncertainty": "low"}'
+    )
+
+    assert fenced["context_tags"] == ["protected_target"]
+    assert fenced["protected_phrase_count"] == 1
+    assert array_tags["context_tags"] == ["protected_target", "negated_hate"]
+    assert explicit_empty["context_tags"] == []
+    assert explicit_empty["uncertainty"] == "low"
+
+
 def test_lm_context_benchmark_writes_blocked_report(tmp_path, monkeypatch):
     source = tmp_path / "rows.csv"
     output = tmp_path / "lm.json"

@@ -10,7 +10,7 @@ The committed synthetic PII stress fixtures live under `tests/fixtures/` and
 exercise anonymizer masking, residual-warning metrics, metadata preservation,
 and ablation behavior without using official or raw challenge examples.
 
-For strategy and next tasks, read `docs/roadmap.md`. The current roadmap
+For strategy and next tasks, read `docs/project/roadmap.md`. The current roadmap
 prioritizes authorship-risk evaluation and style scrubbing over adding more
 PII-only rules.
 
@@ -20,16 +20,16 @@ From the repository root:
 
 ```bash
 python -m pip install .
-privhsd --help
+contextsafe-hsd --help
 ```
 
 Build and test a wheel:
 
 ```bash
 python -m pip wheel . -w dist --no-deps
-python -m venv /tmp/privhsd-smoke
-/tmp/privhsd-smoke/bin/python -m pip install dist/privhsd-*.whl
-/tmp/privhsd-smoke/bin/privhsd --help
+python -m venv /tmp/contextsafe-hsd-smoke
+/tmp/contextsafe-hsd-smoke/bin/python -m pip install dist/contextsafe_hsd-*.whl
+/tmp/contextsafe-hsd-smoke/bin/contextsafe-hsd --help
 ```
 
 ## Prepare Public Data
@@ -71,7 +71,7 @@ python -m privhsd.cli anonymize \
 After package install, the same direct CSV input-to-output path is:
 
 ```bash
-privhsd anonymize \
+contextsafe-hsd anonymize \
   --input INPUT.csv \
   --output OUTPUT.privatized.csv \
   --text-col text \
@@ -84,7 +84,7 @@ This appends `privatized_text` and preserves the original columns. For an
 exact-format upload file, replace the text column in place and validate shape:
 
 ```bash
-privhsd create-submission \
+contextsafe-hsd create-submission \
   --input INPUT.csv \
   --output SUBMISSION.csv \
   --text-col text \
@@ -93,7 +93,7 @@ privhsd create-submission \
   --mode balanced \
   --manifest SUBMISSION.manifest.json
 
-privhsd validate-submission \
+contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission SUBMISSION.csv \
   --text-col text \
@@ -106,14 +106,32 @@ Python API equivalent:
 ```python
 from pathlib import Path
 
-from privhsd.csv_pipeline import process_csv
+import contextsafe_hsd as hsd
 
-process_csv(
+hsd.process_csv(
     Path("INPUT.csv"),
     Path("OUTPUT.privatized.csv"),
     text_col="text",
     id_col="id",
     audit_path=Path("OUTPUT.audit.json"),
+    mode="balanced",
+)
+```
+
+For exact-format upload files:
+
+```python
+from pathlib import Path
+
+import contextsafe_hsd as hsd
+
+hsd.create_submission(
+    Path("INPUT.csv"),
+    Path("SUBMISSION.csv"),
+    text_cols=["text"],
+    id_col="id",
+    manifest_path=Path("SUBMISSION.manifest.json"),
+    replace_text=True,
     mode="balanced",
 )
 ```
@@ -211,7 +229,7 @@ results.
 ## Log Official Scores
 
 When submitting to the official leaderboard, copy the structure from
-`docs/score_log_template.md` into a run-specific note and record the commit,
+`docs/challenge/score_log_template.md` into a run-specific note and record the commit,
 commands, generated artifact paths, local aggregate metrics, official scores,
 and audit notes. Do not paste raw challenge examples into the score log.
 
