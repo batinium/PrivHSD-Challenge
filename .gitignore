@@ -10,3 +10,5 @@ data/public_dev/
 data/outputs/
 data/external_unseen/
 data/temp/
+node_modules/
+workbench/frontend/dist/

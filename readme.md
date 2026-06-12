@@ -17,6 +17,7 @@ privhsd/             CLI and implementation
 tests/               Synthetic and regression tests
 docs/project/        Methodology, pipeline, evidence, and operating workflow
 docs/challenge/      Rules, rights framing, checklist, and pitch material
+workbench/           Decoupled FastAPI + React demo app
 data/                Ignored local datasets, models, and reports
 ```
 
@@ -102,6 +103,12 @@ python -m privhsd.cli source-regression-report \
 The token-policy models are advisory/reranking support. They do not replace
 the deterministic anonymizer unless an audited candidate path improves official
 privacy and utility scores.
+
+## Demo Workbench
+
+The local web demo lives in [workbench/](workbench/). It runs a FastAPI backend
+against the existing `privhsd` APIs and a React/Vite frontend for paste-text
+testing, span highlighting, risk gauges, and audit JSON export.
 
 ## Python API
 

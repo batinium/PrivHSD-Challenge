@@ -11,6 +11,7 @@ logs under ignored `data/`.
 - [project/real_data_playbook.md](project/real_data_playbook.md) - official CSV workflow.
 - [project/roadmap.md](project/roadmap.md) - current technical strategy.
 - [project/experiment_verdict.md](project/experiment_verdict.md) - current evidence table.
+- [project/system_weaknesses.md](project/system_weaknesses.md) - known gaps and win plan.
 - [project/methodology_justification.md](project/methodology_justification.md) - detailed method rationale.
 
 ## Challenge Docs
@@ -19,6 +20,10 @@ logs under ignored `data/`.
 - [challenge/official_submission_checklist.md](challenge/official_submission_checklist.md) - pre-upload checks.
 - [challenge/human_rights_legal_test_plan.md](challenge/human_rights_legal_test_plan.md) - legal and governance acceptance tests.
 - [challenge/final_pitch_outline.md](challenge/final_pitch_outline.md) - five-minute Dragon's Den story and demo plan.
+
+## Demo App
+
+- [../workbench/README.md](../workbench/README.md) - decoupled FastAPI + React privacy review workbench.
 
 ## Current Workflow
 
