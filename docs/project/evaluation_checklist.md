@@ -87,6 +87,18 @@ python scripts/generate_lm_studio_challenge_corpus.py \
 
 Use a separate `--status`, `--report`, and `--errors` path per shard.
 
+After shards finish, merge and dedupe them:
+
+```bash
+python scripts/merge_synthetic_challenge_shards.py \
+  data/outputs/synthetic_challenge_corpus.csv \
+  data/outputs/synthetic_challenge_corpus.part01.csv \
+  data/outputs/synthetic_challenge_corpus.part02.csv \
+  data/outputs/synthetic_challenge_corpus.part03.csv \
+  --output data/outputs/synthetic_challenge_corpus.merged.csv \
+  --report data/outputs/synthetic_challenge_corpus.merged.report.json
+```
+
 ## Regression Gates
 
 Run these before pushing detector or workbench changes:
