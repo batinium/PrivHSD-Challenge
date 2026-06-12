@@ -244,11 +244,21 @@ textarea:focus {
 }
 
 .highlight-box mark {
+  padding: 0 2px;
+}
+
+.highlight-box mark.mask {
   background: #ffedd5;
   border: 1px solid #fed7aa;
   border-radius: 4px;
   color: #8a3b12;
-  padding: 0 2px;
+}
+
+.highlight-box mark.protect {
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 4px;
+  color: #166534;
 }
 
 .empty-output {

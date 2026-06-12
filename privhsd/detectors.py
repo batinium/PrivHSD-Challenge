@@ -83,6 +83,15 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
             r"(?:University|College|Institute|Academy|School|Centre|Center)\b"
         ),
     ),
+    (
+        "LOCATION",
+        re.compile(
+            r"\b(?:[A-Z][A-Za-z0-9.'-]+\s+){0,4}[A-Z][A-Za-z0-9.'-]+\s+"
+            r"(?:Street|St\.?|Avenue|Ave\.?|Road|Rd\.?|Boulevard|Blvd\.?|"
+            r"Lane|Ln\.?|Drive|Dr\.?|Court|Ct\.?|Way|Place|Pl\.?|"
+            r"Square|Sq\.?)\b"
+        ),
+    ),
 )
 
 
@@ -115,6 +124,24 @@ LOCATION_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
         r"\b(?i:from|in|near|at)\s+"
         r"([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})\b"
     ),
+    re.compile(
+        r"\b(?i:leave|left|leaving|visit|visited|visiting|"
+        r"move\s+to|moved\s+to|return\s+to|go\s+back\s+to|"
+        r"deport\s+to|deported\s+to)\s+"
+        r"([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,3})\b"
+    ),
+)
+
+
+KNOWN_LOCATION_TERMS: Sequence[str] = (
+    "Boston",
+    "Chicago",
+    "London",
+    "Los Angeles",
+    "New York",
+    "Paris",
+    "San Francisco",
+    "Washington",
 )
 
 
@@ -253,6 +280,10 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "dalits",
         "chink",
         "chinks",
+        "nigga",
+        "niggas",
+        "nigger",
+        "niggers",
     ),
     "historical_victim_group": (
         "holocaust survivors",
@@ -320,14 +351,37 @@ def regex_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for entity_type, pattern in REGEX_PATTERNS:
         for match in pattern.finditer(text):
+            value = match.group(0)
+            if entity_type == "LOCATION" and contains_target_group_term(value):
+                continue
             spans.append(
                 Span(
                     start=match.start(),
                     end=match.end(),
                     entity_type=entity_type,
-                    text=match.group(0),
+                    text=value,
                     score=0.85,
                     source="regex",
+                )
+            )
+    return spans
+
+
+def known_location_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for term in KNOWN_LOCATION_TERMS:
+        pattern = re.compile(
+            r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])"
+        )
+        for match in pattern.finditer(text):
+            spans.append(
+                Span(
+                    start=match.start(),
+                    end=match.end(),
+                    entity_type="LOCATION",
+                    text=match.group(0),
+                    score=0.62,
+                    source="known_location",
                 )
             )
     return spans
@@ -406,6 +460,7 @@ def span_priority(span: Span) -> tuple[int, float, int]:
         "context_person": 2,
         "context_alias": 2,
         "context_location": 1,
+        "known_location": 1,
         "target_dictionary": 0,
     }.get(span.source, 0)
     return (span.end - span.start, span.score, source_priority)
@@ -442,6 +497,7 @@ def detect_spans(
     spans.extend(regex_spans(text))
     if include_context:
         spans.extend(context_spans(text))
+        spans.extend(known_location_spans(text))
     if include_targets:
         spans.extend(target_group_spans(text))
     return merge_spans(spans)

@@ -1,3 +1,4 @@
+from privhsd.detectors import target_group_spans
 from privhsd.pipeline import PrivatizerConfig, privatize_text
 
 
@@ -68,6 +69,35 @@ def test_context_location_still_masks_non_target_places():
     assert "London" not in result.text
     assert "[LOCATION]" in result.text
     assert "Muslims should leave" in result.text
+
+
+def test_action_context_city_is_masked_as_location():
+    text = "Muslims should leave Boston on Jan 12, 2025."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Boston" not in result.text
+    assert "[LOCATION]" in result.text
+    assert "[DATE]" in result.text
+    assert "Muslims should leave" in result.text
+
+
+def test_street_suffix_is_masked_as_location():
+    text = "Jefferson Street was mentioned by Alex Vale."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Jefferson Street" not in result.text
+    assert "[LOCATION]" in result.text
+
+
+def test_racial_slur_is_detected_as_protected_target():
+    text = "Niggers should leave."
+    spans = target_group_spans(text)
+    privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+    balanced_result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert any(span.category == "race_or_ethnicity" for span in spans)
+    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
+    assert "Niggers should leave" in balanced_result.text
 
 
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():

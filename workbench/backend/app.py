@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from privhsd.context import analyze_context
 from privhsd.cue_checks import row_cue_report
+from privhsd.detectors import Span, target_group_spans
 from privhsd.metrics import row_metric
 from privhsd.pipeline import MODES, PrivatizerConfig, privatize_text
 
@@ -29,6 +30,8 @@ class PrivatizeResponse(BaseModel):
     mode: str
     changed: bool
     transformations: list[dict[str, Any]]
+    protected_spans: list[dict[str, Any]]
+    protected_output_spans: list[dict[str, Any]]
     metrics: dict[str, Any]
     cue_report: dict[str, Any]
     context: dict[str, Any]
@@ -90,6 +93,19 @@ def clean_transformations(transformations: list[dict[str, Any]]) -> list[dict[st
     return cleaned
 
 
+def clean_span(span: Span, *, role: str) -> dict[str, Any]:
+    return {
+        "role": role,
+        "entity_type": span.entity_type,
+        "category": span.category,
+        "source": span.source,
+        "score": span.score,
+        "start": span.start,
+        "end": span.end,
+        "replacement": span.replacement_tag(),
+    }
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -123,6 +139,12 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         "original": analyze_context(request.text),
         "privatized": analyze_context(result.text),
     }
+    protected_spans = [
+        clean_span(span, role="protect") for span in target_group_spans(request.text)
+    ]
+    protected_output_spans = [
+        clean_span(span, role="protect") for span in target_group_spans(result.text)
+    ]
     gauges = {
         "privacy_gain": pct(float(metric.get("privacy_gain", 0.0) or 0.0)),
         "residual_risk": residual_risk(metric),
@@ -142,6 +164,8 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         "changed": bool(metric.get("privacy_identifier_count_before", 0))
         or request.text != result.text,
         "transformations": clean_transformations(list(result.transformations)),
+        "protected_spans": protected_spans,
+        "protected_output_spans": protected_output_spans,
         "metrics": metric,
         "cue_report": cue,
         "context": context,

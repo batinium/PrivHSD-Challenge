@@ -28,26 +28,30 @@ function Gauge({ label, value, tone = "good" }) {
   );
 }
 
-function splitOriginal(text, transformations) {
-  if (!text || !transformations?.length) {
+function splitByRanges(text, ranges) {
+  if (!text || !ranges?.length) {
     return [{ text, marked: false, key: "plain" }];
   }
-  const spans = transformations
-    .filter((item) => Number.isInteger(item.source_start) && Number.isInteger(item.source_end))
-    .sort((a, b) => a.source_start - b.source_start);
+  const spans = ranges
+    .filter((item) => Number.isInteger(item.start) && Number.isInteger(item.end) && item.end > item.start)
+    .sort((a, b) => a.start - b.start || b.priority - a.priority);
   const parts = [];
   let cursor = 0;
   spans.forEach((span, index) => {
-    if (span.source_start > cursor) {
-      parts.push({ text: text.slice(cursor, span.source_start), marked: false, key: `p-${index}` });
+    if (span.start < cursor) {
+      return;
+    }
+    if (span.start > cursor) {
+      parts.push({ text: text.slice(cursor, span.start), marked: false, key: `p-${index}` });
     }
     parts.push({
-      text: text.slice(span.source_start, span.source_end),
+      text: text.slice(span.start, span.end),
       marked: true,
-      type: span.entity_type,
+      type: span.type,
+      role: span.role,
       key: `m-${index}`
     });
-    cursor = span.source_end;
+    cursor = span.end;
   });
   if (cursor < text.length) {
     parts.push({ text: text.slice(cursor), marked: false, key: "tail" });
@@ -55,22 +59,45 @@ function splitOriginal(text, transformations) {
   return parts;
 }
 
-function splitOutput(text) {
+function splitOriginal(text, transformations, protectedSpans) {
+  const masked = (transformations || []).map((item) => ({
+    start: item.source_start,
+    end: item.source_end,
+    type: item.entity_type,
+    role: "mask",
+    priority: 2
+  }));
+  const protectedRanges = (protectedSpans || []).map((item) => ({
+    start: item.start,
+    end: item.end,
+    type: item.category || item.entity_type,
+    role: "protect",
+    priority: 1
+  }));
+  return splitByRanges(text, [...masked, ...protectedRanges]);
+}
+
+function splitOutput(text, protectedSpans) {
   const pattern = /(\[[A-Z][A-Z_]*(?::[A-Za-z0-9_/-]+)?\])/g;
-  const parts = [];
-  let cursor = 0;
+  const ranges = [];
   let match;
   while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) {
-      parts.push({ text: text.slice(cursor, match.index), marked: false, key: `p-${match.index}` });
-    }
-    parts.push({ text: match[0], marked: true, key: `m-${match.index}` });
-    cursor = pattern.lastIndex;
+    ranges.push({
+      start: match.index,
+      end: pattern.lastIndex,
+      type: "placeholder",
+      role: "mask",
+      priority: 2
+    });
   }
-  if (cursor < text.length) {
-    parts.push({ text: text.slice(cursor), marked: false, key: "tail" });
-  }
-  return parts;
+  const protectedRanges = (protectedSpans || []).map((item) => ({
+    start: item.start,
+    end: item.end,
+    type: item.category || item.entity_type,
+    role: "protect",
+    priority: 1
+  }));
+  return splitByRanges(text, [...ranges, ...protectedRanges]);
 }
 
 function HighlightedText({ parts, empty }) {
@@ -81,7 +108,7 @@ function HighlightedText({ parts, empty }) {
     <pre className="highlight-box">
       {parts.map((part) =>
         part.marked ? (
-          <mark key={part.key} title={part.type || "placeholder"}>
+          <mark className={part.role || "mask"} key={part.key} title={part.type || "placeholder"}>
             {part.text}
           </mark>
         ) : (
@@ -117,11 +144,11 @@ function App() {
   const [error, setError] = useState("");
 
   const originalParts = useMemo(
-    () => splitOriginal(text, result?.transformations || []),
+    () => splitOriginal(text, result?.transformations || [], result?.protected_spans || []),
     [text, result]
   );
   const outputParts = useMemo(
-    () => splitOutput(result?.privatized_text || ""),
+    () => splitOutput(result?.privatized_text || "", result?.protected_output_spans || []),
     [result]
   );
 

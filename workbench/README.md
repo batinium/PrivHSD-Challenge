@@ -47,3 +47,10 @@ npm run dev
 The backend processes pasted text in memory and returns aggregate metrics,
 offsets, placeholders, and warnings. It does not write raw text, logs, CSVs, or
 reports. Use synthetic or consented text for public demos.
+
+## Highlighting
+
+- Orange spans are masked identifiers or quasi-identifiers.
+- Green spans are protected HSD target cues. They are detected and preserved in
+  `balanced` mode so downstream HSD review still sees the legally relevant
+  target evidence.
