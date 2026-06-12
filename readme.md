@@ -110,6 +110,18 @@ The local web demo lives in [workbench/](workbench/). It runs a FastAPI backend
 against the existing `privhsd` APIs and a React/Vite frontend for paste-text
 testing, span highlighting, risk gauges, and audit JSON export.
 
+Launch both servers from the repository root:
+
+```bash
+python launch.py --install
+```
+
+After dependencies are installed once:
+
+```bash
+python launch.py
+```
+
 ## Python API
 
 ```python

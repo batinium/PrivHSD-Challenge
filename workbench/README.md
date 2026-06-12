@@ -13,6 +13,20 @@ workbench/frontend/   React/Vite UI
 From the repository root:
 
 ```bash
+python launch.py --install
+```
+
+After dependencies are installed once, use:
+
+```bash
+python launch.py
+```
+
+Open `http://127.0.0.1:5173`.
+
+Manual launch is also supported:
+
+```bash
 .venv/bin/python -m pip install -r workbench/backend/requirements.txt
 .venv/bin/python -m uvicorn workbench.backend.app:app \
   --host 127.0.0.1 \
@@ -27,8 +41,6 @@ cd workbench/frontend
 npm install
 npm run dev
 ```
-
-Open `http://127.0.0.1:5173`.
 
 ## Data Handling
 
