@@ -22,6 +22,12 @@ After dependencies are installed once, use:
 python launch.py
 ```
 
+Backend reload mode is opt-in for development:
+
+```bash
+python launch.py --reload
+```
+
 Open `http://127.0.0.1:5173`.
 
 Manual launch is also supported:

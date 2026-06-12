@@ -132,9 +132,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--backend-port", type=int, default=8000)
     parser.add_argument("--frontend-port", type=int, default=5173)
     parser.add_argument(
-        "--no-reload",
+        "--reload",
         action="store_true",
-        help="Disable FastAPI reload mode.",
+        help="Enable FastAPI reload mode for backend development.",
     )
     return parser.parse_args()
 
@@ -160,7 +160,7 @@ def main() -> int:
         "--port",
         str(args.backend_port),
     ]
-    if not args.no_reload:
+    if args.reload:
         backend_command.append("--reload")
 
     frontend_command = [

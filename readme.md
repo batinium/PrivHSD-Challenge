@@ -122,6 +122,12 @@ After dependencies are installed once:
 python launch.py
 ```
 
+Backend reload mode is opt-in for development:
+
+```bash
+python launch.py --reload
+```
+
 ## Python API
 
 ```python
