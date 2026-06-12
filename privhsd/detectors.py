@@ -258,6 +258,9 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "mongos",
     ),
     "race_or_ethnicity": (
+        "african",
+        "africans",
+        "african people",
         "black people",
         "black community",
         "black communities",
@@ -425,6 +428,45 @@ def has_target_generalization_context(text: str, start: int, end: int) -> bool:
     return False
 
 
+def hashtag_target_group_spans(text: str) -> list[Span]:
+    """Detect target terms embedded in simple hashtags such as StarvingAfricans."""
+    spans: list[Span] = []
+    for hashtag_match in re.finditer(r"#[A-Za-z0-9_]{3,}", text):
+        body = hashtag_match.group(0)[1:]
+        lowered_body = body.lower()
+        for category, terms in TARGET_GROUP_TERMS.items():
+            for term in terms:
+                compact_term = re.sub(r"[^a-z0-9]", "", term.lower())
+                if len(compact_term) < 4:
+                    continue
+                start_in_body = lowered_body.find(compact_term)
+                if start_in_body < 0:
+                    continue
+                matched_start = hashtag_match.start() + 1 + start_in_body
+                matched_end = matched_start + len(compact_term)
+                if (
+                    term.lower() in CONTEXTUAL_TARGET_TERMS
+                    and not has_target_generalization_context(
+                        text,
+                        matched_start,
+                        matched_end,
+                    )
+                ):
+                    continue
+                spans.append(
+                    Span(
+                        start=hashtag_match.start(),
+                        end=hashtag_match.end(),
+                        entity_type="TARGET_GROUP",
+                        text=hashtag_match.group(0),
+                        score=0.62,
+                        source="target_hashtag",
+                        category=category,
+                    )
+                )
+    return spans
+
+
 def target_group_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for category, terms in TARGET_GROUP_TERMS.items():
@@ -451,7 +493,8 @@ def target_group_spans(text: str) -> list[Span]:
                         category=category,
                     )
                 )
-    return spans
+    spans.extend(hashtag_target_group_spans(text))
+    return merge_spans(spans)
 
 
 def span_priority(span: Span) -> tuple[int, float, int]:
@@ -462,6 +505,7 @@ def span_priority(span: Span) -> tuple[int, float, int]:
         "context_location": 1,
         "known_location": 1,
         "target_dictionary": 0,
+        "target_hashtag": 0,
     }.get(span.source, 0)
     return (span.end - span.start, span.score, source_priority)
 

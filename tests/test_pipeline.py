@@ -100,6 +100,21 @@ def test_racial_slur_is_detected_as_protected_target():
     assert "Niggers should leave" in balanced_result.text
 
 
+def test_african_target_and_hashtag_target_are_detected():
+    text = (
+        "They say Africans are resourceful near Lagos. "
+        "#StarvingAfricans #HandoutHogs"
+    )
+    spans = target_group_spans(text)
+    span_values = {(span.text, span.category, span.source) for span in spans}
+    privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert ("Africans", "race_or_ethnicity", "target_dictionary") in span_values
+    assert ("#StarvingAfricans", "race_or_ethnicity", "target_hashtag") in span_values
+    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
+    assert "[LOCATION]" in privacy_result.text
+
+
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():
     text = "The women from River City organized a public meeting."
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))
