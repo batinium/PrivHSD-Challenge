@@ -2,6 +2,10 @@
 
 Date: 2026-06-13
 
+Status: active
+Owner area: challenge alignment and deliverables
+Last verified: 2026-06-13
+
 This note converts the PrivHSD webinar transcript into concrete project aims,
 direction, and deliverables. It should guide what we build and what we show
 during the hackathon.

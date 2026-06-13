@@ -2,6 +2,10 @@
 
 Date: 2026-06-11
 
+Status: active
+Owner area: legal and governance stress tests
+Last verified: 2026-06-13
+
 This note captures the legal and governance constraints that should guide the
 PrivHSD proof of concept. The challenge system is a privacy-preserving text
 transformation tool for hate-speech datasets, not a court, a takedown engine,

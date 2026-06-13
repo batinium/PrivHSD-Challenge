@@ -1,5 +1,9 @@
 # Challenge Requirements
 
+Status: active
+Owner area: challenge interpretation
+Last verified: 2026-06-13
+
 ## Expected Output
 
 The challenge expects a working method that transforms text into a
@@ -93,8 +97,8 @@ It should pass these legal-design checks:
   targeting, threats, large semantic drift, uncertain context, and any
   moderation consequence beyond dataset anonymisation.
 
-See `docs/challenge/human_rights_legal_test_plan.md` for the detailed ECtHR,
-Framework Convention, and HUDERIA mapping.
+See [human_rights_legal_test_plan.md](human_rights_legal_test_plan.md) for the
+detailed ECtHR, Framework Convention, and HUDERIA mapping.
 
 ## Webinar Method Notes
 
@@ -120,4 +124,5 @@ Framework Convention, and HUDERIA mapping.
 - 2026-06-18 end of day: final code/system due.
 - 2026-06-19: final pitches and winners.
 
-See `docs/challenge/webinar_alignment.md` for the current deliverable focus.
+See [webinar_alignment.md](webinar_alignment.md) for the current deliverable
+focus.

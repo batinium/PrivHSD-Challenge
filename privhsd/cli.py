@@ -19,6 +19,11 @@ from .classifier import (
     predict_classifier,
     train_classifier,
 )
+from .contribution_bounding import (
+    BOUNDING_STRATEGIES,
+    ContributionBoundingError,
+    bound_contributions,
+)
 from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
 from .cue_checks import CueCheckError, run_cue_checks
 from .datasets import (
@@ -229,6 +234,36 @@ def build_parser() -> argparse.ArgumentParser:
     target_group = anonymize.add_mutually_exclusive_group()
     target_group.add_argument("--generalize-targets", action="store_true")
     target_group.add_argument("--preserve-targets", action="store_true")
+
+    bound = subparsers.add_parser(
+        "bound-contributions",
+        help="Limit repeated author/user rows before release or model training.",
+    )
+    bound.add_argument("--input", type=Path, required=True)
+    bound.add_argument("--output", type=Path, required=True)
+    bound.add_argument("--author-col", required=True)
+    bound.add_argument("--id-col")
+    bound.add_argument("--text-col")
+    bound.add_argument("--report", type=Path)
+    bound.add_argument("--max-records-per-author", type=int, required=True)
+    bound.add_argument(
+        "--strategy",
+        choices=sorted(BOUNDING_STRATEGIES),
+        default="random",
+    )
+    bound.add_argument(
+        "--stratify-col",
+        dest="stratify_cols",
+        action="append",
+        default=[],
+        help="Column to preserve approximately within each author quota. Repeatable.",
+    )
+    bound.add_argument("--random-state", type=int, default=13)
+    bound.add_argument(
+        "--drop-missing-author",
+        action="store_true",
+        help="Drop blank-author rows instead of keeping them unbounded.",
+    )
 
     evaluate = subparsers.add_parser(
         "evaluate",
@@ -1044,6 +1079,20 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
             )
+        elif args.command == "bound-contributions":
+            result = bound_contributions(
+                args.input,
+                args.output,
+                author_col=args.author_col,
+                max_records_per_author=args.max_records_per_author,
+                id_col=args.id_col,
+                text_col=args.text_col,
+                report_path=args.report,
+                strategy=args.strategy,
+                stratify_cols=args.stratify_cols,
+                random_state=args.random_state,
+                drop_missing_author=args.drop_missing_author,
+            )
         elif args.command == "evaluate":
             result = evaluate_csv(
                 args.input,
@@ -1497,6 +1546,7 @@ def main(argv: list[str] | None = None) -> int:
         AuthorRiskError,
         BenchmarkError,
         ClassifierError,
+        ContributionBoundingError,
         CsvPipelineError,
         CueCheckError,
         DatasetProfileError,

@@ -2,6 +2,10 @@
 
 Date: 2026-06-12
 
+Status: active
+Owner area: pitch and demo narrative
+Last verified: 2026-06-13
+
 Use this as the five-minute Dragon's Den story. The goal is to show a working
 system, a rights-aware privacy/utility tradeoff, and a plausible public-impact
 deployment path.

@@ -8,6 +8,9 @@ workbench/backend/    FastAPI wrapper around privhsd APIs
 workbench/frontend/   React/Vite UI
 ```
 
+The active operational runbook is
+[`docs/runbooks/workbench.md`](../docs/runbooks/workbench.md).
+
 ## Run Locally
 
 From the repository root:

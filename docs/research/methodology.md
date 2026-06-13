@@ -2,6 +2,12 @@
 
 Date: 2026-06-12
 
+Status: active
+Owner area: research methodology
+Last verified: 2026-06-13
+Primary code: `privhsd/detectors.py`, `privhsd/pipeline.py`,
+`privhsd/rerank.py`, `privhsd/token_policy.py`
+
 This note explains why the pipeline uses deterministic rules, lexicons,
 misspelling handling, optional Presidio/DPMLM/LLM candidates, token-policy
 fine-tuning, and reranking. It is meant to support judge questions about
@@ -9,10 +15,10 @@ provenance, redundancy, and the privacy/utility tradeoff. The relevant research
 support is summarized in the references at the end of this file.
 
 For the human-rights and legal test framing, see
-`docs/challenge/human_rights_legal_test_plan.md`. That note maps ECtHR Article 10,
-Articles 8/13/14, Delfi, Google LLC v. Russia, the Council of Europe Framework
-Convention on AI, and HUDERIA into concrete acceptance criteria for this proof
-of concept.
+[human_rights_legal_test_plan.md](../challenge/human_rights_legal_test_plan.md).
+That note maps ECtHR Article 10, Articles 8/13/14, Delfi, Google LLC v.
+Russia, the Council of Europe Framework Convention on AI, and HUDERIA into
+concrete acceptance criteria for this proof of concept.
 
 ## Core Principle
 

@@ -15,14 +15,18 @@ classifier and not an automated takedown tool.
 contextsafe_hsd/     Public Python package alias
 privhsd/             CLI and implementation
 tests/               Synthetic and regression tests
-docs/project/        Methodology, pipeline, evidence, and operating workflow
+docs/runbooks/       Operational workflows and commands
+docs/reference/      Stable contracts and architecture
+docs/planning/       Current evidence, risks, decisions, and roadmap
+docs/research/       Methodology and governance rationale
 docs/challenge/      Rules, rights framing, checklist, and pitch material
 workbench/           Decoupled FastAPI + React demo app
 data/                Ignored local datasets, models, and reports
 ```
 
 Start with [docs/README.md](docs/README.md). For a full method explanation,
-read [docs/project/methodology_justification.md](docs/project/methodology_justification.md).
+read [docs/research/methodology.md](docs/research/methodology.md). For parallel
+agent work, use [docs/agent_workstreams.md](docs/agent_workstreams.md).
 
 ## Install And Test
 
@@ -92,32 +96,13 @@ python -m privhsd.cli source-regression-report \
 
 ## Current Evidence Snapshot
 
-- `auto` is the primary exact-format CSV path. It records provider/model
-  discovery status and falls back to deterministic balanced masking when
-  optional dependencies or local artifacts are missing.
-- `balanced` remains the deterministic compatibility fallback: auditable,
-  target-preserving, and low-dependency.
-- On the merged public regression bundle, `balanced` reduced identifier
-  detections from 40,304 to 5 while preserving target and utility cues at
-  0.9999.
-- Source-aware regression adds slice checks by source, label, split, platform,
-  and type, with rationale/span preservation reported by row ID only.
-- A CUDA fine-tuned RoBERTa token-policy model reached dev macro F1 0.9061 on
-  weak token-action labels.
-- Grouped 5-fold RoBERTa token-policy training reached macro F1 mean 0.8977
-  with zero duplicate text overlap across folds.
-- On external TweetEval hate/offensive data, the equal RoBERTa plus HateBERT
-  ensemble reached macro F1 0.8837 and `PROTECT_TARGET` F1 0.8143 on weak
-  token-action labels.
+Current evidence, readiness, and caveats live in
+[docs/planning/current_status.md](docs/planning/current_status.md).
 
-The token-policy models are advisory/reranking support. They do not replace
-the deterministic anonymizer unless an audited candidate path improves official
-privacy and utility scores.
-
-Default exact submissions use `--metric-depth fast`, which avoids expensive
-target-cue variant, spaced-token, profanity, and semantic scans on every row.
-Use `--metric-depth sampled` or `--metric-depth deep` only for local audit runs
-under ignored `data/` paths.
+The short version: `auto` is the primary exact-format path, `balanced` remains
+the deterministic fallback, token-policy models are advisory/reranking support,
+and exact submissions use `--metric-depth fast` by default. Use sampled or deep
+metrics only for explicit local audits under ignored `data/` paths.
 
 ## Demo Workbench
 

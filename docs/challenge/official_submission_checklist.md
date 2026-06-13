@@ -1,5 +1,10 @@
 # Official Submission Checklist
 
+Status: active
+Owner area: final upload checklist
+Last verified: 2026-06-13
+Primary runbook: `docs/runbooks/official_submission.md`
+
 Use this before any leaderboard upload. Keep raw challenge examples out of
 commits, markdown, screenshots, and chat.
 

@@ -1,43 +1,75 @@
 # Documentation Index
 
-The documentation is intentionally small. Keep operational instructions,
-methodology, evidence, and pitch material here; keep raw data and generated run
-logs under ignored `data/`.
+Status: active
+Owner area: documentation navigation
+Last verified: 2026-06-13
 
-## Project Docs
+This directory is split so multiple agents can work without editing the same
+markdown files. Use the authoritative doc for the area you are changing, then
+link out instead of duplicating content.
 
-- [project/quickstart.md](project/quickstart.md) - setup and common commands.
-- [project/pipeline_design.md](project/pipeline_design.md) - architecture and CLI map.
-- [project/manual_dataset_and_expectations.md](project/manual_dataset_and_expectations.md) - manual fixture, GUI expectations, and author-risk explanation.
-- [project/real_data_playbook.md](project/real_data_playbook.md) - official CSV workflow.
-- [project/roadmap.md](project/roadmap.md) - current technical strategy.
-- [project/experiment_verdict.md](project/experiment_verdict.md) - current evidence table.
-- [project/system_weaknesses.md](project/system_weaknesses.md) - known gaps and win plan.
-- [project/methodology_justification.md](project/methodology_justification.md) - detailed method rationale.
+## Start Here
+
+- [agent_workstreams.md](agent_workstreams.md) - ownership map for parallel
+  agents.
+- [runbooks/quickstart.md](runbooks/quickstart.md) - install, test, prepare
+  data, create an exact candidate.
+- [reference/data_contract.md](reference/data_contract.md) - exact CSV contract
+  that submission work must preserve.
+- [reference/pipeline.md](reference/pipeline.md) - stable pipeline
+  architecture.
+- [planning/current_status.md](planning/current_status.md) - current evidence
+  and readiness snapshot.
+
+## Runbooks
+
+Operational docs with commands:
+
+- [runbooks/quickstart.md](runbooks/quickstart.md)
+- [runbooks/official_submission.md](runbooks/official_submission.md)
+- [runbooks/token_policy_training.md](runbooks/token_policy_training.md)
+- [runbooks/workbench.md](runbooks/workbench.md)
+- [runbooks/manual_fixture.md](runbooks/manual_fixture.md)
+
+## Reference
+
+Stable contracts and system design:
+
+- [reference/data_contract.md](reference/data_contract.md)
+- [reference/pipeline.md](reference/pipeline.md)
+- [reference/providers_and_models.md](reference/providers_and_models.md)
+- [reference/cli.md](reference/cli.md)
+- [reference/evaluation.md](reference/evaluation.md)
+
+## Planning
+
+Current status, risks, and future work:
+
+- [planning/current_status.md](planning/current_status.md)
+- [planning/known_weaknesses.md](planning/known_weaknesses.md)
+- [planning/roadmap.md](planning/roadmap.md)
+- [planning/decisions.md](planning/decisions.md)
+
+## Research And Governance
+
+- [research/methodology.md](research/methodology.md)
+- [research/legal_governance.md](research/legal_governance.md)
 
 ## Challenge Docs
 
-- [challenge/challenge_requirements.md](challenge/challenge_requirements.md) - challenge interpretation and timeline.
-- [challenge/webinar_alignment.md](challenge/webinar_alignment.md) - webinar-derived aims, direction, and deliverables.
-- [challenge/official_submission_checklist.md](challenge/official_submission_checklist.md) - pre-upload checks.
-- [challenge/human_rights_legal_test_plan.md](challenge/human_rights_legal_test_plan.md) - legal and governance acceptance tests.
-- [challenge/final_pitch_outline.md](challenge/final_pitch_outline.md) - five-minute Dragon's Den story and demo plan.
+Challenge-specific interpretation, legal stress tests, checklist, and pitch:
 
-## Demo App
+- [challenge/challenge_requirements.md](challenge/challenge_requirements.md)
+- [challenge/webinar_alignment.md](challenge/webinar_alignment.md)
+- [challenge/official_submission_checklist.md](challenge/official_submission_checklist.md)
+- [challenge/human_rights_legal_test_plan.md](challenge/human_rights_legal_test_plan.md)
+- [challenge/final_pitch_outline.md](challenge/final_pitch_outline.md)
 
-- [../workbench/README.md](../workbench/README.md) - decoupled FastAPI + React privacy review workbench.
+## Editing Rules
 
-## Current Workflow
-
-1. Profile the dataset and verify text, ID, label, source, and author columns.
-2. Create `auto` exact-format output with `create-submission --replace-text`.
-3. Validate shape with `validate-submission`.
-4. Run `source-regression-report`, cue checks, and author-risk checks when the
-   required columns exist.
-5. Compare alternates only after the exact-format baseline exists: `balanced`,
-   style scrub, filtered Presidio reranking, and token-policy advisory
-   candidates.
-6. Exercise the workbench on synthetic examples and a small CSV before the
-   pitch.
-7. Record commands, commit hash, manifest paths, and official scores in a
-   dated run note under ignored `data/outputs/`, not in committed markdown.
+1. Choose a workstream from [agent_workstreams.md](agent_workstreams.md).
+2. Put commands in runbooks.
+3. Put stable interfaces and architecture in reference docs.
+4. Put current results and risks in planning docs.
+5. Put detailed method/legal rationale in research or challenge docs.
+6. Keep raw data and generated reports under ignored `data/`.
