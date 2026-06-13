@@ -2,6 +2,7 @@ from collections import Counter
 import csv
 import importlib.util
 from pathlib import Path
+import random
 
 
 SCRIPT_PATH = (
@@ -74,3 +75,18 @@ def test_validate_offsets_ignores_empty_sentinel_spans():
 
     assert errors == []
     assert [item["text"] for item in valid] == ["Boston"]
+
+
+def test_requested_hate_label_keeps_protected_target_category():
+    rng = random.Random(7)
+    scenario = generator.choose_scenario(
+        0,
+        rng,
+        target_labels=["hate"],
+        label_cycle_size=1,
+        label_index=len(generator.TARGET_CATEGORIES) - 1,
+    )
+
+    assert scenario["label_hint"] == "hate"
+    assert scenario["requested_label"] == "hate"
+    assert scenario["target_category"] != "none"

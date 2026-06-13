@@ -407,7 +407,10 @@ def target_category_for_label(
     category_index = request_index // max(label_schedule_size, 1)
     if requested_label == "offensive":
         return "none"
-    return TARGET_CATEGORIES[category_index % len(TARGET_CATEGORIES)]
+    categories = TARGET_CATEGORIES
+    if requested_label == "hate":
+        categories = tuple(category for category in TARGET_CATEGORIES if category != "none")
+    return categories[category_index % len(categories)]
 
 
 def frame_for_label(
@@ -478,7 +481,7 @@ def choose_scenario(
         label_hint = rng.choice(["hate", "offensive", "ambiguous"])
     else:
         label_hint = rng.choice(["hate", "offensive"])
-    if target_category == "none" and label_hint == "hate":
+    if not requested_label and target_category == "none" and label_hint == "hate":
         label_hint = rng.choice(["offensive", "not_hate", "ambiguous"])
     scenario_id = hashlib.sha1(
         "|".join(
