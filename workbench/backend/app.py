@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from privhsd.context import analyze_context
 from privhsd.cue_checks import row_cue_report
 from privhsd.detectors import Span, target_group_spans
-from privhsd.metrics import aggregate_metrics, row_metric
+from privhsd.metrics import aggregate_metrics, row_metric, row_metric_for_depth
 from privhsd.pipeline import MODES, PrivatizerConfig, privatize_text
 from privhsd.presidio_augment import (
     PresidioAugmentError,
@@ -77,10 +77,13 @@ class CsvPrivatizeRequest(BaseModel):
     id_col: str | None = None
     output_col: str = "privatized_text"
     replace_text: bool = False
-    mode: Literal["utility", "balanced", "privacy", "rerank"] = "balanced"
+    mode: Literal["auto", "utility", "balanced", "privacy", "rerank"] = "auto"
     style_scrub: bool = False
     generalize_targets: bool | None = None
     providers: list[str] = Field(default_factory=list)
+    disabled_providers: list[str] = Field(default_factory=list)
+    disabled_models: list[str] = Field(default_factory=list)
+    metric_depth: Literal["fast", "sampled", "deep"] = "fast"
 
 
 class CsvPrivatizeResponse(BaseModel):
@@ -187,7 +190,7 @@ def validate_csv_request(
             status_code=400,
             detail=f"Missing ID column: {request.id_col}",
         )
-    if request.mode not in {*MODES, "rerank"}:
+    if request.mode not in {*MODES, "rerank", "auto"}:
         raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
 
 
@@ -522,6 +525,90 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
 def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
     rows, fieldnames = parse_csv_text(request.csv_text)
     validate_csv_request(request, fieldnames)
+    if request.mode == "auto":
+        from privhsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
+
+        context = AutoPipelineContext.create(
+            AutoPipelineConfig(
+                metric_depth=request.metric_depth,
+                disabled_providers=frozenset(request.disabled_providers),
+                disabled_models=frozenset(request.disabled_models),
+                style_scrub=request.style_scrub,
+                generalize_targets=(
+                    request.generalize_targets
+                    if request.generalize_targets is not None
+                    else False
+                ),
+            )
+        )
+        engine_result = AutoPipelineEngine(context).process_rows(
+            rows,
+            fieldnames,
+            text_col=request.text_col,
+            id_col=request.id_col,
+            output_col=request.output_col,
+            replace_text=request.replace_text,
+        )
+        output_csv = write_csv_text(engine_result.rows, engine_result.fieldnames)
+        helper_columns = [
+            column for column in engine_result.fieldnames if column not in fieldnames
+        ]
+        validation = {
+            "valid": (
+                len(engine_result.rows) == len(rows)
+                and (
+                    not request.replace_text
+                    or engine_result.fieldnames == fieldnames
+                )
+            ),
+            "source_row_count": len(rows),
+            "output_row_count": len(engine_result.rows),
+            "source_columns": fieldnames,
+            "output_columns": engine_result.fieldnames,
+            "replace_text": request.replace_text,
+            "helper_columns": helper_columns,
+        }
+        summary = {
+            **engine_result.summary,
+            "artifact_type": "workbench_csv_audit",
+            "validation": validation,
+        }
+        manifest = {
+            "artifact_type": "workbench_csv_manifest",
+            "row_count": len(rows),
+            "mode": "auto",
+            "metric_depth": request.metric_depth,
+            "providers": context.provider_status,
+            "models": context.model_status,
+            "load_counts": {
+                "providers": dict(sorted(context.provider_load_counts.items())),
+                "models": dict(sorted(context.model_load_counts.items())),
+            },
+            "columns": {
+                "text_col": request.text_col,
+                "id_col": request.id_col,
+                "output_col": request.text_col if request.replace_text else request.output_col,
+                "preserved_columns": fieldnames,
+            },
+            "validation": validation,
+            "metrics": summary["metrics"],
+        }
+        preview_rows = [
+            csv_preview_row(
+                row,
+                row_id=row.get(request.id_col) if request.id_col else str(index + 1),
+                text_col=request.text_col,
+                output_col=request.text_col if request.replace_text else request.output_col,
+            )
+            for index, row in enumerate(engine_result.rows[:MAX_PREVIEW_ROWS])
+        ]
+        return {
+            "output_csv": output_csv,
+            "audit": {"summary": summary, "rows": engine_result.audit_rows},
+            "manifest": manifest,
+            "preview_rows": preview_rows,
+        }
+
     provider_names = [name.strip().lower() for name in request.providers if name.strip()]
     try:
         providers = load_span_providers(provider_names)
@@ -600,7 +687,12 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
 
         output_row[output_col] = privatized
         output_rows.append(output_row)
-        metrics = row_metric(original, privatized)
+        metrics = row_metric_for_depth(
+            original,
+            privatized,
+            metric_depth=request.metric_depth,
+            row_index=row_index,
+        )
         metric_rows.append(metrics)
         for rejected in rejected_rewrite_candidates:
             for reason in rejected.get("validation", {}).get("reasons", []):
@@ -637,6 +729,7 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
         "id_col": request.id_col,
         "output_col": output_col,
         "mode": request.mode,
+        "metric_depth": request.metric_depth,
         "style_scrub": request.style_scrub,
         "generalize_targets": config.target_generalization_enabled,
         "providers": provider_names,

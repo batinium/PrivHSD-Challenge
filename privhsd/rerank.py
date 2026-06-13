@@ -10,7 +10,7 @@ from typing import Any
 
 from .author_risk import AuthorRiskError, build_author_classifier, load_sklearn
 from .csv_pipeline import read_csv, write_csv, write_json
-from .metrics import aggregate_metrics, row_metric
+from .metrics import aggregate_metrics, row_metric, row_metric_for_depth
 from .pipeline import PrivatizerConfig, privatize_text
 from .presidio_augment import load_presidio_analyzer
 from .span_providers.base import SpanProvider, SpanProviderOutput
@@ -528,6 +528,15 @@ def run_candidate_reranking(
     presidio_augment: bool = False,
     presidio_language: str = "en",
     providers: list[str] | None = None,
+    mode: str = "rerank",
+    metric_depth: str = "fast",
+    allow_model_download: bool = False,
+    device: str = "auto",
+    max_model_batch_size: int = 16,
+    max_provider_rows: int | None = None,
+    disabled_providers: list[str] | None = None,
+    disabled_models: list[str] | None = None,
+    audit_level: str = "summary",
 ) -> dict[str, Any]:
     candidate_cols = candidate_cols or []
     rows, fieldnames = read_csv(input_path)
@@ -539,6 +548,44 @@ def run_candidate_reranking(
         author_col=author_col,
         candidate_cols=candidate_cols,
     )
+    if mode == "auto":
+        from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
+
+        auto_config = AutoPipelineConfig(
+            metric_depth=metric_depth,
+            allow_model_download=allow_model_download,
+            device=device,
+            max_model_batch_size=max_model_batch_size,
+            max_provider_rows=max_provider_rows,
+            disabled_providers=frozenset(disabled_providers or []),
+            disabled_models=frozenset(disabled_models or []),
+            audit_level=audit_level,
+            provider_language=presidio_language,
+        )
+        context = AutoPipelineContext.create(auto_config)
+        engine_result = AutoPipelineEngine(context).process_rows(
+            rows,
+            fieldnames,
+            text_col=text_col,
+            id_col=id_col,
+            output_col=output_col,
+            replace_text=replace_text,
+        )
+        write_csv(output_path, engine_result.rows, engine_result.fieldnames)
+        summary = {
+            "input": str(input_path),
+            "output": str(output_path),
+            **engine_result.summary,
+        }
+        if audit_path:
+            write_json(
+                audit_path,
+                {
+                    "summary": summary,
+                    "rows": engine_result.audit_rows,
+                },
+            )
+        return summary
     author_scorer, author_scorer_report = build_author_scorer(
         rows,
         text_col=text_col,
@@ -591,7 +638,14 @@ def run_candidate_reranking(
             author_scorer=author_scorer,
         )
         chosen_counts[chosen.name] += 1
-        chosen_metrics.append(row_metric(original, chosen.text))
+        chosen_metrics.append(
+            row_metric_for_depth(
+                original,
+                chosen.text,
+                metric_depth=metric_depth,
+                row_index=row_index,
+            )
+        )
         output_row = dict(row)
         if replace_text:
             output_row[text_col] = chosen.text
@@ -645,6 +699,8 @@ def run_candidate_reranking(
             "names": provider_names,
             "language": presidio_language if "presidio" in provider_names else None,
         },
+        "mode": mode,
+        "metric_depth": metric_depth,
         "presidio_augment": {
             "enabled": "presidio" in provider_names,
             "language": presidio_language if "presidio" in provider_names else None,

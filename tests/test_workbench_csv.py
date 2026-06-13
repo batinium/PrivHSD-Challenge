@@ -21,8 +21,10 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
             ),
             "text_col": "text",
             "id_col": "id",
-            "mode": "balanced",
+            "mode": "auto",
             "replace_text": True,
+            "disabled_providers": ["presidio", "scrubadub", "gliner"],
+            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
         },
     )
 
@@ -32,5 +34,5 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
     assert list(rows[0]) == ["id", "text", "label"]
     assert rows[0]["text"] == "Email [EMAIL] because Muslims should leave."
     assert body["audit"]["summary"]["validation"]["valid"] is True
+    assert body["manifest"]["mode"] == "auto"
     assert body["manifest"]["columns"]["output_col"] == "text"
-

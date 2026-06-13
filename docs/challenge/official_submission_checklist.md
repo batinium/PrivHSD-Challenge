@@ -15,7 +15,9 @@ commits, markdown, screenshots, and chat.
 - `validate-submission` passes with no helper columns.
 - Row count, column order, ID order, labels, and metadata match the source.
 - Manifest exists and records command, git commit, input/output hashes, mode,
-  validation, and aggregate metrics.
+  metric depth, provider/model status, validation, and aggregate metrics.
+- Exact submission metrics use `--metric-depth fast` unless a separate local
+  audit explicitly requests `sampled` or `deep`.
 - Generated reports, datasets, model weights, and run notes are under ignored
   `data/outputs/` or `data/official/`.
 - No raw official examples or downloaded datasets are staged for commit.
@@ -43,34 +45,36 @@ python -m privhsd.cli profile-dataset \
 
 python -m privhsd.cli create-submission \
   --input INPUT.csv \
-  --output data/outputs/SUBMISSION.balanced.csv \
+  --output data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
   --replace-text \
-  --mode balanced \
-  --manifest data/outputs/SUBMISSION.balanced.manifest.json
+  --mode auto \
+  --metric-depth fast \
+  --manifest data/outputs/SUBMISSION.auto.manifest.json
 
 python -m privhsd.cli validate-submission \
   --source INPUT.csv \
-  --submission data/outputs/SUBMISSION.balanced.csv \
+  --submission data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/SUBMISSION.balanced.validation.json
+  --output data/outputs/SUBMISSION.auto.validation.json
 
 python -m privhsd.cli source-regression-report \
   --original INPUT.csv \
-  --protected data/outputs/SUBMISSION.balanced.csv \
+  --protected data/outputs/SUBMISSION.auto.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
   --group-col source \
   --group-col label \
-  --output data/outputs/SUBMISSION.balanced.source_regression.json
+  --output data/outputs/SUBMISSION.auto.source_regression.json
 ```
 
 ## Decision Rule
 
-Submit `balanced` first unless official feedback proves a better tradeoff.
-Consider `rerank-candidates --presidio-augment` if privacy is weak and cue
-retention still passes. Use token-policy outputs as advisory candidates only
-when exact-format validation and reranking audit both pass.
+Submit `auto` first unless provider/model status or official feedback proves a
+better deterministic fallback. Consider `rerank-candidates --mode auto` if
+privacy is weak and cue retention still passes. Use token-policy outputs as
+advisory candidates only when exact-format validation and reranking audit both
+pass. Never upload raw optional provider/model output directly.

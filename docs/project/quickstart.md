@@ -46,25 +46,32 @@ The merged schema keeps `id,text,label,source,split,target,type` first, then
 adds `platform,source_id,severity,target_categories,rationale_spans,meta`.
 Downloaded raw files stay under ignored `data/public_dev/raw/`.
 
-## Create And Validate A Baseline
+## Create And Validate An Exact Auto Submission
 
 ```bash
 python -m privhsd.cli create-submission \
   --input data/public_dev/recommended_merged.csv \
-  --output data/outputs/recommended_merged.balanced.csv \
+  --output data/outputs/recommended_merged.auto.csv \
   --text-col text \
   --id-col id \
   --replace-text \
-  --mode balanced \
-  --manifest data/outputs/recommended_merged.balanced.manifest.json
+  --mode auto \
+  --metric-depth fast \
+  --manifest data/outputs/recommended_merged.auto.manifest.json
 
 python -m privhsd.cli validate-submission \
   --source data/public_dev/recommended_merged.csv \
-  --submission data/outputs/recommended_merged.balanced.csv \
+  --submission data/outputs/recommended_merged.auto.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/recommended_merged.balanced.validation.json
+  --output data/outputs/recommended_merged.auto.validation.json
 ```
+
+Auto mode preserves exact CSV shape when `--replace-text` is used. Optional
+Presidio, scrubadub, GLiNER, token-policy, semantic, and advisory components
+are discovered locally, loaded at most once when used, and safely skipped when
+dependencies or model artifacts are absent. No model downloads happen unless
+`--allow-model-download` is passed.
 
 For a package-installed command, replace `python -m privhsd.cli` with
 `contextsafe-hsd`.
@@ -76,7 +83,7 @@ Source-aware regression:
 ```bash
 python -m privhsd.cli source-regression-report \
   --original data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.balanced.csv \
+  --protected data/outputs/recommended_merged.auto.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
@@ -85,7 +92,7 @@ python -m privhsd.cli source-regression-report \
   --group-col split \
   --group-col platform \
   --group-col type \
-  --output data/outputs/recommended_merged.balanced.source_regression.json
+  --output data/outputs/recommended_merged.auto.source_regression.json
 ```
 
 Semantic triage for rows needing repair or selective semantic review:
@@ -93,7 +100,7 @@ Semantic triage for rows needing repair or selective semantic review:
 ```bash
 python -m privhsd.cli semantic-triage-report \
   --input data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.balanced.csv \
+  --protected data/outputs/recommended_merged.auto.csv \
   --text-col text \
   --privatized-col text \
   --id-col id \
@@ -102,9 +109,13 @@ python -m privhsd.cli semantic-triage-report \
   --sample-size 20000 \
   --sample-strategy source_label_round_robin \
   --privacy-scan changed \
-  --output data/outputs/recommended_merged.balanced.semantic_triage.json \
-  --queue-output data/outputs/recommended_merged.balanced.semantic_triage.queue.csv
+  --output data/outputs/recommended_merged.auto.semantic_triage.json \
+  --queue-output data/outputs/recommended_merged.auto.semantic_triage.queue.csv
 ```
+
+Use `--metric-depth fast` for exact submissions. `sampled` runs deep metrics on
+a bounded sample, and `deep` enables expensive target-variant/profanity and
+semantic-style audit checks where implemented.
 
 Author-risk check when an author/user column has repeated values:
 
@@ -169,7 +180,7 @@ hsd.create_submission(
     id_col="id",
     manifest_path=Path("SUBMISSION.manifest.json"),
     replace_text=True,
-    mode="balanced",
+    mode="auto",
 )
 ```
 

@@ -54,6 +54,12 @@ The backend processes pasted text in memory and returns aggregate metrics,
 offsets, placeholders, and warnings. It does not write raw text, logs, CSVs, or
 reports. Use synthetic or consented text for public demos.
 
+CSV uploads are processed in memory. The default CSV mode is `auto` with fast
+metrics. When "Replace text column" is enabled, the downloaded CSV preserves the
+original schema and writes the privatized text back into the selected text
+column. When it is disabled, the backend adds a `privatized_text` helper column
+for local audit only.
+
 ## Highlighting
 
 - Orange spans are masked identifiers or quasi-identifiers.
@@ -63,11 +69,16 @@ reports. Use synthetic or consented text for public demos.
 
 ## Detection Layers
 
-- Deterministic rules and small lexicons run by default.
-- Filtered Presidio is optional. It adds broader NER spans for likely names,
-  locations, and durable dates, then rejects protected HSD cues and noisy spans.
-- RoBERTa + HateBERT token-policy ensemble is optional advisory guidance. It
-  predicts token actions such as `MASK_IDENTIFIER`, `PROTECT_TARGET`, and
-  `PROTECT_HSD`; it does not silently rewrite the output.
+- Deterministic rules and small lexicons run for every CSV row.
+- Auto mode discovers Presidio, scrubadub, GLiNER, token-policy, semantic, and
+  HSD advisory components from installed local dependencies and artifacts.
+  Missing optional components are shown as skipped/missing and fall back to the
+  deterministic candidate.
+- Filtered Presidio adds broader NER spans for likely names, locations, and
+  durable dates, then rejects protected HSD cues and noisy spans.
+- RoBERTa + HateBERT token-policy ensemble is advisory guidance. It predicts
+  token actions such as `MASK_IDENTIFIER`, `PROTECT_TARGET`, and `PROTECT_HSD`;
+  auto mode batches model rows and never uses token-policy output as a direct
+  rewrite.
 - LLM guidance is last-resort routing advice only. The workbench does not call
   a local LLM automatically.

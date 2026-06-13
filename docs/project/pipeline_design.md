@@ -1,6 +1,6 @@
 # Pipeline Design
 
-Date: 2026-06-12
+Date: 2026-06-13
 
 ContextSafe-HSD is built as a layered preprocessing system. The submission path
 must be deterministic, reproducible, and auditable; optional model paths provide
@@ -11,6 +11,7 @@ evidence, uncertainty, and candidates that can be accepted only after checks.
 | Layer | Purpose | Main modules | Submission role |
 | --- | --- | --- | --- |
 | CSV and manifests | Preserve rows, IDs, labels, metadata, hashes, and command provenance. | `csv_pipeline.py`, `submission.py` | Required |
+| Auto orchestration | Discover local providers/models once, route risky rows, batch model inference, and select checked candidates. | `privhsd/auto/` | Default exact path |
 | Deterministic privacy | Mask direct and quasi identifiers with typed placeholders. | `detectors.py`, `pipeline.py`, `metrics.py` | Required |
 | HSD cue protection | Preserve target, hostility, action, negation, modality, counterspeech, and rationale cues. | `cue_checks.py`, `context.py`, `rationale_checks.py` | Required audit |
 | Style pressure | Reduce author-style signals without erasing HSD meaning. | `style.py` | Optional candidate |
@@ -22,28 +23,38 @@ evidence, uncertainty, and candidates that can be accepted only after checks.
 
 ## Core Submission Path
 
-Create the first candidate with `balanced` mode:
+Create the first exact-format candidate with `auto` mode:
 
 ```bash
 python -m privhsd.cli create-submission \
   --input INPUT.csv \
-  --output data/outputs/SUBMISSION.balanced.csv \
+  --output data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
   --replace-text \
-  --mode balanced \
-  --manifest data/outputs/SUBMISSION.balanced.manifest.json
+  --mode auto \
+  --metric-depth fast \
+  --manifest data/outputs/SUBMISSION.auto.manifest.json
 ```
+
+Auto mode always runs deterministic balanced masking first. It then computes
+cheap row risk features and routes only rows with residual ID risk, quasi-ID
+context, provider-worthy ambiguity, style risk, or cue ambiguity to optional
+providers/models. Presidio, scrubadub, GLiNER, token-policy, semantic, and HSD
+advisory components are discovered from local dependencies/artifacts. Missing
+dependencies or artifacts are recorded in the manifest and fall back to the
+deterministic candidate. Downloads are disabled unless `--allow-model-download`
+is explicitly passed.
 
 Validate exact shape:
 
 ```bash
 python -m privhsd.cli validate-submission \
   --source INPUT.csv \
-  --submission data/outputs/SUBMISSION.balanced.csv \
+  --submission data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/SUBMISSION.balanced.validation.json
+  --output data/outputs/SUBMISSION.auto.validation.json
 ```
 
 Run slice regression when metadata columns exist:
@@ -51,22 +62,35 @@ Run slice regression when metadata columns exist:
 ```bash
 python -m privhsd.cli source-regression-report \
   --original INPUT.csv \
-  --protected data/outputs/SUBMISSION.balanced.csv \
+  --protected data/outputs/SUBMISSION.auto.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
   --group-col source \
   --group-col label \
   --group-col split \
-  --output data/outputs/SUBMISSION.balanced.source_regression.json
+  --output data/outputs/SUBMISSION.auto.source_regression.json
 ```
+
+## Metric Depth
+
+Exact submissions default to `--metric-depth fast`. Fast metrics keep the
+aggregate schema but avoid target-variant, spaced-token, external profanity,
+and semantic scans on every row. `--metric-depth sampled` runs deep metrics on a
+bounded sample; `--metric-depth deep` is for explicit local audits under
+ignored `data/` paths.
 
 ## Optional Alternates
 
 Use alternates only after the baseline passes validation.
 
+- `balanced`: deterministic compatibility fallback when auto is not desired.
 - `balanced --style-scrub`: more author-style pressure with the same core
   masking policy.
+- `anonymize --mode auto`: same row routing as exact submission, writing either
+  a helper column or replacing the text column.
+- `rerank-candidates --mode auto`: automatic routing and checked candidate
+  selection without manual provider flags.
 - `rerank-candidates`: row-local choice among `balanced`, `style_scrubbed`,
   `privacy`, `target_generalized`, and supplied candidate columns.
 - `rerank-candidates --presidio-augment`: adds filtered Presidio spans for
@@ -151,8 +175,14 @@ python -m privhsd.cli evaluate-token-policy-ensemble \
   --output data/outputs/token_policy_ensemble.roberta_hatebert.tweet_eval_external.evaluate.json
 ```
 
-Use predictions as a candidate helper only when a reranking/audit path accepts
-them:
+In auto mode, local token-policy artifacts are loaded once only when routing
+needs advisory model evidence, and inference is batched. `MASK_IDENTIFIER` and
+`GENERALIZE_CONTEXT` become span evidence for fusion; `PROTECT_TARGET`,
+`PROTECT_HSD`, `NORMALIZE_STYLE`, and `REVIEW` remain audit/routing evidence.
+Token-policy output never directly overwrites final text.
+
+Use standalone predictions as a candidate helper only when a reranking/audit
+path accepts them:
 
 ```bash
 python -m privhsd.cli predict-token-policy-ensemble \

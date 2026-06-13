@@ -13,7 +13,13 @@ import re
 from statistics import mean
 from typing import Any, Iterable
 
-from .detectors import TAGS, TARGET_GROUP_CATEGORIES, Span, detect_spans
+from .detectors import (
+    TAGS,
+    TARGET_GROUP_CATEGORIES,
+    Span,
+    detect_spans,
+    target_group_term_patterns,
+)
 from .resource_config import load_utility_cue_terms
 
 
@@ -53,6 +59,8 @@ HIGH_PLACEHOLDER_DENSITY = 0.4
 HIGH_MASK_DENSITY = 0.5
 LOW_CHARACTER_UTILITY_RETENTION = 0.55
 TARGET_CUE_LOSS_THRESHOLD = 0.8
+METRIC_DEPTHS = frozenset({"fast", "sampled", "deep"})
+DEFAULT_SAMPLED_DEEP_ROWS = 100
 
 
 @lru_cache(maxsize=1)
@@ -141,6 +149,16 @@ def target_cue_counts(text: str) -> tuple[Counter[str], Counter[str]]:
     return term_counts, cue_counts
 
 
+def target_cue_counts_fast(text: str) -> tuple[Counter[str], Counter[str]]:
+    """Count explicit target cue terms without variant/profanity scans."""
+    term_counts: Counter[str] = Counter()
+    for category, _term, pattern in target_group_term_patterns():
+        term_counts[category] += len(pattern.findall(text))
+    placeholders, _ = placeholder_counts(text)
+    cue_counts = term_counts + target_placeholder_counts(placeholders)
+    return term_counts, cue_counts
+
+
 def quasi_flags(counts: Counter[str]) -> dict[str, bool]:
     return {
         entity_type: counts.get(entity_type, 0) > 0
@@ -199,7 +217,12 @@ def warning_codes(
     )
 
 
-def row_metric(original: str, privatized: str) -> dict[str, Any]:
+def _row_metric_impl(
+    original: str,
+    privatized: str,
+    *,
+    deep_target_scan: bool,
+) -> dict[str, Any]:
     before_spans = identifier_spans(original)
     after_spans = identifier_spans(privatized)
     before_direct_spans = direct_spans(before_spans)
@@ -226,8 +249,9 @@ def row_metric(original: str, privatized: str) -> dict[str, Any]:
     token_count = len(TOKEN_PATTERN.findall(privatized))
     mask_density = round_ratio(placeholder_characters, len(privatized))
     placeholder_density = round_ratio(placeholder_count, token_count)
-    target_terms_before, target_cues_by_category_before = target_cue_counts(original)
-    target_terms_after, target_cues_by_category_after = target_cue_counts(privatized)
+    target_count_fn = target_cue_counts if deep_target_scan else target_cue_counts_fast
+    target_terms_before, target_cues_by_category_before = target_count_fn(original)
+    target_terms_after, target_cues_by_category_after = target_count_fn(privatized)
     target_cues_before = sum(target_cues_by_category_before.values())
     target_cues_after = sum(target_cues_by_category_after.values())
     target_terms_before_count = sum(target_terms_before.values())
@@ -274,6 +298,7 @@ def row_metric(original: str, privatized: str) -> dict[str, Any]:
         privatized=privatized,
     )
     return {
+        "metric_depth": "deep" if deep_target_scan else "fast",
         "privacy_identifier_count_before": before_privacy,
         "privacy_identifier_count_after": after_privacy,
         "privacy_gain": round(privacy_gain, 4),
@@ -338,6 +363,50 @@ def row_metric(original: str, privatized: str) -> dict[str, Any]:
     }
 
 
+def row_metric_deep(original: str, privatized: str) -> dict[str, Any]:
+    return _row_metric_impl(original, privatized, deep_target_scan=True)
+
+
+def row_metric_fast(original: str, privatized: str) -> dict[str, Any]:
+    return _row_metric_impl(original, privatized, deep_target_scan=False)
+
+
+def row_metric_for_depth(
+    original: str,
+    privatized: str,
+    *,
+    metric_depth: str = "deep",
+    row_index: int | None = None,
+    deep_sample_size: int = DEFAULT_SAMPLED_DEEP_ROWS,
+) -> dict[str, Any]:
+    if metric_depth not in METRIC_DEPTHS:
+        raise ValueError(f"metric_depth must be one of {sorted(METRIC_DEPTHS)}")
+    if metric_depth == "deep":
+        return row_metric_deep(original, privatized)
+    if metric_depth == "fast":
+        return row_metric_fast(original, privatized)
+    if row_index is not None and row_index <= max(0, deep_sample_size):
+        metric = row_metric_deep(original, privatized)
+        metric["metric_depth"] = "sampled_deep"
+        return metric
+    metric = row_metric_fast(original, privatized)
+    metric["metric_depth"] = "sampled_fast"
+    return metric
+
+
+def row_metric(
+    original: str,
+    privatized: str,
+    *,
+    metric_depth: str = "deep",
+) -> dict[str, Any]:
+    return row_metric_for_depth(
+        original,
+        privatized,
+        metric_depth=metric_depth,
+    )
+
+
 def counter_sum(rows: Iterable[dict[str, Any]], key: str) -> Counter[str]:
     counts: Counter[str] = Counter()
     for row in rows:
@@ -393,6 +462,7 @@ def aggregate_metrics(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "rows_with_warnings": 0,
             "rows_with_privacy_warnings": 0,
             "rows_with_overmasking_warnings": 0,
+            "metric_depth_counts": {},
             "transformed_entity_counts": {},
         }
     before = sum(row["privacy_identifier_count_before"] for row in materialized)
@@ -547,6 +617,9 @@ def aggregate_metrics(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         ),
         "rows_with_overmasking_warnings": sum(
             1 for row in materialized if row.get("overmasking_warnings")
+        ),
+        "metric_depth_counts": sorted_counter(
+            Counter(str(row.get("metric_depth", "unknown")) for row in materialized)
         ),
         "transformed_entity_counts": dict(sorted(placeholders.items())),
     }

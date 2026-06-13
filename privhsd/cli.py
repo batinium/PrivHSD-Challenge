@@ -132,6 +132,56 @@ from .token_policy import (
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
+def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--metric-depth",
+        choices=["fast", "sampled", "deep"],
+        default="fast",
+        help="Metric cost tier. Exact CSV paths default to fast.",
+    )
+    parser.add_argument(
+        "--auto-profile",
+        action="store_true",
+        help="Include provider/model discovery status in the JSON result.",
+    )
+    parser.add_argument(
+        "--allow-model-download",
+        action="store_true",
+        help="Allow optional model loaders to download weights. Default is local-only.",
+    )
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device policy for optional neural advisory models.",
+    )
+    parser.add_argument("--max-model-batch-size", type=int, default=16)
+    parser.add_argument(
+        "--max-provider-rows",
+        type=int,
+        help="Debugging limit for rows routed to optional providers.",
+    )
+    parser.add_argument(
+        "--disable-provider",
+        dest="disabled_providers",
+        action="append",
+        default=[],
+        help="Disable an automatically discovered provider. Repeatable.",
+    )
+    parser.add_argument(
+        "--disable-model",
+        dest="disabled_models",
+        action="append",
+        default=[],
+        help="Disable an automatically discovered model. Repeatable.",
+    )
+    parser.add_argument(
+        "--audit-level",
+        choices=["summary", "row", "debug"],
+        default="summary",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="contextsafe-hsd")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -172,9 +222,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     anonymize.add_argument(
         "--mode",
-        choices=["utility", "balanced", "privacy"],
+        choices=["auto", "utility", "balanced", "privacy"],
         default="balanced",
     )
+    add_auto_runtime_arguments(anonymize)
     target_group = anonymize.add_mutually_exclusive_group()
     target_group.add_argument("--generalize-targets", action="store_true")
     target_group.add_argument("--preserve-targets", action="store_true")
@@ -270,6 +321,12 @@ def build_parser() -> argparse.ArgumentParser:
     rerank.add_argument("--id-col")
     rerank.add_argument("--output-col", default="privatized_text")
     rerank.add_argument("--replace-text", action="store_true")
+    rerank.add_argument(
+        "--mode",
+        choices=["auto", "rerank"],
+        default="rerank",
+    )
+    add_auto_runtime_arguments(rerank)
     rerank.add_argument(
         "--presidio-augment",
         action="store_true",
@@ -392,9 +449,10 @@ def build_parser() -> argparse.ArgumentParser:
     create_submission_parser.add_argument("--replace-text", action="store_true")
     create_submission_parser.add_argument(
         "--mode",
-        choices=["utility", "balanced", "privacy"],
+        choices=["auto", "utility", "balanced", "privacy"],
         default="balanced",
     )
+    add_auto_runtime_arguments(create_submission_parser)
     create_submission_parser.add_argument("--style-scrub", action="store_true")
     create_submission_parser.add_argument(
         "--presidio-augment",
@@ -977,6 +1035,14 @@ def main(argv: list[str] | None = None) -> int:
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
                 presidio_augment=args.presidio_augment,
+                metric_depth=args.metric_depth,
+                allow_model_download=args.allow_model_download,
+                device=args.device,
+                max_model_batch_size=args.max_model_batch_size,
+                max_provider_rows=args.max_provider_rows,
+                disabled_providers=args.disabled_providers,
+                disabled_models=args.disabled_models,
+                audit_level=args.audit_level,
             )
         elif args.command == "evaluate":
             result = evaluate_csv(
@@ -1049,6 +1115,15 @@ def main(argv: list[str] | None = None) -> int:
                 audit_path=args.audit,
                 presidio_augment=args.presidio_augment,
                 providers=args.providers,
+                mode=args.mode,
+                metric_depth=args.metric_depth,
+                allow_model_download=args.allow_model_download,
+                device=args.device,
+                max_model_batch_size=args.max_model_batch_size,
+                max_provider_rows=args.max_provider_rows,
+                disabled_providers=args.disabled_providers,
+                disabled_models=args.disabled_models,
+                audit_level=args.audit_level,
             )
         elif args.command == "dpmlm-spike":
             result = run_dpmlm_spike(
@@ -1101,6 +1176,14 @@ def main(argv: list[str] | None = None) -> int:
                 style_scrub=args.style_scrub,
                 replace_text=args.replace_text,
                 presidio_augment=args.presidio_augment,
+                metric_depth=args.metric_depth,
+                allow_model_download=args.allow_model_download,
+                device=args.device,
+                max_model_batch_size=args.max_model_batch_size,
+                max_provider_rows=args.max_provider_rows,
+                disabled_providers=args.disabled_providers,
+                disabled_models=args.disabled_models,
+                audit_level=args.audit_level,
             )
         elif args.command == "validate-submission":
             result = validate_submission(

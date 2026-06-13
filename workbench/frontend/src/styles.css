@@ -195,6 +195,20 @@ select {
   max-height: 300px;
 }
 
+.status-grid {
+  border-top: 1px solid #e1e6ed;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.status-grid strong {
+  color: #2c3440;
+  font-size: 13px;
+}
+
 .csv-preview td:last-child {
   max-width: 560px;
   overflow-wrap: anywhere;

@@ -68,7 +68,36 @@ def test_submission_commands_are_registered():
             "--text-col",
             "text",
             "--replace-text",
-            "--presidio-augment",
+            "--mode",
+            "auto",
+            "--metric-depth",
+            "fast",
+        ]
+    )
+    anonymize_args = parser.parse_args(
+        [
+            "anonymize",
+            "--input",
+            "input.csv",
+            "--output",
+            "output.csv",
+            "--text-col",
+            "text",
+            "--mode",
+            "auto",
+        ]
+    )
+    rerank_args = parser.parse_args(
+        [
+            "rerank-candidates",
+            "--input",
+            "input.csv",
+            "--output",
+            "output.csv",
+            "--text-col",
+            "text",
+            "--mode",
+            "auto",
         ]
     )
     validate_args = parser.parse_args(
@@ -85,7 +114,10 @@ def test_submission_commands_are_registered():
 
     assert create_args.command == "create-submission"
     assert create_args.text_cols == ["text"]
-    assert create_args.presidio_augment is True
+    assert create_args.mode == "auto"
+    assert create_args.metric_depth == "fast"
+    assert anonymize_args.mode == "auto"
+    assert rerank_args.mode == "auto"
     assert validate_args.command == "validate-submission"
 
 

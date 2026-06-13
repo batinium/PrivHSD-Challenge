@@ -2,6 +2,221 @@
 
 Date: 2026-06-13
 
+## Implementation Note
+
+The first implementation pass added `--mode auto` for exact submission,
+anonymize, rerank, and the workbench CSV path. Auto mode now uses
+`privhsd/auto/` for run-level context, local provider/model discovery,
+row-level routing, candidate fusion/reranking, raw-text-free audit summaries,
+and token-policy advisory batching. Exact submissions default to
+`--metric-depth fast`; `sampled` and `deep` remain explicit local audit choices.
+Optional components are local-only by default and fall back to deterministic
+balanced output when dependencies or artifacts are missing.
+
+## Implementation Audit And Readiness Snapshot
+
+Audit date: 2026-06-13.
+
+Current readiness: **hackathon demo ready with caveats**. The exact-format auto
+pipeline works on the local tests and the ignored external TweetEval unseen
+CSV, preserves schema, records provider/model status, and loads optional heavy
+components once per run. It is not privacy-perfect. The remaining risks are
+known, measurable, and should be disclosed in the run note before any official
+upload.
+
+### Verification Commands Run
+
+Core verification:
+
+```bash
+python -m compileall privhsd workbench/backend
+python -m pytest -q
+cd workbench/frontend && npm run build
+```
+
+Result:
+
+- `pytest -q`: 164 passed, 1 skipped.
+- frontend production build passed.
+- compile check passed.
+
+Hardware and optional component check:
+
+- GPU: NVIDIA GeForce RTX 5090 Laptop GPU, 24 GB class VRAM.
+- PyTorch: CUDA available, one CUDA device.
+- Installed locally: Presidio, torch, transformers.
+- Missing locally: scrubadub, GLiNER, sentence-transformers, Detoxify.
+- Local token-policy artifacts present:
+  - `data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda/`
+  - `data/outputs/token_policy_hatebert.action_balanced_train30000.cuda/`
+
+Exact unseen-data auto run:
+
+```bash
+python -m privhsd.cli create-submission \
+  --input data/external_unseen/tweet_eval_hate_offensive_test.csv \
+  --output data/outputs/tweet_eval_hate_offensive_test.auto.audit_run.csv \
+  --text-col text \
+  --id-col id \
+  --replace-text \
+  --mode auto \
+  --metric-depth fast \
+  --manifest data/outputs/tweet_eval_hate_offensive_test.auto.audit_run.manifest.json
+```
+
+Result:
+
+- Runtime: 2:43 with Presidio plus local RoBERTa/HateBERT token-policy
+  ensemble active.
+- Exact validation: passed.
+- Rows: 3,830 in, 3,830 out.
+- Columns: unchanged exact input schema.
+- Metric depth: `fast` for all rows.
+- Provider/model load counts: Presidio loaded once; token-policy ensemble
+  loaded once.
+- Provider/model status:
+  - deterministic ready;
+  - Presidio ready;
+  - scrubadub missing dependency;
+  - GLiNER missing dependency;
+  - token-policy ensemble ready;
+  - semantic missing dependency;
+  - HSD advisory missing artifact;
+  - local LLM disabled.
+- Candidate choices:
+  - balanced: 1,487 rows;
+  - provider-fusion augmented: 111 rows;
+  - style-scrubbed: 1,353 rows;
+  - token-policy candidate: 879 rows.
+- Fast metric identifier count: 4,223 before, 6 after.
+- Conservative cue check: 6 of 3,830 rows flagged cue loss, mostly
+  negation/modality; no raw text is required to inspect those row IDs under
+  ignored `data/outputs/`.
+
+No-optional auto fallback run:
+
+```bash
+python -m privhsd.cli create-submission \
+  --input data/external_unseen/tweet_eval_hate_offensive_test.csv \
+  --output data/outputs/tweet_eval_hate_offensive_test.auto.no_optional.audit_run.csv \
+  --text-col text \
+  --id-col id \
+  --replace-text \
+  --mode auto \
+  --metric-depth fast \
+  --disable-provider presidio \
+  --disable-provider scrubadub \
+  --disable-provider gliner \
+  --disable-model token_policy_ensemble \
+  --disable-model semantic \
+  --disable-model hsd_advisory \
+  --manifest data/outputs/tweet_eval_hate_offensive_test.auto.no_optional.audit_run.manifest.json
+```
+
+Result:
+
+- Runtime: 10.42 seconds.
+- Exact validation: passed.
+- Rows: 3,830 in, 3,830 out.
+- Metric depth: `fast` for all rows.
+- No optional provider/model loads.
+- Fast metric identifier count: 4,223 before, 11 after.
+
+Adversarial stress fixture:
+
+- Exact four-column schema `source,author_id,text,is_hate_speech` remained
+  exact after `--mode auto --replace-text`.
+- Runtime: 6.14 seconds with local token-policy artifacts loaded.
+- Fast metrics reported 18 identifiers before and 0 after on the fixture.
+- The fixture still exposed detector blind spots that metrics did not count:
+  obfuscated email forms, Telegram-style aliases, short standalone names in
+  threat context, and one overmasking case where a leading determiner was
+  treated as a person-like span.
+
+### Confirmed Working
+
+- `--mode auto` exists for exact submission, anonymize, rerank, and workbench
+  CSV paths.
+- Exact-format CSV output preserves row count, row order, column order, and
+  non-text columns when `--replace-text` is used.
+- The four-column exact-shape regression is covered by tests.
+- Missing optional dependencies and artifacts degrade to deterministic
+  balanced output with manifest status rather than failing the run.
+- GLiNER is not downloaded by default; optional downloads require
+  `--allow-model-download`.
+- Token-policy artifacts are advisory only: they produce span evidence that
+  still goes through fusion, candidate scoring, and cue/privacy checks.
+- Heavy token-policy models are loaded once per command run and inference is
+  batched.
+- Default exact submission metrics use the fast tier and avoid deep
+  target-variant/profanity scans.
+- Generated outputs, manifests, comparison files, and reports are under
+  ignored `data/outputs/`.
+
+### Remaining Vulnerabilities
+
+1. **Residual direct identifiers remain on unseen data.** Auto with optional
+   local providers/models reduced the fast metric residual direct count to 6,
+   but not 0. This is acceptable for a hackathon demo only if reported honestly;
+   it should not be described as complete anonymization.
+2. **Detector blind spots are broader than the fast metric sees.** The
+   adversarial fixture showed obfuscated email/handle patterns and short
+   standalone names can survive while fast metrics still report zero residual
+   identifiers.
+3. **Cue checks found 6 conservative loss rows on unseen data.** Most were
+   negation/modality. These row IDs should be reviewed before choosing the
+   final submitted output.
+4. **Source regression is still too slow.** The exact submission path is fast,
+   but `source-regression-report` on the 3,830-row unseen output was
+   interrupted after several minutes. That report likely still calls deeper
+   row metrics and needs the same metric-depth split.
+5. **Auto with token-policy is practical but not fast.** The exact no-optional
+   path is about 10 seconds on 3,830 rows; the local GPU token-policy path is
+   about 2:43. That is usable for a hackathon run, but not ideal for rapid
+   iteration.
+6. **Audit row samples are capped in summary mode.** This protects output size
+   and raw-text risk, but a final challenge run may need `--audit-level row`
+   under ignored `data/outputs/` for full row-level decision review.
+7. **Presidio is loaded at context startup when available.** This satisfies
+   one-load lifecycle rules but can add startup cost even if few rows are
+   routed to providers.
+
+### Recommendations Before Final Hackathon Submission
+
+Do before final upload:
+
+- Review the 6 unseen rows with residual direct identifier metrics.
+- Review the 6 cue-loss row IDs from
+  `data/outputs/tweet_eval_hate_offensive_test.auto.audit_run.cue_checks.json`.
+- Decide whether the optional token-policy output improves the official score
+  enough to justify the 2:43 runtime and 6 residual direct IDs, compared with
+  the 10-second no-optional fallback and 11 residual direct IDs.
+- Add targeted deterministic patterns for obfuscated email forms such as
+  `[at]` / `dot`, Telegram/contact aliases, and short name-in-threat contexts.
+- Apply metric-depth support to `source-regression-report` so source-slice
+  validation does not regress into deep scans by default.
+
+Next engineering steps:
+
+- Add an adversarial synthetic regression suite for obfuscated contact info,
+  short names, protected-target overlap, and style/cue interactions.
+- Add a row-level repair queue command that emits only row IDs, warning codes,
+  and candidate names for residual identifier and cue-loss rows.
+- Add optional provider batching where provider APIs support it; current model
+  inference is batched, but provider calls are row-local.
+- Add a calibrated candidate threshold that can prefer provider/token-policy
+  candidates for high-risk direct identifiers even when length drift is high,
+  while still rejecting target/cue loss.
+- Add source-regression fast metrics or sampled/deep controls.
+
+Hackathon readiness statement:
+
+The pipeline is ready for a hackathon demonstration and for producing an
+auditable exact-format candidate. It should be presented as a local,
+best-effort, evidence-preserving CSV privatization pipeline with documented
+fallbacks and known residual-risk review queues, not as a guarantee that every
+identifier is removed.
+
 ## Purpose Of This Document
 
 This is the implementation roadmap for the next engineering agent. It is

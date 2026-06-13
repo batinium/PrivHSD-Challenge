@@ -8,7 +8,7 @@ from pathlib import Path
 from collections import Counter
 from typing import Any
 
-from .metrics import aggregate_metrics, row_metric
+from .metrics import aggregate_metrics, row_metric, row_metric_for_depth
 from .pipeline import PrivatizerConfig, privatize_text
 from .presidio_augment import filtered_presidio_spans, load_presidio_analyzer
 
@@ -54,12 +54,61 @@ def process_csv(
     style_scrub: bool = False,
     presidio_augment: bool = False,
     presidio_language: str = "en",
+    metric_depth: str = "fast",
+    allow_model_download: bool = False,
+    device: str = "auto",
+    max_model_batch_size: int = 16,
+    max_provider_rows: int | None = None,
+    disabled_providers: list[str] | None = None,
+    disabled_models: list[str] | None = None,
+    audit_level: str = "summary",
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
     if text_col not in fieldnames:
         raise CsvPipelineError(f"{input_path}: missing text column {text_col!r}")
     if id_col and id_col not in fieldnames:
         raise CsvPipelineError(f"{input_path}: missing id column {id_col!r}")
+
+    if mode == "auto":
+        from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
+
+        auto_config = AutoPipelineConfig(
+            metric_depth=metric_depth,
+            allow_model_download=allow_model_download,
+            device=device,
+            max_model_batch_size=max_model_batch_size,
+            max_provider_rows=max_provider_rows,
+            disabled_providers=frozenset(disabled_providers or []),
+            disabled_models=frozenset(disabled_models or []),
+            audit_level=audit_level,
+            provider_language=presidio_language,
+            generalize_targets=generalize_targets if generalize_targets is not None else False,
+            style_scrub=style_scrub,
+        )
+        context = AutoPipelineContext.create(auto_config)
+        result = AutoPipelineEngine(context).process_rows(
+            rows,
+            fieldnames,
+            text_col=text_col,
+            id_col=id_col,
+            output_col=output_col,
+            replace_text=replace_text,
+        )
+        write_csv(output_path, result.rows, result.fieldnames)
+        summary = {
+            "input": str(input_path),
+            "output": str(output_path),
+            **result.summary,
+        }
+        if audit_path:
+            write_json(
+                audit_path,
+                {
+                    "summary": summary,
+                    "rows": result.audit_rows,
+                },
+            )
+        return summary
 
     config = PrivatizerConfig(
         mode=mode,
@@ -102,7 +151,12 @@ def process_csv(
         output_rows.append(out_row)
 
         row_id = row.get(id_col) if id_col else str(index)
-        row_metrics = row_metric(str(original), result.text)
+        row_metrics = row_metric_for_depth(
+            str(original),
+            result.text,
+            metric_depth=metric_depth,
+            row_index=index,
+        )
         row_metrics.update(result.metrics)
         metric_rows.append(row_metrics)
         audit_row = {
@@ -127,6 +181,7 @@ def process_csv(
         "output_col": text_col if replace_text else output_col,
         "replace_text": replace_text,
         "mode": mode,
+        "metric_depth": metric_depth,
         "generalize_targets": config.target_generalization_enabled,
         "style_scrub": style_scrub,
         "presidio_augment": {

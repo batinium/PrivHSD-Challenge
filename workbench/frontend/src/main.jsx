@@ -171,9 +171,9 @@ function CsvWorkbench({ modelStatus }) {
   const [headers, setHeaders] = useState([]);
   const [textCol, setTextCol] = useState("");
   const [idCol, setIdCol] = useState("");
-  const [mode, setMode] = useState("balanced");
-  const [replaceText, setReplaceText] = useState(false);
-  const [providers, setProviders] = useState({ presidio: false, gliner: false, scrubadub: false });
+  const [mode, setMode] = useState("auto");
+  const [replaceText, setReplaceText] = useState(true);
+  const [providers, setProviders] = useState({ presidio: true, gliner: true, scrubadub: true });
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -181,7 +181,12 @@ function CsvWorkbench({ modelStatus }) {
   const selectedProviders = Object.entries(providers)
     .filter(([, enabled]) => enabled)
     .map(([name]) => name);
+  const disabledProviders = Object.entries(providers)
+    .filter(([, enabled]) => !enabled)
+    .map(([name]) => name);
   const metrics = result?.audit?.summary?.metrics || {};
+  const providerItems = result?.manifest?.providers || {};
+  const modelItems = result?.manifest?.models || {};
   const csvGauges = {
     privacy: Math.round((metrics.privacy_gain_mean || 0) * 100),
     cue: Math.round((metrics.target_cue_retention_mean ?? 1) * 100),
@@ -218,7 +223,9 @@ function CsvWorkbench({ modelStatus }) {
           replace_text: replaceText,
           mode,
           style_scrub: false,
-          providers: selectedProviders
+          providers: mode === "auto" ? [] : selectedProviders,
+          disabled_providers: mode === "auto" ? disabledProviders : [],
+          metric_depth: "fast"
         })
       });
       if (!response.ok) {
@@ -266,7 +273,7 @@ function CsvWorkbench({ modelStatus }) {
             </label>
           </div>
           <div className="segmented wide-segment" role="group" aria-label="CSV mode">
-            {["balanced", "privacy", "rerank"].map((option) => (
+            {["auto", "balanced", "privacy", "rerank"].map((option) => (
               <button
                 className={mode === option ? "active" : ""}
                 key={option}
@@ -339,6 +346,16 @@ function CsvWorkbench({ modelStatus }) {
               <Download size={17} />
               Manifest
             </button>
+          </div>
+          <div className="status-grid">
+            <div>
+              <strong>Providers</strong>
+              <Tags values={Object.entries(providerItems).map(([name, item]) => `${name}: ${item.status}`)} />
+            </div>
+            <div>
+              <strong>Models</strong>
+              <Tags values={Object.entries(modelItems).map(([name, item]) => `${name}: ${item.status}`)} />
+            </div>
           </div>
           <div className="table-wrap csv-preview">
             <table>

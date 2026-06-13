@@ -47,23 +47,30 @@ PyTorch build sees a CUDA GPU.
 ```bash
 python -m privhsd.cli create-submission \
   --input data/public_dev/recommended_merged.csv \
-  --output data/outputs/recommended_merged.balanced.csv \
+  --output data/outputs/recommended_merged.auto.csv \
   --text-col text \
   --id-col id \
   --replace-text \
-  --mode balanced \
-  --manifest data/outputs/recommended_merged.balanced.manifest.json
+  --mode auto \
+  --metric-depth fast \
+  --manifest data/outputs/recommended_merged.auto.manifest.json
 ```
+
+`--mode auto` runs deterministic balanced masking for every row, discovers
+local optional providers/models, routes only risky rows to them, and writes the
+selected text back into the original text column. A four-column CSV such as
+`source,author_id,text,is_hate_speech` stays exactly four columns in that order
+when `--replace-text` is used.
 
 Validate upload shape:
 
 ```bash
 python -m privhsd.cli validate-submission \
   --source data/public_dev/recommended_merged.csv \
-  --submission data/outputs/recommended_merged.balanced.csv \
+  --submission data/outputs/recommended_merged.auto.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/recommended_merged.balanced.validation.json
+  --output data/outputs/recommended_merged.auto.validation.json
 ```
 
 Run source-aware regression:
@@ -71,7 +78,7 @@ Run source-aware regression:
 ```bash
 python -m privhsd.cli source-regression-report \
   --original data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.balanced.csv \
+  --protected data/outputs/recommended_merged.auto.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
@@ -80,13 +87,16 @@ python -m privhsd.cli source-regression-report \
   --group-col split \
   --group-col platform \
   --group-col type \
-  --output data/outputs/recommended_merged.balanced.source_regression.json
+  --output data/outputs/recommended_merged.auto.source_regression.json
 ```
 
 ## Current Evidence Snapshot
 
-- `balanced` remains the first exact-format submission candidate: deterministic,
-  auditable, target-preserving, and low-dependency.
+- `auto` is the primary exact-format CSV path. It records provider/model
+  discovery status and falls back to deterministic balanced masking when
+  optional dependencies or local artifacts are missing.
+- `balanced` remains the deterministic compatibility fallback: auditable,
+  target-preserving, and low-dependency.
 - On the merged public regression bundle, `balanced` reduced identifier
   detections from 40,304 to 5 while preserving target and utility cues at
   0.9999.
@@ -103,6 +113,11 @@ python -m privhsd.cli source-regression-report \
 The token-policy models are advisory/reranking support. They do not replace
 the deterministic anonymizer unless an audited candidate path improves official
 privacy and utility scores.
+
+Default exact submissions use `--metric-depth fast`, which avoids expensive
+target-cue variant, spaced-token, profanity, and semantic scans on every row.
+Use `--metric-depth sampled` or `--metric-depth deep` only for local audit runs
+under ignored `data/` paths.
 
 ## Demo Workbench
 
@@ -142,7 +157,7 @@ hsd.create_submission(
     id_col="id",
     manifest_path=Path("SUBMISSION.manifest.json"),
     replace_text=True,
-    mode="balanced",
+    mode="auto",
 )
 ```
 

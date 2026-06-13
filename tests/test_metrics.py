@@ -1,4 +1,6 @@
-from privhsd.metrics import aggregate_metrics, row_metric
+import pytest
+
+from privhsd.metrics import aggregate_metrics, row_metric, row_metric_fast
 
 
 def test_row_metric_reports_placeholder_density_residuals_and_quasi_flags():
@@ -102,3 +104,17 @@ def test_aggregate_metrics_rolls_up_new_fields():
     assert metrics["target_cue_retention_mean"] == 1.0
     assert metrics["privacy_warning_counts"]["residual_identifier_detected"] == 1
     assert metrics["rows_with_warnings"] == 1
+
+
+def test_fast_metric_avoids_deep_target_scan(monkeypatch):
+    def fail_deep_scan(_text):
+        raise AssertionError("deep target scan should not run")
+
+    monkeypatch.setattr("privhsd.metrics.target_term_spans", fail_deep_scan)
+
+    metrics = row_metric_fast("Muslims should leave.", "Muslims should leave.")
+
+    assert metrics["metric_depth"] == "fast"
+    assert metrics["target_cue_count_before"] == 1
+    with pytest.raises(AssertionError, match="deep target scan"):
+        row_metric("Muslims should leave.", "Muslims should leave.")
