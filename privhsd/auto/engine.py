@@ -304,6 +304,8 @@ class AutoPipelineEngine:
         max_rows = self.context.config.max_provider_rows
         if max_rows is not None:
             provider_rows = provider_rows[:max_rows]
+        if not provider_rows:
+            return
         providers = self.context.optional_span_providers()
         if not providers:
             for state in provider_rows:
@@ -311,19 +313,56 @@ class AutoPipelineEngine:
                     {"provider": "auto", "error_class": "NoAvailableProvider"}
                 )
             return
-        for state in provider_rows:
-            for provider in providers:
+        for provider in providers:
+            provider_name = getattr(provider, "name", "unknown")
+            propose_many = getattr(provider, "propose_many", None)
+            if callable(propose_many):
+                texts = [state.original for state in provider_rows]
+                try:
+                    outputs = propose_many(
+                        texts,
+                        batch_size=self.context.config.max_model_batch_size,
+                    )
+                except Exception as exc:
+                    for state in provider_rows:
+                        state.provider_errors.append(
+                            {
+                                "provider": provider_name,
+                                "error_class": type(exc).__name__,
+                            }
+                        )
+                    self.context.audit_counters[
+                        f"provider_runtime_error:{provider_name}:{type(exc).__name__}"
+                    ] += 1
+                    continue
+                if len(outputs) != len(provider_rows):
+                    for state in provider_rows:
+                        state.provider_errors.append(
+                            {
+                                "provider": provider_name,
+                                "error_class": "UnexpectedOutputCount",
+                            }
+                        )
+                    self.context.audit_counters[
+                        f"provider_runtime_error:{provider_name}:UnexpectedOutputCount"
+                    ] += 1
+                    continue
+                for state, output in zip(provider_rows, outputs):
+                    state.provider_outputs.append(output)
+                    state.provider_candidates.extend(output.spans)
+                continue
+            for state in provider_rows:
                 try:
                     output = provider.propose(state.original)
                 except Exception as exc:
                     state.provider_errors.append(
                         {
-                            "provider": getattr(provider, "name", "unknown"),
+                            "provider": provider_name,
                             "error_class": type(exc).__name__,
                         }
                     )
                     self.context.audit_counters[
-                        f"provider_runtime_error:{getattr(provider, 'name', 'unknown')}:{type(exc).__name__}"
+                        f"provider_runtime_error:{provider_name}:{type(exc).__name__}"
                     ] += 1
                     continue
                 state.provider_outputs.append(output)

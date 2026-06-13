@@ -59,6 +59,14 @@ class ScrubadubSpanProvider:
     scrubber: Any
     name: str = "scrubadub"
 
+    def propose_many(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int,
+    ) -> list[SpanProviderOutput]:
+        return [self.propose(text) for text in texts]
+
     def propose(self, text: str) -> SpanProviderOutput:
         try:
             raw_results = list(self.scrubber.iter_filth(text))
@@ -108,4 +116,3 @@ class ScrubadubSpanProvider:
 
 def load_scrubadub_provider() -> ScrubadubSpanProvider:
     return ScrubadubSpanProvider(scrubber=load_scrubber())
-

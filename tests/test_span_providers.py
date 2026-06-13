@@ -8,6 +8,7 @@ from privhsd.span_providers.base import (
 )
 from privhsd.span_providers.deterministic import DeterministicSpanProvider
 from privhsd.span_providers.fusion import fuse_span_candidates
+from privhsd.span_providers.gliner import GlinerSpanProvider
 from privhsd.span_providers.presidio import PresidioSpanProvider
 
 
@@ -87,6 +88,65 @@ def test_presidio_provider_matches_compatibility_span_behavior():
     assert output.audit["rejected_counts_by_reason"] == {"nrp_preserved": 1}
 
 
+class FakeGlinerModel:
+    name_or_path = "fake-gliner"
+
+    def __init__(self, outputs):
+        self.outputs = outputs
+        self.batch_calls = []
+
+    def batch_predict_entities(self, texts, labels, batch_size):
+        self.batch_calls.append(
+            {"texts": list(texts), "labels": list(labels), "batch_size": batch_size}
+        )
+        return self.outputs
+
+
+def test_gliner_pii_profile_maps_normalized_labels_in_batch():
+    text = "Contact @mara or mara@example.test."
+    handle_start = text.index("@mara")
+    email_start = text.index("mara@example.test")
+    model = FakeGlinerModel(
+        [
+            [
+                {
+                    "start": handle_start,
+                    "end": handle_start + len("@mara"),
+                    "text": "@mara",
+                    "label": "username",
+                    "score": 0.92,
+                },
+                {
+                    "start": email_start,
+                    "end": email_start + len("mara@example.test"),
+                    "text": "mara@example.test",
+                    "label": "email_address",
+                    "score": 0.91,
+                },
+                {
+                    "start": 0,
+                    "end": 7,
+                    "text": "Contact",
+                    "label": "favorite color",
+                    "score": 0.99,
+                },
+            ]
+        ]
+    )
+    provider = GlinerSpanProvider(model=model, profile="pii")
+
+    outputs = provider.propose_many([text], batch_size=4)
+
+    assert model.batch_calls[0]["batch_size"] == 4
+    assert model.batch_calls[0]["labels"][0:3] == ["person", "full name", "username"]
+    assert [(span.entity_type, span.text) for span in outputs[0].spans] == [
+        ("USER", "@mara"),
+        ("EMAIL", "mara@example.test"),
+    ]
+    assert outputs[0].audit["profile"] == "pii"
+    assert outputs[0].audit["rejected_counts_by_reason"] == {"unsupported_label": 1}
+
+
 def test_privatize_text_accepts_provider_candidates_and_audits_fusion():
     text = "i'm going to kill Amy"
     start = text.index("Amy")
@@ -150,4 +210,3 @@ def test_rerank_can_generate_provider_augmented_candidate():
     unit = [candidate for candidate in candidates if candidate.name == "unit_augmented"]
     assert len(unit) == 1
     assert unit[0].text == "i'm going to kill [PERSON]"
-

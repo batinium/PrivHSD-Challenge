@@ -19,7 +19,12 @@ identifier is removed; residual-risk review remains required.
 
 ## Latest Verification Snapshot
 
-Most recent recorded verification from the pre-cleanup planning notes:
+Most recent local verification after the unified auto/provider update:
+
+- `python -m compileall privhsd workbench/backend`: passed.
+- `python -m pytest -q`: 180 passed, 1 skipped.
+
+Previous recorded verification from the pre-cleanup planning notes:
 
 - `python -m compileall privhsd workbench/backend`: passed.
 - `python -m pytest -q`: 164 passed, 1 skipped.

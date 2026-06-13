@@ -537,6 +537,8 @@ def run_candidate_reranking(
     disabled_providers: list[str] | None = None,
     disabled_models: list[str] | None = None,
     audit_level: str = "summary",
+    gliner_model: str | None = None,
+    gliner_profile: str = "general",
 ) -> dict[str, Any]:
     candidate_cols = candidate_cols or []
     rows, fieldnames = read_csv(input_path)
@@ -561,6 +563,8 @@ def run_candidate_reranking(
             disabled_models=frozenset(disabled_models or []),
             audit_level=audit_level,
             provider_language=presidio_language,
+            gliner_model=gliner_model,
+            gliner_profile=gliner_profile,
         )
         context = AutoPipelineContext.create(auto_config)
         engine_result = AutoPipelineEngine(context).process_rows(
@@ -595,6 +599,8 @@ def run_candidate_reranking(
     span_providers = load_span_providers(
         provider_names,
         presidio_language=presidio_language,
+        gliner_model=gliner_model,
+        gliner_profile=gliner_profile,
     )
     if presidio_augment and "presidio" not in provider_names:
         provider_names.append("presidio")

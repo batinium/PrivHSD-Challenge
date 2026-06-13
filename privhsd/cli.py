@@ -155,6 +155,19 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
         help="Allow optional model loaders to download weights. Default is local-only.",
     )
     parser.add_argument(
+        "--gliner-model",
+        help=(
+            "GLiNER model ID or local path for the optional GLiNER provider. "
+            "Remote IDs require --allow-model-download unless already cached."
+        ),
+    )
+    parser.add_argument(
+        "--gliner-profile",
+        choices=["general", "pii"],
+        default="general",
+        help="GLiNER label/threshold profile for optional privacy span detection.",
+    )
+    parser.add_argument(
         "--device",
         choices=["auto", "cpu", "cuda"],
         default="auto",
@@ -1078,6 +1091,8 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
+                gliner_model=args.gliner_model,
+                gliner_profile=args.gliner_profile,
             )
         elif args.command == "bound-contributions":
             result = bound_contributions(
@@ -1173,6 +1188,8 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
+                gliner_model=args.gliner_model,
+                gliner_profile=args.gliner_profile,
             )
         elif args.command == "dpmlm-spike":
             result = run_dpmlm_spike(
@@ -1233,6 +1250,8 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
+                gliner_model=args.gliner_model,
+                gliner_profile=args.gliner_profile,
             )
         elif args.command == "validate-submission":
             result = validate_submission(

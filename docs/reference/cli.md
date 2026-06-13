@@ -49,6 +49,8 @@ Important exact-output flags:
 --replace-text
 --metric-depth fast|sampled|deep
 --allow-model-download
+--gliner-model MODEL_ID_OR_LOCAL_PATH
+--gliner-profile general|pii
 --device auto|cpu|cuda
 --disable-provider NAME
 --disable-model NAME

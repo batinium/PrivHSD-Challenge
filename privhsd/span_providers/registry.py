@@ -20,6 +20,7 @@ def load_span_provider(
     *,
     presidio_language: str = "en",
     gliner_model: str | None = None,
+    gliner_profile: str = "general",
 ) -> SpanProvider:
     normalized = name.strip().lower().replace("_", "-")
     if normalized == "presidio":
@@ -29,8 +30,8 @@ def load_span_provider(
         )
     if normalized == "gliner":
         if gliner_model:
-            return load_gliner_provider(gliner_model)
-        return load_gliner_provider()
+            return load_gliner_provider(gliner_model, profile=gliner_profile)
+        return load_gliner_provider(profile=gliner_profile)
     if normalized == "scrubadub":
         return load_scrubadub_provider()
     raise SpanProviderRegistryError(
@@ -43,6 +44,7 @@ def load_span_providers(
     *,
     presidio_language: str = "en",
     gliner_model: str | None = None,
+    gliner_profile: str = "general",
 ) -> list[SpanProvider]:
     providers: list[SpanProvider] = []
     seen: set[str] = set()
@@ -56,6 +58,7 @@ def load_span_providers(
                 normalized,
                 presidio_language=presidio_language,
                 gliner_model=gliner_model,
+                gliner_profile=gliner_profile,
             )
         )
     return providers

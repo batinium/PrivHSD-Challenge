@@ -110,15 +110,10 @@ class AutoPipelineContext:
             }
 
     def load_startup_providers(self) -> None:
-        for name in self.provider_factories:
-            self.ensure_provider(name)
-        for name in ("presidio", "scrubadub"):
-            status = self.provider_status.get(name, {})
-            if status.get("status") == "available":
-                self.ensure_provider(name)
-        gliner_status = self.provider_status.get("gliner", {})
-        if gliner_status.get("status") in {"available", "download_allowed"}:
-            self.ensure_provider("gliner")
+        # Discovery is cheap and eager; provider initialization is lazy so
+        # routing can avoid heavy optional model loads on rows that do not need
+        # provider evidence.
+        return
 
     def ensure_provider(self, name: str) -> SpanProvider | None:
         if name in self.providers:
@@ -153,8 +148,11 @@ class AutoPipelineContext:
             return load_scrubadub_provider()
         if name == "gliner":
             if self.config.gliner_model:
-                return load_gliner_provider(self.config.gliner_model)
-            return load_gliner_provider()
+                return load_gliner_provider(
+                    self.config.gliner_model,
+                    profile=self.config.gliner_profile,
+                )
+            return load_gliner_provider(profile=self.config.gliner_profile)
         raise ValueError(f"unknown auto provider {name!r}")
 
     def optional_span_providers(self) -> list[SpanProvider]:

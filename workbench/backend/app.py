@@ -53,6 +53,8 @@ class PrivatizeRequest(BaseModel):
     generalize_targets: bool | None = None
     use_presidio: bool = False
     providers: list[str] = Field(default_factory=list)
+    gliner_model: str | None = None
+    gliner_profile: Literal["general", "pii"] = "general"
     run_model_ensemble: bool = False
     run_hsd_classifier: bool = False
 
@@ -89,6 +91,8 @@ class CsvPrivatizeRequest(BaseModel):
     disabled_providers: list[str] = Field(default_factory=list)
     disabled_models: list[str] = Field(default_factory=list)
     metric_depth: Literal["fast", "sampled", "deep"] = "fast"
+    gliner_model: str | None = None
+    gliner_profile: Literal["general", "pii"] = "general"
 
 
 class CsvPrivatizeResponse(BaseModel):
@@ -482,12 +486,20 @@ def selected_provider_names(request: PrivatizeRequest) -> list[str]:
 def run_selected_span_providers(
     text: str,
     names: list[str],
+    *,
+    gliner_model: str | None = None,
+    gliner_profile: str = "general",
 ) -> tuple[list[Any], dict[str, Any]]:
     candidates = []
     report = provider_status_template()
     for name in names:
         try:
-            provider: SpanProvider = load_span_provider(name)
+            provider_kwargs = (
+                {"gliner_model": gliner_model, "gliner_profile": gliner_profile}
+                if name == "gliner"
+                else {}
+            )
+            provider: SpanProvider = load_span_provider(name, **provider_kwargs)
             output = provider.propose(text)
         except Exception as exc:
             report[name] = {
@@ -573,6 +585,8 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
     provider_candidates, provider_report = run_selected_span_providers(
         request.text,
         provider_names,
+        gliner_model=request.gliner_model,
+        gliner_profile=request.gliner_profile,
     )
     presidio_status = provider_report.get("presidio", {})
     presidio_audit = presidio_status.get("audit")
@@ -687,6 +701,8 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
                     if request.generalize_targets is not None
                     else False
                 ),
+                gliner_model=request.gliner_model,
+                gliner_profile=request.gliner_profile,
             )
         )
         engine_result = AutoPipelineEngine(context).process_rows(
@@ -759,7 +775,11 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
 
     provider_names = [name.strip().lower() for name in request.providers if name.strip()]
     try:
-        providers = load_span_providers(provider_names)
+        providers = load_span_providers(
+            provider_names,
+            gliner_model=request.gliner_model,
+            gliner_profile=request.gliner_profile,
+        )
     except (SpanProviderRegistryError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

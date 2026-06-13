@@ -48,6 +48,49 @@ def test_context_person_masks_single_token_self_identification():
     assert "Muslims should leave" in result.text
 
 
+def test_contact_context_masks_person_and_obfuscated_email():
+    text = "Reach Lina at lina [at] example dot test or Telegram alias night_owl77."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Lina" not in result.text
+    assert "lina [at] example dot test" not in result.text
+    assert "[PERSON]" in result.text
+    assert "[EMAIL]" in result.text
+    assert "[ALIAS]" in result.text
+    assert "Telegram" in result.text
+
+
+def test_bare_at_dot_words_do_not_create_email_without_contact_context():
+    text = "We met at example dot cafe and Muslims should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "[EMAIL]" not in result.text
+    assert "example dot cafe" in result.text
+    assert "Muslims should leave" in result.text
+
+
+def test_reported_person_context_masks_name_without_flattening_counterspeech():
+    text = (
+        "I reported Omar Vale because he quoted Muslims should leave "
+        "and I replied do not attack Muslims."
+    )
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Omar Vale" not in result.text
+    assert "[PERSON]" in result.text
+    assert "Muslims should leave" in result.text
+    assert "do not attack Muslims" in result.text
+
+
+def test_short_name_threat_context_preserves_action_cue():
+    text = "Kill Alex was posted by a throwaway account near Paris."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text.startswith("Kill [PERSON] was posted")
+    assert "Alex" not in result.text
+    assert "[LOCATION]" in result.text
+
+
 def test_context_person_masks_unicode_and_lowercase_self_identification():
     text = "My name is ayşe and Muslims should leave Lagos."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))

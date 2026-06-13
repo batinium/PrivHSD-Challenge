@@ -16,9 +16,10 @@ Detailed implementation handoffs live in planning docs. For GLiNER PII,
 ## Lifecycle Rules
 
 - Build one `AutoPipelineContext` at command startup.
-- Load resources, providers, and local model artifacts once per run.
-- Keep loaded components alive until the run finishes.
-- Batch model inference when the model API supports it.
+- Discover providers and local model artifacts once at command startup.
+- Initialize optional providers/models lazily when routing sends rows to them,
+  then keep loaded components alive until the run finishes.
+- Batch provider/model inference when the component API supports it.
 - Default to local-only model usage. Downloads require
   `--allow-model-download`.
 - Missing optional dependencies or artifacts must produce structured manifest
@@ -32,7 +33,7 @@ Detailed implementation handoffs live in planning docs. For GLiNER PII,
 | Deterministic provider | Always ready | Baseline spans and fallback candidate |
 | Presidio | Ready if dependency and spaCy model initialize | Names, locations, durable dates after filtering |
 | scrubadub | Ready if dependency initializes | Supplemental identifier spans |
-| GLiNER | Ready if dependency and local/download-allowed model exist | Supplemental NER spans |
+| GLiNER | Ready if dependency and local/download-allowed model exist | Supplemental NER spans; supports `general` and `pii` profiles |
 | Token-policy ensemble | Ready if local model dirs and torch/transformers initialize | Advisory token-action evidence |
 | Semantic/HSD advisory | Ready only if artifacts and dependencies exist | Candidate drift/audit support |
 | Local LLM reviewer | Disabled by default in official mode | Structured local review only |

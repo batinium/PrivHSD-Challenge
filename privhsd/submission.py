@@ -205,6 +205,8 @@ def create_submission(
     disabled_providers: list[str] | None = None,
     disabled_models: list[str] | None = None,
     audit_level: str = "summary",
+    gliner_model: str | None = None,
+    gliner_profile: str = "general",
 ) -> dict[str, Any]:
     if not replace_text:
         raise SubmissionError("create-submission requires --replace-text")
@@ -226,6 +228,8 @@ def create_submission(
             disabled_models=frozenset(disabled_models or []),
             audit_level=audit_level,
             provider_language=presidio_language,
+            gliner_model=gliner_model,
+            gliner_profile=gliner_profile,
             generalize_targets=generalize_targets if generalize_targets is not None else False,
             style_scrub=style_scrub,
             official_mode=True,

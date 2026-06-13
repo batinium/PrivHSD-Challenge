@@ -83,7 +83,11 @@ def discover_gliner(config: AutoPipelineConfig) -> dict[str, Any]:
         return disabled_status("provider")
     dependency = dependency_status(("gliner",), kind="provider")
     if dependency:
-        return dependency
+        return {
+            **dependency,
+            "model": config.gliner_model,
+            "profile": config.gliner_profile,
+        }
     if config.gliner_model:
         model_path = Path(config.gliner_model)
         if model_path.exists():
@@ -91,6 +95,7 @@ def discover_gliner(config: AutoPipelineConfig) -> dict[str, Any]:
                 "status": "available",
                 "kind": "provider",
                 "model": str(model_path),
+                "profile": config.gliner_profile,
                 "local_only": True,
             }
         if config.allow_model_download:
@@ -98,23 +103,28 @@ def discover_gliner(config: AutoPipelineConfig) -> dict[str, Any]:
                 "status": "download_allowed",
                 "kind": "provider",
                 "model": config.gliner_model,
+                "profile": config.gliner_profile,
                 "local_only": False,
             }
         return {
             "status": "missing_artifact",
             "kind": "provider",
             "model": config.gliner_model,
+            "profile": config.gliner_profile,
         }
     if config.allow_model_download:
         return {
             "status": "download_allowed",
             "kind": "provider",
             "model": None,
+            "profile": config.gliner_profile,
             "local_only": False,
         }
     return {
         "status": "missing_artifact",
         "kind": "provider",
+        "model": None,
+        "profile": config.gliner_profile,
         "detail": "GLiNER default model is remote; pass --allow-model-download or a local model path.",
     }
 

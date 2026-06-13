@@ -72,6 +72,10 @@ def test_submission_commands_are_registered():
             "auto",
             "--metric-depth",
             "fast",
+            "--gliner-model",
+            "nvidia/gliner-PII",
+            "--gliner-profile",
+            "pii",
         ]
     )
     anonymize_args = parser.parse_args(
@@ -116,6 +120,8 @@ def test_submission_commands_are_registered():
     assert create_args.text_cols == ["text"]
     assert create_args.mode == "auto"
     assert create_args.metric_depth == "fast"
+    assert create_args.gliner_model == "nvidia/gliner-PII"
+    assert create_args.gliner_profile == "pii"
     assert anonymize_args.mode == "auto"
     assert rerank_args.mode == "auto"
     assert validate_args.command == "validate-submission"

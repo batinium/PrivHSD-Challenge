@@ -130,6 +130,14 @@ class PresidioSpanProvider:
     language: str = "en"
     name: str = "presidio"
 
+    def propose_many(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int,
+    ) -> list[SpanProviderOutput]:
+        return [self.propose(text) for text in texts]
+
     def propose(self, text: str) -> SpanProviderOutput:
         results = self.analyzer.analyze(text=text, language=self.language)
         accepted: list[SpanCandidate] = []

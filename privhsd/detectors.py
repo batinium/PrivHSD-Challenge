@@ -106,6 +106,25 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
     ),
 )
 
+OBFUSCATED_EMAIL_PATTERN = re.compile(
+    r"(?<![\w@])"
+    r"(?P<local>[A-Z0-9][A-Z0-9._%+-]{1,63})"
+    r"\s*(?P<at_marker>\[\s*at\s*\]|\(\s*at\s*\)|_at_|\bat\b)\s*"
+    r"(?P<domain>[A-Z0-9-]{2,63}(?:(?:\s+|[._-]+)[A-Z0-9-]{2,63}){0,3})"
+    r"\s*(?P<dot_marker>\[\s*dot\s*\]|\(\s*dot\s*\)|_dot_|\bdot\b)\s*"
+    r"(?P<tld>[A-Z]{2,24})"
+    r"(?![\w@])",
+    re.I,
+)
+OBFUSCATED_EMAIL_CONTEXT_PATTERN = re.compile(
+    r"\b(?:email|e-mail|mail|reach|contact|dm|message|send\s+to|write\s+to)\b",
+    re.I,
+)
+EXPLICIT_OBFUSCATED_EMAIL_MARKER_PATTERN = re.compile(
+    r"\[\s*(?:at|dot)\s*\]|\(\s*(?:at|dot)\s*\)|_(?:at|dot)_",
+    re.I,
+)
+
 
 PERSON_CONTEXT_PATTERNS: Sequence[tuple[re.Pattern[str], bool]] = (
     (
@@ -124,22 +143,38 @@ PERSON_CONTEXT_PATTERNS: Sequence[tuple[re.Pattern[str], bool]] = (
     ),
     (
         re.compile(
+            r"\b(?i:reach|contact|message|dm|email|mail|write\s+to|send\s+to)\s+"
+            rf"({NAME_PHRASE_PATTERN})\s+"
+            r"(?i:at|via|on)\b"
+        ),
+        False,
+    ),
+    (
+        re.compile(
             r"\b(?i:says|said|reports|reported|documented)\s+"
             rf"({NAME_PHRASE_PATTERN})\s+"
-            r"(?:called|emailed|posted|replied|wrote|said)\b"
+            r"(?:called|emailed|posted|quoted|replied|wrote|said)\b"
+        ),
+        False,
+    ),
+    (
+        re.compile(
+            r"\b(?i:(?:i|we|they|he|she|someone)\s+reported|reported)\s+"
+            rf"({NAME_PHRASE_PATTERN})\s+"
+            r"(?:because|for|after|when)\b"
         ),
         False,
     ),
     (
         re.compile(
             rf"\b({NAME_PHRASE_PATTERN})\s+"
-            r"(?:said|emailed|called|posted|replied|wrote)\b"
+            r"(?:said|emailed|called|posted|quoted|replied|wrote)\b"
         ),
         False,
     ),
     (
         re.compile(
-            r"\b(?:said|emailed|called|posted|replied|wrote)\s+"
+            r"\b(?:said|emailed|called|posted|quoted|replied|wrote)\s+"
             rf"({NAME_PHRASE_PATTERN})\b"
         ),
         False,
@@ -214,6 +249,17 @@ CONTEXT_NAME_STOP_WORDS = {
     "with",
     "wrote",
 }
+
+
+@lru_cache(maxsize=1)
+def action_context_terms() -> frozenset[str]:
+    return frozenset(
+        term.lower()
+        for term in (
+            set(load_utility_cue_terms("action_terms"))
+            | set(load_utility_cue_terms("target_generalization_context"))
+        )
+    )
 
 
 TARGET_GROUP_TERMS: dict[str, Sequence[str]] = load_target_group_terms()
@@ -323,6 +369,60 @@ def trim_context_span(
     return start, end, value
 
 
+def trim_leading_action_word(
+    text: str,
+    start: int,
+    end: int,
+    value: str,
+) -> tuple[int, int, str]:
+    words = list(re.finditer(NAME_WORD_PATTERN, value))
+    if len(words) < 2:
+        return start, end, value
+    first_word = value[words[0].start() : words[0].end()].lower()
+    if first_word not in action_context_terms():
+        return start, end, value
+    new_start = start + words[1].start()
+    new_value = value[words[1].start() :].strip()
+    leading = len(value[words[1].start() :]) - len(value[words[1].start() :].lstrip())
+    new_start += leading
+    new_end = new_start + len(new_value)
+    return new_start, new_end, new_value
+
+
+def has_obfuscated_email_context(text: str, start: int, end: int) -> bool:
+    window = text[max(0, start - 40) : min(len(text), end + 40)]
+    return bool(OBFUSCATED_EMAIL_CONTEXT_PATTERN.search(window))
+
+
+def obfuscated_email_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for match in OBFUSCATED_EMAIL_PATTERN.finditer(text):
+        value = match.group(0)
+        if len(value) > 120:
+            continue
+        local = match.group("local")
+        tld = match.group("tld")
+        if len(re.sub(r"[^A-Za-z0-9]", "", local)) < 2 or len(tld) < 2:
+            continue
+        if contains_target_group_term(local) or local.lower() in action_context_terms():
+            continue
+        if not EXPLICIT_OBFUSCATED_EMAIL_MARKER_PATTERN.search(
+            value
+        ) and not has_obfuscated_email_context(text, match.start(), match.end()):
+            continue
+        spans.append(
+            Span(
+                start=match.start(),
+                end=match.end(),
+                entity_type="EMAIL",
+                text=value,
+                score=0.86,
+                source="regex_obfuscated_email",
+            )
+        )
+    return spans
+
+
 def regex_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for entity_type, pattern in REGEX_PATTERNS:
@@ -340,6 +440,7 @@ def regex_spans(text: str) -> list[Span]:
                     source="regex",
                 )
             )
+    spans.extend(obfuscated_email_spans(text))
     return spans
 
 
@@ -375,6 +476,9 @@ def context_spans(text: str) -> list[Span]:
                 require_titlecase=not allow_lowercase,
                 stop_at_connector=allow_lowercase,
             )
+            if not value:
+                continue
+            start, end, value = trim_leading_action_word(text, start, end, value)
             if not value:
                 continue
             if contains_target_group_term(value):
@@ -722,6 +826,7 @@ def target_group_spans(text: str) -> list[Span]:
 def span_priority(span: Span) -> tuple[int, float, int]:
     source_priority = {
         "regex": 3,
+        "regex_obfuscated_email": 3,
         "context_person": 2,
         "context_alias": 2,
         "context_location": 1,

@@ -12,6 +12,7 @@ AUTO_MODES = frozenset({"auto"})
 AUTO_CAPABLE_MODES = frozenset({"auto", "utility", "balanced", "privacy"})
 DEVICE_POLICIES = frozenset({"auto", "cpu", "cuda"})
 AUDIT_LEVELS = frozenset({"summary", "row", "debug"})
+GLINER_PROFILES = frozenset({"general", "pii"})
 DEFAULT_TOKEN_POLICY_MODEL_DIRS = (
     Path("data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda"),
     Path("data/outputs/token_policy_hatebert.action_balanced_train30000.cuda"),
@@ -38,6 +39,7 @@ class AutoPipelineConfig:
     audit_level: str = "summary"
     provider_language: str = "en"
     gliner_model: str | None = None
+    gliner_profile: str = "general"
     token_policy_model_dirs: tuple[Path, ...] = DEFAULT_TOKEN_POLICY_MODEL_DIRS
     token_policy_mode: str = "mean_prob"
     hsd_advisory_model: str = DEFAULT_HSD_ADVISORY_MODEL
@@ -50,6 +52,11 @@ class AutoPipelineConfig:
     local_llm_enabled: bool = False
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "gliner_profile",
+            self.gliner_profile.strip().lower(),
+        )
         if self.baseline_mode not in {"utility", "balanced", "privacy"}:
             raise ValueError("baseline_mode must be utility, balanced, or privacy")
         if self.metric_depth not in METRIC_DEPTHS:
@@ -58,6 +65,8 @@ class AutoPipelineConfig:
             raise ValueError(f"device must be one of {sorted(DEVICE_POLICIES)}")
         if self.audit_level not in AUDIT_LEVELS:
             raise ValueError(f"audit_level must be one of {sorted(AUDIT_LEVELS)}")
+        if self.gliner_profile not in GLINER_PROFILES:
+            raise ValueError(f"gliner_profile must be one of {sorted(GLINER_PROFILES)}")
         if self.max_model_batch_size < 1:
             raise ValueError("max_model_batch_size must be positive")
         if self.max_provider_rows is not None and self.max_provider_rows < 0:

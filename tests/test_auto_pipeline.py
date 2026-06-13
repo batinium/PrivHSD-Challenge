@@ -150,6 +150,52 @@ class CountingProvider:
         )
 
 
+class BatchedCountingProvider:
+    name = "batched_provider"
+
+    def __init__(self, batch_calls):
+        self.batch_calls = batch_calls
+
+    def propose_many(self, texts, *, batch_size):
+        self.batch_calls.append({"count": len(texts), "batch_size": batch_size})
+        outputs = []
+        for text in texts:
+            if "Amy" not in text:
+                outputs.append(
+                    SpanProviderOutput(provider=self.name, spans=(), audit={})
+                )
+                continue
+            start = text.index("Amy")
+            outputs.append(
+                SpanProviderOutput(
+                    provider=self.name,
+                    spans=(
+                        SpanCandidate(
+                            start=start,
+                            end=start + len("Amy"),
+                            text="Amy",
+                            entity_type="PERSON",
+                            privacy_class=PRIVACY_CLASS_DIRECT,
+                            utility_class=UTILITY_CLASS_NONE,
+                            provider=self.name,
+                            score=0.95,
+                            explanation_code="unit_person",
+                            metadata={"source": "batched_provider:person"},
+                        ),
+                    ),
+                    audit={"accepted_span_count": 1},
+                )
+            )
+        return outputs
+
+
+class MismatchedBatchedProvider:
+    name = "mismatched_provider"
+
+    def propose_many(self, texts, *, batch_size):
+        return []
+
+
 class CountingModel:
     def __init__(self, batch_calls):
         self.batch_calls = batch_calls
@@ -247,6 +293,84 @@ def test_auto_context_loads_fake_provider_and_model_once_per_run():
     assert sum("[PERSON]" in row["text"] for row in result.rows[:3]) >= 2
 
 
+def test_auto_engine_uses_provider_batch_api_once_per_provider():
+    batch_calls = []
+
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            max_model_batch_size=7,
+            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
+            disabled_models=frozenset(
+                {"token_policy_ensemble", "semantic", "hsd_advisory"}
+            ),
+            audit_level="row",
+        ),
+        provider_factories={
+            "batched_provider": lambda _context: BatchedCountingProvider(batch_calls)
+        },
+    )
+    rows = [
+        {"id": "1", "text": "kill Amy"},
+        {"id": "2", "text": "threaten Amy"},
+        {"id": "3", "text": "No identifiers here"},
+    ]
+
+    result = AutoPipelineEngine(context).process_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        replace_text=True,
+    )
+
+    assert batch_calls == [{"count": 2, "batch_size": 7}]
+    assert context.provider_load_counts["batched_provider"] == 1
+    assert result.audit_rows[0]["accepted_provider_spans_by_provider"] == {
+        "batched_provider": 1
+    }
+    assert result.audit_rows[1]["accepted_provider_spans_by_provider"] == {
+        "batched_provider": 1
+    }
+    assert result.rows[2]["text"] == "No identifiers here"
+
+
+def test_auto_engine_rejects_mismatched_provider_batch_count():
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
+            disabled_models=frozenset(
+                {"token_policy_ensemble", "semantic", "hsd_advisory"}
+            ),
+            audit_level="row",
+        ),
+        provider_factories={
+            "mismatched_provider": lambda _context: MismatchedBatchedProvider()
+        },
+    )
+
+    result = AutoPipelineEngine(context).process_rows(
+        [{"id": "1", "text": "kill Amy"}],
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        replace_text=True,
+    )
+
+    assert result.rows[0]["text"] == "kill Amy"
+    assert result.audit_rows[0]["provider_errors"] == [
+        {
+            "provider": "mismatched_provider",
+            "error_class": "UnexpectedOutputCount",
+        }
+    ]
+    assert (
+        context.audit_counters[
+            "provider_runtime_error:mismatched_provider:UnexpectedOutputCount"
+        ]
+        == 1
+    )
+
+
 def test_auto_candidate_rejects_large_hsd_advisory_drop():
     candidates = [
         AutoCandidate(name="balanced", text="Muslims should leave.", source="unit"),
@@ -342,3 +466,35 @@ def test_testing_dataset_fast_submission_path_is_practical(tmp_path):
     assert manifest["validation"]["valid"] is True
     assert manifest["metrics"]["row_count"] == 3830
     assert manifest["metrics"]["metric_depth_counts"] == {"fast": 3830}
+
+
+def test_create_submission_auto_records_configured_gliner_model(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        "privhsd.auto.model_registry.module_available",
+        lambda name: name == "gliner",
+    )
+    source = tmp_path / "four_col.csv"
+    output = tmp_path / "four_col.out.csv"
+    model_dir = tmp_path / "local-gliner"
+    model_dir.mkdir()
+    write_four_col(source)
+
+    manifest = create_submission(
+        source,
+        output,
+        text_cols=["text"],
+        replace_text=True,
+        mode="auto",
+        disabled_providers=["presidio", "scrubadub"],
+        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        gliner_model=str(model_dir),
+        gliner_profile="pii",
+    )
+
+    assert manifest["providers"]["gliner"]["status"] == "available"
+    assert manifest["providers"]["gliner"]["model"] == str(model_dir)
+    assert manifest["providers"]["gliner"]["profile"] == "pii"
+    assert manifest["load_counts"]["providers"].get("gliner") is None

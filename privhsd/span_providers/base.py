@@ -132,6 +132,18 @@ class SpanProvider(Protocol):
         """Return normalized candidate spans for a single row of text."""
 
 
+class BatchedSpanProvider(Protocol):
+    name: str
+
+    def propose_many(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int,
+    ) -> list[SpanProviderOutput]:
+        """Return normalized candidate spans for a batch of rows."""
+
+
 def provider_from_source(source: str) -> str:
     if source.startswith("presidio:"):
         return "presidio"
@@ -146,6 +158,7 @@ def provider_from_source(source: str) -> str:
         "target_variant",
         "target_spaced_variant",
         "external_profanity_lexicon",
+        "regex_obfuscated_email",
     }:
         return "deterministic"
     return source.split(":", 1)[0] if ":" in source else source
@@ -157,4 +170,3 @@ def candidates_from_spans(
     provider: str | None = None,
 ) -> tuple[SpanCandidate, ...]:
     return tuple(SpanCandidate.from_span(span, provider=provider) for span in spans)
-
