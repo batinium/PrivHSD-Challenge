@@ -80,3 +80,21 @@ For meaningful pipeline changes, check:
 - runtime and provider/model load counts;
 - author-risk metrics when repeated author IDs exist;
 - external/unseen token-policy results when token-policy behavior changes.
+
+## External Utility Probes
+
+Optional external HSD/toxicity probes are research and audit evidence, not
+official moderation decisions. The detailed implementation handoff for adding
+probe kinds, Cardiff multiclass target drift, an HSD advisory ensemble,
+continuous hate-score probes, toxicity-bias probes, and generated span/rationale
+probes lives in
+`docs/planning/utility_probe_integration_plan.md`.
+
+## Public Dataset Benchmarks
+
+Public dataset adapters and deep benchmark reports are opt-in audit workflows,
+not official exact-submission requirements. The detailed implementation handoff
+for PII gold-span datasets, character-level span metrics, HateXplain
+destructive-interference ratios, HateCheck functionality reports, Jigsaw
+identity-slice drift, and GLiNER provider replacement benchmarks lives in
+`docs/planning/public_dataset_evaluation_integration_plan.md`.

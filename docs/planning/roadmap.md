@@ -50,6 +50,15 @@ Tasks:
 - Fuse spans and generate candidates.
 - Rerank and select the least destructive safe candidate.
 - Fall back to baseline on uncertainty/errors.
+- Implement the PII provider and edge-case plan in
+  `docs/planning/pii_provider_edge_case_plan.md`: obfuscated email detection,
+  reported-person contexts, short-name threat cue preservation, conservative
+  alias handling, and provider benchmarks.
+- Implement the privacy span model integration plan in
+  `docs/planning/privacy_span_model_integration_plan.md`: expose GLiNER model
+  selection, add a PII GLiNER profile, batch provider inference, benchmark
+  `nvidia/gliner-PII`, and keep `openai/privacy-filter` as a secondary
+  optional provider.
 
 Acceptance:
 
@@ -94,7 +103,17 @@ Acceptance:
 Tasks:
 
 - Add deep metrics and benchmark reports under ignored `data/outputs/`.
+- Implement the public dataset evaluation handoff in
+  `docs/planning/public_dataset_evaluation_integration_plan.md`: PII
+  gold-span adapters, character span precision/recall, HateXplain destructive
+  interference, HateCheck functionality drift, Jigsaw identity slices, and
+  GLiNER provider replacement benchmarks.
 - Add semantic drift scorers where dependencies exist.
+- Implement the external utility-probe plan in
+  `docs/planning/utility_probe_integration_plan.md`: registry metadata,
+  Cardiff multiclass target drift, binary advisory ensemble, Detoxify
+  toxicity-bias audit, continuous Measuring Hate Speech scores, MUDES toxic
+  spans, and HateXplain rationale runtime.
 - Add weak supervision and metadata privacy reports.
 - Keep DPMLM, SanText, and LLM candidates behind reranking.
 

@@ -9,6 +9,10 @@ Primary code: `privhsd/auto/context.py`, `privhsd/auto/model_registry.py`,
 This is the authoritative reference for optional providers and local model
 behavior.
 
+Detailed implementation handoffs live in planning docs. For GLiNER PII,
+`openai/privacy-filter`, provider batching, and benchmark gates, use
+`docs/planning/privacy_span_model_integration_plan.md`.
+
 ## Lifecycle Rules
 
 - Build one `AutoPipelineContext` at command startup.

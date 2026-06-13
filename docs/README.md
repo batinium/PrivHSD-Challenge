@@ -49,6 +49,22 @@ Current status, risks, and future work:
 - [planning/known_weaknesses.md](planning/known_weaknesses.md)
 - [planning/roadmap.md](planning/roadmap.md)
 - [planning/decisions.md](planning/decisions.md)
+- [planning/author_aware_group_privacy_plan.md](planning/author_aware_group_privacy_plan.md)
+  - detailed implementation handoff for contribution bounding, author-risk
+  upgrades, and optional authorship-obfuscation candidates.
+- [planning/utility_probe_integration_plan.md](planning/utility_probe_integration_plan.md)
+  - detailed implementation handoff for external HSD utility probes and
+  advisory-model ensemble work.
+- [planning/pii_provider_edge_case_plan.md](planning/pii_provider_edge_case_plan.md)
+  - detailed implementation handoff for PII provider selection, HydroXai
+  benchmark conclusions, and deterministic edge-case fixes.
+- [planning/privacy_span_model_integration_plan.md](planning/privacy_span_model_integration_plan.md)
+  - detailed implementation handoff for GLiNER PII, privacy-filter, provider
+  batching, model-selection CLI work, and benchmark gates.
+- [planning/public_dataset_evaluation_integration_plan.md](planning/public_dataset_evaluation_integration_plan.md)
+  - detailed implementation handoff for public PII/HSD dataset adapters,
+  gold-span PII benchmarks, HateXplain interference metrics, HateCheck
+  functionality reports, and Jigsaw identity-slice drift.
 
 ## Research And Governance
 
