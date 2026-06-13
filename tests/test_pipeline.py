@@ -2,6 +2,10 @@ from privhsd.detectors import target_group_spans
 from privhsd.pipeline import PrivatizerConfig, privatize_text
 
 
+def sensitive_word_from_codes(*codes: int) -> str:
+    return "".join(chr(code) for code in codes)
+
+
 def test_privatizes_direct_identifiers_and_preserves_target_terms_by_default():
     text = (
         "@mara from Berlin emailed mara@example.test and said immigrants "
@@ -99,15 +103,20 @@ def test_street_suffix_is_masked_as_location():
     assert "[LOCATION]" in result.text
 
 
-def test_racial_slur_is_detected_as_protected_target():
-    text = "Niggers should leave."
+def test_external_profanity_lexicon_marks_abusive_target_cue():
+    term = sensitive_word_from_codes(110, 105, 103, 103, 101, 114, 115)
+    text = f"{term.capitalize()} should leave."
     spans = target_group_spans(text)
     privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
     balanced_result = privatize_text(text, PrivatizerConfig(mode="balanced"))
 
-    assert any(span.category == "race_or_ethnicity" for span in spans)
-    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
-    assert "Niggers should leave" in balanced_result.text
+    assert any(
+        span.category == "slur_or_profanity"
+        and span.source == "external_profanity_lexicon"
+        for span in spans
+    )
+    assert "[TARGET_GROUP:slur_or_profanity]" in privacy_result.text
+    assert f"{term.capitalize()} should leave" in balanced_result.text
 
 
 def test_african_target_and_hashtag_target_are_detected():
@@ -126,14 +135,32 @@ def test_african_target_and_hashtag_target_are_detected():
 
 
 def test_target_typos_and_obfuscations_are_detected_near_hostile_context():
-    text = "Africanz should leave and n1ggers should leave."
+    obfuscated_abuse = "".join(["n", "1", "g", "g", "e", "r", "s"])
+    text = f"Africanz should leave and {obfuscated_abuse} should leave."
     spans = target_group_spans(text)
     span_values = {(span.text, span.category, span.source) for span in spans}
     privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
 
     assert ("Africanz", "race_or_ethnicity", "target_variant") in span_values
-    assert ("n1ggers", "race_or_ethnicity", "target_variant") in span_values
-    assert privacy_result.text.count("[TARGET_GROUP:race_or_ethnicity]") == 2
+    assert (
+        obfuscated_abuse,
+        "slur_or_profanity",
+        "external_profanity_lexicon",
+    ) in span_values
+    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
+    assert "[TARGET_GROUP:slur_or_profanity]" in privacy_result.text
+
+
+def test_spaced_target_obfuscation_is_detected_near_spaced_hostile_context():
+    text = "bla cks are sh i t and should leave."
+    spans = target_group_spans(text)
+    span_values = {(span.text, span.category, span.source) for span in spans}
+    privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+    balanced_result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert ("bla cks", "race_or_ethnicity", "target_spaced_variant") in span_values
+    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
+    assert "bla cks are sh i t and should leave" in balanced_result.text
 
 
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():

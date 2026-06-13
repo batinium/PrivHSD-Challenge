@@ -74,6 +74,30 @@ This CSV stores the prompt, raw model response, parsed row labels, expected
 privacy/target annotations, local detector outputs, and weak token-action
 labels. It is still synthetic and must be curated before training.
 
+To fill underrepresented classes for model training, balance against the actual
+large merged training CSV. The generator canonicalizes adjacent labels such as
+`toxic` and `abuse` into `offensive`, computes the current deficits, and asks
+LM Studio only for deficit labels:
+
+```bash
+python scripts/generate_lm_studio_challenge_corpus.py \
+  --endpoint http://172.21.96.1:1234/v1/chat/completions \
+  --model gemma-4-e4b-uncensored-hauhaucs-aggressive \
+  --balance-against data/outputs/recommended_merged.balanced.csv \
+  --balance-label-mode canonical \
+  --reject-label-mismatch \
+  --target-count 12000 \
+  --temperature 0.8 \
+  --output data/outputs/synthetic_challenge_corpus.balance_aug.csv \
+  --errors data/outputs/synthetic_challenge_corpus.balance_aug.errors.jsonl \
+  --report data/outputs/synthetic_challenge_corpus.balance_aug.report.json \
+  --status data/outputs/synthetic_challenge_corpus.balance_aug.status.json \
+  --id-prefix synthetic_lmstudio_bal
+```
+
+Keep these rows separate until labels, duplicates, and token-action
+distributions have been checked.
+
 If the one-stream rate is too slow, shard safely into separate CSV files rather
 than letting multiple processes append to one CSV:
 
@@ -118,3 +142,7 @@ Do not let them directly rewrite text without context filters, because broad
 lexicons can create false positives and can remove HSD utility words such as
 negation or modality. The deterministic layer should still decide whether a
 candidate is privacy-sensitive in this task.
+
+Do not hard-code protected slurs into the source tree. Use the external
+`better-profanity` lexicon as a candidate source for profanity/slur cues, then
+apply context filters before treating a match as HSD-relevant.

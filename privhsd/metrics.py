@@ -12,7 +12,7 @@ import re
 from statistics import mean
 from typing import Any, Iterable
 
-from .detectors import TAGS, TARGET_GROUP_TERMS, Span, detect_spans
+from .detectors import TAGS, TARGET_GROUP_CATEGORIES, Span, detect_spans
 
 
 UTILITY_CUES = (
@@ -67,7 +67,7 @@ QUASI_IDENTIFIER_TYPES = frozenset(
 )
 KNOWN_PLACEHOLDER_TYPES = frozenset(
     {tag.strip("[]") for tag in TAGS.values()}
-    | {f"TARGET_GROUP:{category}" for category in TARGET_GROUP_TERMS}
+    | {f"TARGET_GROUP:{category}" for category in TARGET_GROUP_CATEGORIES}
 )
 
 PLACEHOLDER_PATTERN = re.compile(

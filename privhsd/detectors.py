@@ -12,6 +12,11 @@ from dataclasses import dataclass
 import re
 from typing import Iterable, Sequence
 
+try:  # The package ships the sensitive word list; keep raw slurs out of source.
+    from better_profanity import profanity as _external_profanity
+except Exception:  # pragma: no cover - optional at import time for library users.
+    _external_profanity = None
+
 
 @dataclass(frozen=True)
 class Span:
@@ -244,10 +249,6 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "jewish people",
         "jewish community",
         "jewish communities",
-        "heeb",
-        "heebs",
-        "kike",
-        "kikes",
         "christian",
         "christians",
         "hindu",
@@ -294,10 +295,6 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "same-sex couples",
         "queer",
         "queers",
-        "fag",
-        "fags",
-        "poof",
-        "poofs",
     ),
     "disability": (
         "disabled",
@@ -311,20 +308,14 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "deaf people",
         "blind",
         "blind people",
-        "retard",
-        "retards",
-        "tard",
-        "tards",
-        "mong",
-        "mongs",
-        "mongo",
-        "mongos",
     ),
     "race_or_ethnicity": (
         "african",
         "africans",
         "african people",
         "black people",
+        "black",
+        "blacks",
         "black community",
         "black communities",
         "asian people",
@@ -334,8 +325,6 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "roma people",
         "romani",
         "sinti",
-        "gypsy",
-        "gypsies",
         "traveller",
         "travellers",
         "people of color",
@@ -344,12 +333,6 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
         "hispanic people",
         "dalit",
         "dalits",
-        "chink",
-        "chinks",
-        "nigga",
-        "niggas",
-        "nigger",
-        "niggers",
     ),
     "historical_victim_group": (
         "holocaust survivors",
@@ -365,6 +348,7 @@ TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
 CONTEXTUAL_TARGET_TERMS = {
     "boy",
     "boys",
+    "black",
     "girl",
     "girls",
     "man",
@@ -414,6 +398,24 @@ VARIANT_TRANSLATION = str.maketrans(
     }
 )
 VARIANT_TOKEN_PATTERN = re.compile(r"#?[A-Za-z0-9_@$]{4,}")
+SPACED_FRAGMENT_PATTERN = re.compile(r"#?[A-Za-z0-9_@$]{1,8}")
+EXTERNAL_TARGET_CATEGORIES = frozenset({"slur_or_profanity"})
+TARGET_GROUP_CATEGORIES = frozenset(TARGET_GROUP_TERMS) | EXTERNAL_TARGET_CATEGORIES
+_EXTERNAL_PROFANITY_LOADED = False
+
+
+def contains_external_profanity(value: str) -> bool:
+    """Query the external profanity/slur lexicon without exposing its word list."""
+    global _EXTERNAL_PROFANITY_LOADED
+    if _external_profanity is None:
+        return False
+    candidate = value.strip()
+    if len(compact_variant(candidate)) < 3:
+        return False
+    if not _EXTERNAL_PROFANITY_LOADED:
+        _external_profanity.load_censor_words()
+        _EXTERNAL_PROFANITY_LOADED = True
+    return bool(_external_profanity.contains_profanity(candidate))
 
 
 def contains_target_group_term(value: str) -> bool:
@@ -558,13 +560,59 @@ def context_spans(text: str) -> list[Span]:
     return spans
 
 
-def has_target_generalization_context(text: str, start: int, end: int) -> bool:
+def external_profanity_candidate_spans(text: str) -> list[tuple[int, int, str, str]]:
+    candidates: list[tuple[int, int, str, str]] = []
+    for match in VARIANT_TOKEN_PATTERN.finditer(text):
+        raw_value = match.group(0)
+        normalized_value = compact_variant(raw_value.lstrip("#"))
+        if contains_external_profanity(raw_value) or contains_external_profanity(
+            normalized_value
+        ):
+            candidates.append((match.start(), match.end(), raw_value, normalized_value))
+    for start, end, raw_value, normalized_value in spaced_fragment_windows(text):
+        if contains_external_profanity(normalized_value):
+            candidates.append((start, end, raw_value, normalized_value))
+    return candidates
+
+
+def has_explicit_target_generalization_context(text: str, start: int, end: int) -> bool:
     window = text[max(0, start - 80) : min(len(text), end + 80)].lower()
     for cue in TARGET_GENERALIZATION_CONTEXT_CUES:
         pattern = r"(?<![a-z0-9])" + re.escape(cue) + r"(?![a-z0-9])"
         if re.search(pattern, window):
             return True
+        normalized_cue = compact_variant(cue)
+        if len(normalized_cue) >= 4:
+            for _start, _end, _raw, normalized_value in spaced_fragment_windows(window):
+                if normalized_value == normalized_cue:
+                    return True
     return False
+
+
+def has_predicative_external_abuse_context(text: str, start: int, end: int) -> bool:
+    window_start = max(0, start - 80)
+    window = text[window_start : min(len(text), end + 80)]
+    local_start = start - window_start
+    local_end = end - window_start
+    for profane_start, profane_end, _raw, _normalized in external_profanity_candidate_spans(
+        window
+    ):
+        if profane_start >= local_start and profane_end <= local_end:
+            continue
+        between_start = min(local_end, profane_end)
+        between_end = max(local_start, profane_start)
+        between = window[between_start:between_end].lower()
+        if re.search(r"\b(?:are|is|was|were|be|being|seem|seems|look|looks)\b", between):
+            return True
+    return False
+
+
+def has_target_generalization_context(text: str, start: int, end: int) -> bool:
+    return has_explicit_target_generalization_context(
+        text,
+        start,
+        end,
+    ) or has_predicative_external_abuse_context(text, start, end)
 
 
 def compact_variant(value: str) -> str:
@@ -578,6 +626,35 @@ def compact_variant(value: str) -> str:
             continue
         collapsed.append(character)
     return "".join(collapsed)
+
+
+def spaced_fragment_windows(
+    text: str,
+    *,
+    max_fragments: int = 8,
+) -> list[tuple[int, int, str, str]]:
+    fragments = list(SPACED_FRAGMENT_PATTERN.finditer(text))
+    windows: list[tuple[int, int, str, str]] = []
+    for start_index, start_match in enumerate(fragments):
+        for end_index in range(
+            start_index + 1,
+            min(len(fragments), start_index + max_fragments) + 1,
+        ):
+            if end_index == start_index:
+                continue
+            end_match = fragments[end_index - 1]
+            if end_match.start() == start_match.start():
+                continue
+            if end_index - start_index < 2:
+                continue
+            raw_value = text[start_match.start() : end_match.end()]
+            if not re.search(r"[\s._*|-]", raw_value):
+                continue
+            normalized_value = compact_variant(raw_value.lstrip("#"))
+            windows.append(
+                (start_match.start(), end_match.end(), raw_value, normalized_value)
+            )
+    return windows
 
 
 def edit_distance_at_most_one(left: str, right: str) -> bool:
@@ -683,6 +760,67 @@ def variant_target_group_spans(text: str) -> list[Span]:
     return spans
 
 
+def spaced_variant_target_group_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for start, end, raw_value, normalized_value in spaced_fragment_windows(text):
+        if len(normalized_value) < 5:
+            continue
+        for category, terms in TARGET_GROUP_TERMS.items():
+            for term in terms:
+                normalized_term = compact_variant(term)
+                if len(normalized_term) < 5:
+                    continue
+                if not edit_distance_at_most_one(normalized_value, normalized_term):
+                    continue
+                if (
+                    term.lower() in CONTEXTUAL_TARGET_TERMS
+                    and not has_target_generalization_context(
+                        text,
+                        start,
+                        end,
+                    )
+                ):
+                    continue
+                if not has_target_generalization_context(text, start, end):
+                    continue
+                spans.append(
+                    Span(
+                        start=start,
+                        end=end,
+                        entity_type="TARGET_GROUP",
+                        text=raw_value,
+                        score=0.57,
+                        source="target_spaced_variant",
+                        category=category,
+                    )
+                )
+    return spans
+
+
+def external_profane_target_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for start, end, raw_value, normalized_value in external_profanity_candidate_spans(text):
+        if len(normalized_value) < 4:
+            continue
+        if not (
+            has_explicit_target_generalization_context(text, start, end)
+            or has_predicative_external_abuse_context(text, start, end)
+        ):
+            continue
+        spans.append(
+            Span(
+                start=start,
+                end=end,
+                entity_type="TARGET_GROUP",
+                text=raw_value,
+                score=0.54,
+                source="external_profanity_lexicon",
+                category="slur_or_profanity",
+            )
+        )
+    return spans
+
+
 def target_group_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for category, terms in TARGET_GROUP_TERMS.items():
@@ -711,6 +849,8 @@ def target_group_spans(text: str) -> list[Span]:
                 )
     spans.extend(hashtag_target_group_spans(text))
     spans.extend(variant_target_group_spans(text))
+    spans.extend(spaced_variant_target_group_spans(text))
+    spans.extend(external_profane_target_spans(text))
     return merge_spans(spans)
 
 
@@ -724,6 +864,8 @@ def span_priority(span: Span) -> tuple[int, float, int]:
         "target_dictionary": 0,
         "target_hashtag": 0,
         "target_variant": 0,
+        "target_spaced_variant": 0,
+        "external_profanity_lexicon": 0,
     }.get(span.source, 0)
     return (span.end - span.start, span.score, source_priority)
 

@@ -43,6 +43,19 @@ DEFAULT_REPORT = Path("data/outputs/synthetic_challenge_corpus.report.json")
 DEFAULT_STATUS = Path("data/outputs/synthetic_challenge_corpus.status.json")
 
 ALLOWED_LABELS = {"hate", "offensive", "not_hate", "ambiguous"}
+BALANCED_LABEL_SCHEDULE = ("hate", "offensive", "not_hate", "ambiguous")
+BALANCE_LABEL_ALIASES = {
+    "abuse": "offensive",
+    "abusive": "offensive",
+    "ambiguous_abuse": "ambiguous",
+    "non_hate": "not_hate",
+    "not_abuse": "not_hate",
+    "not_abusive": "not_hate",
+    "not hate": "not_hate",
+    "not_offensive": "not_hate",
+    "toxic": "offensive",
+    "toxicity": "offensive",
+}
 ALLOWED_SEVERITIES = {"none", "low", "medium", "high"}
 TARGET_CATEGORIES = (
     "race_or_ethnicity",
@@ -114,6 +127,39 @@ HSD_FRAMES = (
     "neutral_identity_mention",
     "ambiguous_context",
 )
+LABEL_FRAMES = {
+    "hate": (
+        "direct_hate",
+        "exclusion",
+        "dehumanization",
+        "threat_or_intimidation",
+        "stereotype",
+        "coded_language",
+        "slur_variant",
+        "harassment_reply",
+    ),
+    "offensive": (
+        "offensive_insult_without_protected_target",
+        "profanity_without_protected_target",
+        "personal_abuse",
+        "vulgar_complaint",
+        "non_identity_harassment",
+    ),
+    "not_hate": (
+        "counterspeech",
+        "public_interest_criticism",
+        "neutral_identity_mention",
+        "supportive_identity_mention",
+        "benign_report",
+    ),
+    "ambiguous": (
+        "ambiguous_context",
+        "reported_speech",
+        "quoted_hate",
+        "sarcasm",
+        "coded_language",
+    ),
+}
 SURFACES = (
     "short social post",
     "reply thread",
@@ -225,8 +271,61 @@ def parse_args() -> argparse.Namespace:
         help="Global request-index offset for sharded generation.",
     )
     parser.add_argument("--id-prefix", default="synthetic_lmstudio")
+    parser.add_argument(
+        "--label-strategy",
+        choices=("balanced", "scenario"),
+        default="balanced",
+        help="Use explicit balanced labels or the older scenario-derived label hints.",
+    )
+    parser.add_argument(
+        "--target-label",
+        action="append",
+        choices=sorted(ALLOWED_LABELS),
+        help=(
+            "Requested label to cycle. Repeat to oversample underrepresented "
+            "classes, e.g. --target-label offensive --target-label not_hate."
+        ),
+    )
+    parser.add_argument(
+        "--reject-label-mismatch",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip rows when the model returns a label different from the requested label.",
+    )
+    parser.add_argument(
+        "--balance-against",
+        type=Path,
+        help=(
+            "CSV whose label distribution should determine deficit-only "
+            "generation when --target-label is not supplied."
+        ),
+    )
+    parser.add_argument("--balance-label-col", default="label")
+    parser.add_argument(
+        "--balance-label-mode",
+        choices=("canonical", "exact"),
+        default="canonical",
+        help="Canonical mode maps adjacent labels such as toxic/abuse into offensive.",
+    )
+    parser.add_argument(
+        "--balance-to-count",
+        type=int,
+        help="Desired per-label count. Defaults to the max current canonical label count.",
+    )
+    parser.add_argument(
+        "--balance-min-deficit",
+        type=int,
+        default=1,
+        help="Ignore labels whose deficit is below this many rows.",
+    )
     parser.add_argument("--resume", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--max-consecutive-errors", type=int, default=50)
+    parser.add_argument(
+        "--max-consecutive-label-mismatches",
+        type=int,
+        default=10,
+        help="Advance past a requested label after this many consecutive mismatches.",
+    )
     parser.add_argument("--retry-sleep", type=float, default=5.0)
     parser.add_argument("--heartbeat-every", type=int, default=25)
     parser.add_argument("--recent-window", type=int, default=40)
@@ -287,10 +386,67 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def choose_scenario(request_index: int, rng: random.Random) -> dict[str, Any]:
-    target_category = TARGET_CATEGORIES[request_index % len(TARGET_CATEGORIES)]
+def label_for_request(
+    request_index: int,
+    *,
+    label_strategy: str,
+    target_labels: list[str] | None,
+) -> str | None:
+    if label_strategy == "scenario":
+        return None
+    schedule = tuple(target_labels) if target_labels else BALANCED_LABEL_SCHEDULE
+    return schedule[request_index % len(schedule)]
+
+
+def target_category_for_label(
+    request_index: int,
+    *,
+    requested_label: str | None,
+    label_schedule_size: int,
+) -> str:
+    category_index = request_index // max(label_schedule_size, 1)
+    if requested_label == "offensive":
+        return "none"
+    return TARGET_CATEGORIES[category_index % len(TARGET_CATEGORIES)]
+
+
+def frame_for_label(
+    request_index: int,
+    requested_label: str | None,
+    label_schedule_size: int,
+    rng: random.Random,
+) -> str:
+    if requested_label and requested_label in LABEL_FRAMES:
+        frames = LABEL_FRAMES[requested_label]
+        return frames[(request_index // max(label_schedule_size, 1)) % len(frames)]
+    return HSD_FRAMES[(request_index // (len(TARGET_CATEGORIES) * 3)) % len(HSD_FRAMES)]
+
+
+def choose_scenario(
+    request_index: int,
+    rng: random.Random,
+    *,
+    label_strategy: str = "balanced",
+    target_labels: list[str] | None = None,
+    label_cycle_size: int | None = None,
+    label_index: int | None = None,
+) -> dict[str, Any]:
+    label_index = request_index if label_index is None else label_index
+    requested_label = label_for_request(
+        label_index,
+        label_strategy=label_strategy,
+        target_labels=target_labels,
+    )
+    label_schedule_size = label_cycle_size or (
+        len(target_labels) if target_labels else len(BALANCED_LABEL_SCHEDULE)
+    )
+    target_category = target_category_for_label(
+        label_index,
+        requested_label=requested_label,
+        label_schedule_size=label_schedule_size,
+    )
     pii_type = PII_SCHEDULE[(request_index // len(TARGET_CATEGORIES)) % len(PII_SCHEDULE)]
-    frame = HSD_FRAMES[(request_index // (len(TARGET_CATEGORIES) * 3)) % len(HSD_FRAMES)]
+    frame = frame_for_label(label_index, requested_label, label_schedule_size, rng)
     surface = rng.choice(SURFACES)
     register = rng.choice(REGISTERS)
     platform = rng.choice(PLATFORMS)
@@ -301,6 +457,7 @@ def choose_scenario(request_index: int, rng: random.Random) -> dict[str, Any]:
             "use no hashtag",
             "include one emoji if natural",
             "include typo or obfuscation if natural",
+            "include split-letter obfuscation like spaced target words if natural",
             "include quotation marks if natural",
             "avoid starting with 'They say'",
             "avoid starting with 'I hate'",
@@ -311,7 +468,9 @@ def choose_scenario(request_index: int, rng: random.Random) -> dict[str, Any]:
         ],
         k=4,
     )
-    if frame in {"counterspeech", "neutral_identity_mention", "public_interest_criticism"}:
+    if requested_label:
+        label_hint = requested_label
+    elif frame in {"counterspeech", "neutral_identity_mention", "public_interest_criticism"}:
         label_hint = rng.choice(["not_hate", "ambiguous", "offensive"])
     elif frame in {"reported_speech", "quoted_hate", "ambiguous_context"}:
         label_hint = rng.choice(["ambiguous", "hate", "not_hate"])
@@ -330,6 +489,7 @@ def choose_scenario(request_index: int, rng: random.Random) -> dict[str, Any]:
                 frame,
                 surface,
                 register,
+                label_hint,
             ]
         ).encode("utf-8")
     ).hexdigest()[:12]
@@ -344,6 +504,7 @@ def choose_scenario(request_index: int, rng: random.Random) -> dict[str, Any]:
         "platform": platform,
         "length_profile": length_profile,
         "label_hint": label_hint,
+        "requested_label": requested_label or label_hint,
         "style_constraints": style_constraints,
         "lexical_seed": rng.randrange(1_000_000_000),
     }
@@ -380,9 +541,13 @@ def prompt_for_scenario(scenario: dict[str, Any], recent_signatures: list[str]) 
         "required_json_schema": schema,
         "hard_constraints": [
             "Return exactly one JSON object and no markdown.",
+            f"The label field must be exactly {scenario['label_hint']!r}.",
             "The text must be fictional and must not contain real private personal data.",
             "Use one sample only.",
-            "Use target-group evidence when the label is hate.",
+            "For label hate, include protected-target evidence plus hostile, exclusionary, threatening, dehumanizing, or slur/coded content.",
+            "For label offensive, use profanity or personal abuse without a protected-class target.",
+            "For label not_hate, use neutral mention, counterspeech, supportive language, or public-interest criticism without endorsing hate.",
+            "For label ambiguous, make the context genuinely unclear, quoted, coded, sarcastic, or hard to classify.",
             "Occasionally include PII or quasi-identifiers according to pii_type, but never real private data.",
             "When PII exists, pii_annotations must include exact text spans.",
             "When target groups exist, target_annotations must include exact text spans.",
@@ -500,6 +665,110 @@ def clean_label(value: Any) -> str:
     return aliases.get(label, label)
 
 
+def balance_label(value: Any, *, mode: str) -> str:
+    label = clean_label(value)
+    if mode == "canonical":
+        return BALANCE_LABEL_ALIASES.get(label, label)
+    return label
+
+
+def read_balance_counts(
+    path: Path,
+    *,
+    label_col: str,
+    label_mode: str,
+) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if label_col not in (reader.fieldnames or []):
+            raise ValueError(f"{path} does not contain label column {label_col!r}")
+        for row in reader:
+            label = balance_label(row.get(label_col), mode=label_mode)
+            if label:
+                counts[label] += 1
+    return counts
+
+
+def weighted_label_schedule(
+    deficits: dict[str, int],
+    *,
+    total_rows: int,
+) -> list[str]:
+    active = {label: deficit for label, deficit in deficits.items() if deficit > 0}
+    if not active or total_rows <= 0:
+        return []
+    total_deficit = sum(active.values())
+    allocations = {
+        label: int(total_rows * deficit / total_deficit)
+        for label, deficit in active.items()
+    }
+    fractions = {
+        label: (total_rows * deficit / total_deficit) - allocations[label]
+        for label, deficit in active.items()
+    }
+    remainder = total_rows - sum(allocations.values())
+    for label, _fraction in sorted(
+        fractions.items(),
+        key=lambda item: (item[1], active[item[0]]),
+        reverse=True,
+    )[:remainder]:
+        allocations[label] += 1
+    if total_rows >= len(active):
+        for label in active:
+            if allocations[label]:
+                continue
+            donor = max(allocations, key=lambda item: allocations[item])
+            if allocations[donor] > 1:
+                allocations[donor] -= 1
+                allocations[label] = 1
+
+    current = {label: 0 for label in allocations}
+    schedule: list[str] = []
+    allocation_total = sum(allocations.values())
+    for _index in range(allocation_total):
+        for label, weight in allocations.items():
+            current[label] += weight
+        chosen = max(current, key=lambda label: (current[label], allocations[label], label))
+        schedule.append(chosen)
+        current[chosen] -= allocation_total
+    return schedule
+
+
+def build_balance_plan(
+    counts: Counter[str],
+    *,
+    target_count: int,
+    balance_to_count: int | None,
+    min_deficit: int,
+) -> tuple[dict[str, Any], list[str]]:
+    observed = {label: counts.get(label, 0) for label in sorted(ALLOWED_LABELS)}
+    target_per_label = balance_to_count
+    if target_per_label is None:
+        target_per_label = max(observed.values()) if observed else 0
+    deficits = {
+        label: max(target_per_label - count, 0)
+        for label, count in observed.items()
+    }
+    active_deficits = {
+        label: deficit
+        for label, deficit in deficits.items()
+        if deficit >= max(min_deficit, 1)
+    }
+    schedule = weighted_label_schedule(active_deficits, total_rows=target_count)
+    schedule_counts = dict(sorted(Counter(schedule).items()))
+    plan = {
+        "observed_counts": observed,
+        "balance_target_count_per_label": target_per_label,
+        "deficits": dict(sorted(deficits.items())),
+        "active_deficits": dict(sorted(active_deficits.items())),
+        "requested_synthetic_rows": target_count,
+        "scheduled_synthetic_rows": len(schedule),
+        "schedule_counts": schedule_counts,
+    }
+    return plan, schedule
+
+
 def clean_string_list(value: Any) -> list[str]:
     if isinstance(value, str):
         items = [item.strip() for item in re.split(r"[,;|]", value) if item.strip()]
@@ -520,6 +789,8 @@ def validate_offsets(text: str, spans: Any, *, text_key: str = "text") -> tuple[
             errors.append("span_not_object")
             continue
         span_text = str(item.get(text_key, item.get("text", "")) or "")
+        if span_text.strip().lower() in {"", "none", "n/a", "na", "null"}:
+            continue
         start = item.get("start")
         end = item.get("end")
         if isinstance(start, int) and isinstance(end, int) and 0 <= start < end <= len(text):
@@ -744,10 +1015,13 @@ def status_payload(
     duplicate_count: int,
     error_count: int,
     consecutive_errors: int,
+    consecutive_label_mismatches: int,
     label_counts: Counter[str],
     category_counts: Counter[str],
     pii_counts: Counter[str],
     frame_counts: Counter[str],
+    label_mismatch_count: int,
+    balance_plan: dict[str, Any] | None,
     last_row_id: str | None,
 ) -> dict[str, Any]:
     elapsed = max(time.time() - started, 0.001)
@@ -766,13 +1040,16 @@ def status_payload(
         "remaining_estimate": remaining,
         "duplicates_this_run": duplicate_count,
         "errors_this_run": error_count,
+        "label_mismatches_this_run": label_mismatch_count,
         "consecutive_errors": consecutive_errors,
+        "consecutive_label_mismatches": consecutive_label_mismatches,
         "rows_per_hour_this_run": round(rows_per_hour, 2),
         "eta_hours_at_current_rate": round(eta_hours, 2) if eta_hours is not None else None,
         "label_counts_this_run": dict(sorted(label_counts.items())),
         "target_category_counts_this_run": dict(sorted(category_counts.items())),
         "pii_type_counts_this_run": dict(sorted(pii_counts.items())),
         "frame_counts_this_run": dict(sorted(frame_counts.items())),
+        "balance_plan": balance_plan,
         "last_row_id": last_row_id,
         "runtime_seconds": round(elapsed, 2),
         "stop_requested": STOP_REQUESTED or args.stop_file.exists(),
@@ -789,6 +1066,37 @@ def main() -> int:
     args = parse_args()
     if args.target_count < 1:
         raise SystemExit("--target-count must be positive")
+    if args.balance_to_count is not None and args.balance_to_count < 1:
+        raise SystemExit("--balance-to-count must be positive when supplied")
+
+    runtime_target_labels = args.target_label
+    balance_plan: dict[str, Any] | None = None
+    if args.balance_against:
+        balance_counts = read_balance_counts(
+            args.balance_against,
+            label_col=args.balance_label_col,
+            label_mode=args.balance_label_mode,
+        )
+        balance_plan, balance_schedule = build_balance_plan(
+            balance_counts,
+            target_count=args.target_count,
+            balance_to_count=args.balance_to_count,
+            min_deficit=args.balance_min_deficit,
+        )
+        balance_plan["source"] = str(args.balance_against)
+        balance_plan["label_col"] = args.balance_label_col
+        balance_plan["label_mode"] = args.balance_label_mode
+        if runtime_target_labels:
+            balance_plan["target_label_override"] = list(runtime_target_labels)
+        elif balance_schedule:
+            runtime_target_labels = balance_schedule
+        else:
+            raise SystemExit(
+                "No label deficits found for --balance-against; lower "
+                "--balance-min-deficit or provide --target-label explicitly."
+            )
+    unique_runtime_labels = list(dict.fromkeys(runtime_target_labels or []))
+    label_cycle_size = len(unique_runtime_labels) or len(BALANCED_LABEL_SCHEDULE)
 
     rng = random.Random(args.seed)
     existing_hashes, existing_rows = read_existing_hashes(args.output) if args.resume else (set(), 0)
@@ -803,14 +1111,25 @@ def main() -> int:
     category_counts: Counter[str] = Counter()
     pii_counts: Counter[str] = Counter()
     frame_counts: Counter[str] = Counter()
+    label_mismatch_count = 0
+    consecutive_label_mismatches = 0
+    last_mismatch_label: str | None = None
     last_row_id: str | None = None
 
     try:
         request_index = args.request_index_offset + existing_rows
+        label_schedule_index = existing_rows
         while existing_rows + written < args.target_count:
             if STOP_REQUESTED or args.stop_file.exists():
                 break
-            scenario = choose_scenario(request_index, rng)
+            scenario = choose_scenario(
+                request_index,
+                rng,
+                label_strategy=args.label_strategy,
+                target_labels=runtime_target_labels,
+                label_cycle_size=label_cycle_size,
+                label_index=label_schedule_index,
+            )
             prompt = prompt_for_scenario(scenario, list(recent_signatures))
             payload = chat_payload(
                 model=args.model,
@@ -825,6 +1144,40 @@ def main() -> int:
                 )
                 raw_response = response_content(response)
                 parsed = parse_json_object(raw_response)
+                parsed_label = clean_label(parsed.get("label"))
+                requested_label = str(scenario.get("label_hint", "") or "")
+                if (
+                    args.reject_label_mismatch
+                    and requested_label
+                    and parsed_label != requested_label
+                ):
+                    label_mismatch_count += 1
+                    if last_mismatch_label == requested_label:
+                        consecutive_label_mismatches += 1
+                    else:
+                        last_mismatch_label = requested_label
+                        consecutive_label_mismatches = 1
+                    append_error(
+                        args.errors,
+                        {
+                            "type": "label_mismatch",
+                            "request_index": request_index,
+                            "label_schedule_index": label_schedule_index,
+                            "requested_label": requested_label,
+                            "model_label": parsed_label,
+                            "consecutive_label_mismatches": consecutive_label_mismatches,
+                            "scenario": scenario,
+                        },
+                    )
+                    if (
+                        consecutive_label_mismatches
+                        >= args.max_consecutive_label_mismatches
+                    ):
+                        label_schedule_index += 1
+                        consecutive_label_mismatches = 0
+                    request_index += 1
+                    consecutive_errors = 0
+                    continue
                 row, validation_errors = build_row(
                     parsed=parsed,
                     prompt=prompt,
@@ -847,6 +1200,9 @@ def main() -> int:
                 consecutive_errors = 0
                 last_row_id = row["id"]
                 label_counts[row["label"]] += 1
+                label_schedule_index += 1
+                consecutive_label_mismatches = 0
+                last_mismatch_label = None
                 for category in clean_string_list(json.loads(row["target_categories"])):
                     category_counts[category] += 1
                 pii_counts[scenario["pii_type"]] += 1
@@ -888,10 +1244,13 @@ def main() -> int:
                     duplicate_count=duplicate_count,
                     error_count=error_count,
                     consecutive_errors=consecutive_errors,
+                    consecutive_label_mismatches=consecutive_label_mismatches,
                     label_counts=label_counts,
                     category_counts=category_counts,
                     pii_counts=pii_counts,
                     frame_counts=frame_counts,
+                    label_mismatch_count=label_mismatch_count,
+                    balance_plan=balance_plan,
                     last_row_id=last_row_id,
                 )
                 write_json(args.status, status)
@@ -905,10 +1264,13 @@ def main() -> int:
             duplicate_count=duplicate_count,
             error_count=error_count,
             consecutive_errors=consecutive_errors,
+            consecutive_label_mismatches=consecutive_label_mismatches,
             label_counts=label_counts,
             category_counts=category_counts,
             pii_counts=pii_counts,
             frame_counts=frame_counts,
+            label_mismatch_count=label_mismatch_count,
+            balance_plan=balance_plan,
             last_row_id=last_row_id,
         )
         write_json(args.status, status)
