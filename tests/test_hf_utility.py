@@ -179,6 +179,9 @@ def test_hf_utility_reports_score_drift_with_fake_pipeline(monkeypatch, tmp_path
     assert model_result["sample_size"] == 2
     assert model_result["agreement"] == 0.5
     assert model_result["score_drift"]["mean_delta"] < 0
+    assert model_result["label_alignment"]["original"]["accuracy"] == 1.0
+    assert model_result["label_alignment"]["privatized"]["accuracy"] == 0.5
+    assert model_result["label_alignment"]["utility_label_drop_rows"][0]["row_id"] == "1"
     assert model_result["large_utility_drop_rows"][0]["row_id"] == "1"
     assert "original_text" not in model_result["large_utility_drop_rows"][0]
 
@@ -203,3 +206,26 @@ def test_hf_utility_model_load_failure_is_per_model_skip(monkeypatch, tmp_path):
     assert result["status"] == "ok"
     assert result["models"][0]["status"] == "skipped"
     assert result["models"][0]["skip_reason"] == "model_load_failed"
+
+
+def test_hf_utility_skips_custom_loader_models_before_pipeline(monkeypatch, tmp_path):
+    source = tmp_path / "hf.csv"
+    write_hf_rows(source)
+
+    def fail_if_called():
+        raise AssertionError("generic HF stack should not load")
+
+    monkeypatch.setattr("privhsd.hf_utility.load_hf_stack", fail_if_called)
+
+    result = run_hf_utility_evaluation(
+        source,
+        text_col="text",
+        privatized_col="privatized_text",
+        id_col="id",
+        model_ids=["Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two"],
+        sample_size=1,
+    )
+
+    assert result["status"] == "ok"
+    assert result["models"][0]["status"] == "skipped"
+    assert result["models"][0]["skip_reason"] == "custom_loader_required"

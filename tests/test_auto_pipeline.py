@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from privhsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
+from privhsd.auto.engine import AutoCandidate, choose_auto_candidate
 from privhsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
@@ -168,6 +169,37 @@ class CountingModel:
         ]
 
 
+class CountingHsdAdvisory:
+    def __init__(self, batch_calls):
+        self.batch_calls = batch_calls
+
+    def status_metadata(self):
+        return {
+            "model_id": "facebook/roberta-hate-speech-dynabench-r4-target",
+            "device": "cpu",
+        }
+
+    def score_texts(self, texts, *, batch_size):
+        self.batch_calls.append({"count": len(texts), "batch_size": batch_size})
+        return [0.1 if "[STYLE]" in text or "[TAG]" in text else 0.9 for text in texts]
+
+    def compare(self, original_score, candidate_score):
+        drop = max(0.0, original_score - candidate_score)
+        abs_drift = abs(candidate_score - original_score)
+        original_positive = original_score >= 0.5
+        candidate_positive = candidate_score >= 0.5
+        return {
+            "model_id": "facebook/roberta-hate-speech-dynabench-r4-target",
+            "original_score": round(original_score, 4),
+            "candidate_score": round(candidate_score, 4),
+            "score_drop": round(drop, 4),
+            "abs_drift": round(abs_drift, 4),
+            "decision_changed": original_positive != candidate_positive,
+            "large_drop": original_positive and drop >= 0.25,
+            "large_abs_drift": abs_drift >= 0.35,
+        }
+
+
 def test_auto_context_loads_fake_provider_and_model_once_per_run():
     provider_loads = []
     provider_calls = []
@@ -213,6 +245,82 @@ def test_auto_context_loads_fake_provider_and_model_once_per_run():
     assert len(provider_calls) == 3
     assert batch_calls == [2]
     assert sum("[PERSON]" in row["text"] for row in result.rows[:3]) >= 2
+
+
+def test_auto_candidate_rejects_large_hsd_advisory_drop():
+    candidates = [
+        AutoCandidate(name="balanced", text="Muslims should leave.", source="unit"),
+        AutoCandidate(
+            name="style_scrubbed",
+            text="[STYLE]",
+            source="unit",
+            metadata={
+                "hsd_advisory": {
+                    "score_drop": 0.8,
+                    "abs_drift": 0.8,
+                    "decision_changed": True,
+                    "large_drop": True,
+                    "large_abs_drift": True,
+                }
+            },
+        ),
+    ]
+
+    chosen, scored, reason = choose_auto_candidate(
+        "Muslims should leave.",
+        candidates,
+        baseline_metrics={
+            "direct_identifier_count_after": 0,
+            "quasi_identifier_count_after": 0,
+        },
+    )
+
+    assert chosen.name == "balanced"
+    assert reason == "selected_least_destructive_candidate"
+    assert "hsd_advisory_large_drop" in scored[1]["hard_reject_reasons"]
+    assert "hsd_advisory_decision_drift" in scored[1]["hard_reject_reasons"]
+
+
+def test_auto_hsd_advisory_scores_candidates_in_one_batch():
+    loads = []
+    hsd_batches = []
+
+    def hsd_factory(_context):
+        loads.append("load")
+        return CountingHsdAdvisory(hsd_batches)
+
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            max_model_batch_size=8,
+            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
+            disabled_models=frozenset({"token_policy_ensemble", "semantic"}),
+        ),
+        model_factories={"hsd_advisory": hsd_factory},
+    )
+    rows = [
+        {"id": "1", "text": "Muslims should leave lol!!! #watchlist"},
+        {"id": "2", "text": "No one should attack black people lol!!! #watchlist"},
+    ]
+
+    result = AutoPipelineEngine(context).process_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        replace_text=False,
+        output_col="privatized_text",
+    )
+
+    assert loads == ["load"]
+    assert context.model_load_counts["hsd_advisory"] == 1
+    assert hsd_batches == [{"count": 6, "batch_size": 8}]
+    assert result.summary["models"]["items"]["hsd_advisory"]["status"] == "ready"
+    assert all(row["privatized_text"] == row["text"] for row in result.rows)
+    for row in result.audit_rows:
+        assert any(
+            "hsd_advisory_large_drop" in score["hard_reject_reasons"]
+            for score in row["scores"]
+        )
 
 
 def test_testing_dataset_fast_submission_path_is_practical(tmp_path):

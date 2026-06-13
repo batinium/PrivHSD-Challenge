@@ -24,6 +24,29 @@ DEFAULT_SAMPLE_SIZE = 100
 DEFAULT_DROP_THRESHOLD = 0.25
 DEFAULT_DECISION_THRESHOLD = 0.5
 DEFAULT_DEVICE = "auto"
+POSITIVE_GOLD_LABELS = frozenset(
+    {
+        "abuse",
+        "abusive",
+        "hate",
+        "hateful",
+        "offensive",
+        "toxic",
+    }
+)
+NEGATIVE_GOLD_LABELS = frozenset(
+    {
+        "clean",
+        "neutral",
+        "non_abuse",
+        "non_abusive",
+        "non_hate",
+        "normal",
+        "not_abuse",
+        "not_abusive",
+        "not_hate",
+    }
+)
 
 
 class HfUtilityError(ValueError):
@@ -38,6 +61,8 @@ class HfUtilityModel:
     positive_label_hints: tuple[str, ...]
     runtime_note: str
     license_note: str = "Review the live Hugging Face model card before full runs."
+    pipeline_compatible: bool = True
+    custom_loader_note: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +72,8 @@ class HfUtilityModel:
             "positive_label_hints": list(self.positive_label_hints),
             "runtime_note": self.runtime_note,
             "license_note": self.license_note,
+            "pipeline_compatible": self.pipeline_compatible,
+            "custom_loader_note": self.custom_loader_note,
             "approved_use": "optional HSD/toxicity utility evaluation only",
         }
 
@@ -71,14 +98,30 @@ APPROVED_MODELS: tuple[HfUtilityModel, ...] = (
         task="text-classification",
         default=False,
         positive_label_hints=("hate", "offensive", "toxic", "abusive"),
-        runtime_note="HateXplain-family utility and explainability probe.",
+        runtime_note=(
+            "HateXplain-family utility and explainability probe; generic "
+            "Transformers pipeline failed in local smoke tests."
+        ),
+        pipeline_compatible=False,
+        custom_loader_note=(
+            "Local generic pipeline inference fails with tuple index out of range; "
+            "add a validated custom loader before trusting scores."
+        ),
     ),
     HfUtilityModel(
         model_id="Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two",
         task="text-classification",
         default=False,
         positive_label_hints=("hate", "offensive", "toxic", "abusive"),
-        runtime_note="HateXplain rationale-family probe; may be slower or unavailable.",
+        runtime_note=(
+            "HateXplain rationale-family probe; requires the repository's "
+            "custom Model_Rational_Label loader for trustworthy scores."
+        ),
+        pipeline_compatible=False,
+        custom_loader_note=(
+            "Model card warns generic hosted/API predictions may be wrong due "
+            "to different class initialisations."
+        ),
     ),
     HfUtilityModel(
         model_id="unitary/toxic-bert",
@@ -228,6 +271,145 @@ def pipeline_revision(classifier: Any) -> str | None:
     return str(revision) if revision else None
 
 
+def normalize_gold_label(label: str | None) -> bool | None:
+    normalized = str(label or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not normalized or "ambiguous" in normalized:
+        return None
+    if normalized in POSITIVE_GOLD_LABELS:
+        return True
+    if normalized in NEGATIVE_GOLD_LABELS:
+        return False
+    return None
+
+
+def binary_confusion_metrics(
+    gold: list[bool],
+    predictions: list[bool],
+) -> dict[str, Any]:
+    tp = sum(expected and predicted for expected, predicted in zip(gold, predictions))
+    tn = sum(
+        (not expected) and (not predicted)
+        for expected, predicted in zip(gold, predictions)
+    )
+    fp = sum(
+        (not expected) and predicted
+        for expected, predicted in zip(gold, predictions)
+    )
+    fn = sum(expected and (not predicted) for expected, predicted in zip(gold, predictions))
+    total = len(gold)
+
+    def divide(numerator: int, denominator: int) -> float:
+        return float(numerator) / denominator if denominator else 0.0
+
+    positive_precision = divide(tp, tp + fp)
+    positive_recall = divide(tp, tp + fn)
+    negative_precision = divide(tn, tn + fn)
+    negative_recall = divide(tn, tn + fp)
+
+    def f1(precision: float, recall: float) -> float:
+        return 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+
+    positive_f1 = f1(positive_precision, positive_recall)
+    negative_f1 = f1(negative_precision, negative_recall)
+    return {
+        "accuracy": rounded(divide(tp + tn, total)) if total else 0.0,
+        "macro_f1": rounded((positive_f1 + negative_f1) / 2.0) if total else 0.0,
+        "positive_precision": rounded(positive_precision),
+        "positive_recall": rounded(positive_recall),
+        "negative_precision": rounded(negative_precision),
+        "negative_recall": rounded(negative_recall),
+        "confusion": {
+            "tp": tp,
+            "tn": tn,
+            "fp": fp,
+            "fn": fn,
+        },
+    }
+
+
+def label_alignment_report(
+    samples: list[HfUtilitySample],
+    *,
+    original_scores: list[float],
+    privatized_scores: list[float],
+    decision_threshold: float,
+) -> dict[str, Any] | None:
+    gold: list[bool] = []
+    original_predictions: list[bool] = []
+    privatized_predictions: list[bool] = []
+    evaluated_rows: list[tuple[HfUtilitySample, bool, bool, bool, float, float]] = []
+    skipped = 0
+    for sample, original_score, privatized_score in zip(
+        samples,
+        original_scores,
+        privatized_scores,
+    ):
+        expected = normalize_gold_label(sample.label)
+        if expected is None:
+            skipped += 1
+            continue
+        original_prediction = original_score >= decision_threshold
+        privatized_prediction = privatized_score >= decision_threshold
+        gold.append(expected)
+        original_predictions.append(original_prediction)
+        privatized_predictions.append(privatized_prediction)
+        evaluated_rows.append(
+            (
+                sample,
+                expected,
+                original_prediction,
+                privatized_prediction,
+                original_score,
+                privatized_score,
+            )
+        )
+    if not gold and skipped == 0:
+        return None
+    original = binary_confusion_metrics(gold, original_predictions)
+    privatized = binary_confusion_metrics(gold, privatized_predictions)
+    utility_label_drop_rows = [
+        {
+            "row_index": sample.row_index,
+            "row_id": sample.row_id,
+            "label": sample.label,
+            "original_score": rounded(original_score),
+            "privatized_score": rounded(privatized_score),
+            "original_prediction": "positive" if original_prediction else "negative",
+            "privatized_prediction": "positive" if privatized_prediction else "negative",
+        }
+        for (
+            sample,
+            expected,
+            original_prediction,
+            privatized_prediction,
+            original_score,
+            privatized_score,
+        ) in evaluated_rows
+        if original_prediction == expected and privatized_prediction != expected
+    ]
+    utility_label_drop_rows.sort(
+        key=lambda item: abs(item["original_score"] - item["privatized_score"]),
+        reverse=True,
+    )
+    return {
+        "evaluated_count": len(gold),
+        "skipped_count": skipped,
+        "positive_gold_count": sum(gold),
+        "negative_gold_count": len(gold) - sum(gold),
+        "decision_threshold": decision_threshold,
+        "original": original,
+        "privatized": privatized,
+        "delta": {
+            "accuracy": rounded(privatized["accuracy"] - original["accuracy"]),
+            "macro_f1": rounded(privatized["macro_f1"] - original["macro_f1"]),
+            "positive_recall": rounded(
+                privatized["positive_recall"] - original["positive_recall"]
+            ),
+        },
+        "utility_label_drop_rows": utility_label_drop_rows[:20],
+    }
+
+
 def skipped_model_result(
     model_id: str,
     *,
@@ -290,6 +472,14 @@ def score_with_model(
     decision_threshold: float,
 ) -> dict[str, Any]:
     start = time.perf_counter()
+    if not model.pipeline_compatible:
+        return skipped_model_result(
+            model.model_id,
+            reason="custom_loader_required",
+            detail=model.custom_loader_note or model.runtime_note,
+            device=device,
+            sample_size=len(samples),
+        )
     try:
         device_arg, resolved_device = resolve_device(device)
     except HfUtilityError as exc:
@@ -397,6 +587,12 @@ def score_with_model(
             "large_drop_threshold": drop_threshold,
         },
         "agreement": rounded(mean(agreements)) if agreements else 0.0,
+        "label_alignment": label_alignment_report(
+            samples,
+            original_scores=original_scores,
+            privatized_scores=privatized_scores,
+            decision_threshold=decision_threshold,
+        ),
         "large_utility_drop_rows": large_drops[:20],
     }
 
@@ -467,6 +663,21 @@ def run_hf_utility_evaluation(
         "registry": model_registry_manifest(),
         "models": [],
     }
+
+    if not any(model.pipeline_compatible for model in models):
+        result["models"] = [
+            skipped_model_result(
+                model.model_id,
+                reason="custom_loader_required",
+                detail=model.custom_loader_note or model.runtime_note,
+                device=device,
+                sample_size=len(samples),
+            )
+            for model in models
+        ]
+        if output_path:
+            write_json(output_path, result)
+        return result
 
     try:
         hf = load_hf_stack()

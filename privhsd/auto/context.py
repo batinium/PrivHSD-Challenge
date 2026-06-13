@@ -200,10 +200,24 @@ class AutoPipelineContext:
                 device=self.config.device,
             )
             return TokenPolicySpanProvider(runtime=runtime)
+        if name == "hsd_advisory":
+            from privhsd.models.hsd_advisory_runtime import HsdAdvisoryRuntime
+
+            return HsdAdvisoryRuntime.from_model_id(
+                self.config.hsd_advisory_model,
+                allow_model_download=self.config.allow_model_download,
+                device=self.config.device,
+                decision_threshold=self.config.hsd_advisory_decision_threshold,
+                large_drop_threshold=self.config.hsd_advisory_large_drop_threshold,
+                max_abs_drift=self.config.hsd_advisory_max_abs_drift,
+            )
         raise ValueError(f"unknown auto model {name!r}")
 
     def ensure_token_policy_provider(self) -> Any | None:
         return self.ensure_model("token_policy_ensemble")
+
+    def ensure_hsd_advisory(self) -> Any | None:
+        return self.ensure_model("hsd_advisory")
 
     def audit_status(self) -> dict[str, Any]:
         return {

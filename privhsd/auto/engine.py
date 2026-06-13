@@ -67,6 +67,10 @@ def score_auto_candidate(
     character_retention = float(metrics.get("character_utility_retention", 1.0) or 1.0)
     target_retention = float(metrics.get("target_cue_retention", 1.0) or 1.0)
     utility_retention = float(metrics.get("utility_cue_retention", 1.0) or 1.0)
+    hsd_advisory = candidate.metadata.get("hsd_advisory") or {}
+    hsd_drop = float(hsd_advisory.get("score_drop", 0.0) or 0.0)
+    hsd_abs_drift = float(hsd_advisory.get("abs_drift", 0.0) or 0.0)
+    hsd_decision_changed = bool(hsd_advisory.get("decision_changed", False))
     drift = length_drift(original, candidate.text)
     hard_rejects: list[str] = []
     if candidate.name != "balanced":
@@ -84,6 +88,15 @@ def score_auto_candidate(
             hard_rejects.append("new_identifier_signal")
         if drift > 0.65:
             hard_rejects.append("length_drift")
+        if bool(hsd_advisory.get("large_drop", False)):
+            hard_rejects.append("hsd_advisory_large_drop")
+        if hsd_decision_changed and bool(hsd_advisory.get("large_abs_drift", False)):
+            hard_rejects.append("hsd_advisory_decision_drift")
+    hsd_penalty = (
+        hsd_drop * 2.0
+        + hsd_abs_drift * 1.0
+        + (0.75 if hsd_decision_changed else 0.0)
+    )
     score = (
         direct_reduction * 4.0
         + quasi_reduction * 1.5
@@ -94,6 +107,7 @@ def score_auto_candidate(
         + character_retention
         - drift * 0.7
         - max(0, original_style - style_reduction) * 0.05
+        - hsd_penalty
     )
     return {
         "name": candidate.name,
@@ -111,6 +125,8 @@ def score_auto_candidate(
             "length_drift": round(drift, 4),
             "style_risk_count": candidate_style,
             "provider_accepted_span_count": accepted_provider_spans,
+            "hsd_advisory": hsd_advisory or None,
+            "hsd_advisory_penalty": round(hsd_penalty, 4),
         },
     }
 
@@ -209,6 +225,11 @@ class AutoPipelineEngine:
 
         self._run_provider_batches(states)
         self._run_token_policy_batch(states, text_col=text_col)
+        candidate_groups = [
+            (state, self._candidates_for_state(state))
+            for state in states
+        ]
+        self._run_hsd_advisory_batch(candidate_groups)
 
         output_rows: list[dict[str, Any]] = []
         audit_rows: list[dict[str, Any]] = []
@@ -216,8 +237,7 @@ class AutoPipelineEngine:
         chosen_counts: Counter[str] = Counter()
         fallback_counts: Counter[str] = Counter()
         changed_count = 0
-        for state in states:
-            candidates = self._candidates_for_state(state)
+        for state, candidates in candidate_groups:
             chosen, scored, reason = choose_auto_candidate(
                 state.original,
                 candidates,
@@ -353,6 +373,67 @@ class AutoPipelineEngine:
         for state, output in zip(model_rows, outputs):
             state.model_outputs.append(output)
             state.model_candidates.extend(output.spans)
+
+    def _run_hsd_advisory_batch(
+        self,
+        candidate_groups: list[tuple[AutoRowState, list[AutoCandidate]]],
+    ) -> None:
+        advisory_groups = [
+            (state, candidates)
+            for state, candidates in candidate_groups
+            if len(candidates) > 1
+        ]
+        if not advisory_groups:
+            return
+        advisory = self.context.ensure_hsd_advisory()
+        if advisory is None:
+            return
+
+        texts: list[str] = []
+        for state, candidates in advisory_groups:
+            texts.append(state.original)
+            texts.extend(candidate.text for candidate in candidates)
+        try:
+            scores = advisory.score_texts(
+                texts,
+                batch_size=self.context.config.max_model_batch_size,
+            )
+        except Exception as exc:
+            self.context.audit_counters[
+                f"model_runtime_error:hsd_advisory:{type(exc).__name__}"
+            ] += 1
+            for state, _candidates in advisory_groups:
+                state.model_errors.append(
+                    {
+                        "model": "hsd_advisory",
+                        "error_class": type(exc).__name__,
+                    }
+                )
+            return
+        if len(scores) != len(texts):
+            self.context.audit_counters[
+                "model_runtime_error:hsd_advisory:UnexpectedScoreCount"
+            ] += 1
+            for state, _candidates in advisory_groups:
+                state.model_errors.append(
+                    {
+                        "model": "hsd_advisory",
+                        "error_class": "UnexpectedScoreCount",
+                    }
+                )
+            return
+
+        cursor = 0
+        for _state, candidates in advisory_groups:
+            original_score = scores[cursor]
+            cursor += 1
+            for candidate in candidates:
+                candidate_score = scores[cursor]
+                cursor += 1
+                candidate.metadata["hsd_advisory"] = advisory.compare(
+                    original_score,
+                    candidate_score,
+                )
 
     def _candidates_for_state(self, state: AutoRowState) -> list[AutoCandidate]:
         candidates = [

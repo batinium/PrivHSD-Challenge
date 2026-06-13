@@ -16,6 +16,7 @@ DEFAULT_TOKEN_POLICY_MODEL_DIRS = (
     Path("data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda"),
     Path("data/outputs/token_policy_hatebert.action_balanced_train30000.cuda"),
 )
+DEFAULT_HSD_ADVISORY_MODEL = "facebook/roberta-hate-speech-dynabench-r4-target"
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,10 @@ class AutoPipelineConfig:
     gliner_model: str | None = None
     token_policy_model_dirs: tuple[Path, ...] = DEFAULT_TOKEN_POLICY_MODEL_DIRS
     token_policy_mode: str = "mean_prob"
+    hsd_advisory_model: str = DEFAULT_HSD_ADVISORY_MODEL
+    hsd_advisory_decision_threshold: float = 0.5
+    hsd_advisory_large_drop_threshold: float = 0.25
+    hsd_advisory_max_abs_drift: float = 0.35
     generalize_targets: bool | None = False
     style_scrub: bool = False
     official_mode: bool = True
@@ -57,3 +62,9 @@ class AutoPipelineConfig:
             raise ValueError("max_model_batch_size must be positive")
         if self.max_provider_rows is not None and self.max_provider_rows < 0:
             raise ValueError("max_provider_rows must be non-negative")
+        if not 0.0 < self.hsd_advisory_decision_threshold < 1.0:
+            raise ValueError("hsd_advisory_decision_threshold must be between 0 and 1")
+        if self.hsd_advisory_large_drop_threshold < 0.0:
+            raise ValueError("hsd_advisory_large_drop_threshold must be non-negative")
+        if self.hsd_advisory_max_abs_drift < 0.0:
+            raise ValueError("hsd_advisory_max_abs_drift must be non-negative")

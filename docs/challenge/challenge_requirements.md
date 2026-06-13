@@ -14,6 +14,12 @@ input dataset
   -> privacy/utility tradeoff score
 ```
 
+The webinar clarified that this is a text-to-text privatization challenge. The
+official evaluator benchmarks the privatized dataset with transformer-based
+utility/privacy scoring and returns a tradeoff score, roughly on a negative to
+positive scale. A strong leaderboard score matters, but it is not the only
+judging signal.
+
 ## What We Are Building
 
 We are building a preprocessing layer:
@@ -28,6 +34,15 @@ We are building a preprocessing layer:
 The real privacy adversary is broader than PII lookup. The method should reduce
 signals useful for authorship identification while preserving cues useful for
 hate-speech detection.
+
+The intended public artifact is a runnable system, not a one-off notebook:
+
+- public working code that a judge can install and run;
+- packaged CLI/API behavior, ideally as a Python package;
+- exact-format CSV output for the official evaluator;
+- a public-facing UI or workbench that makes the backend testable;
+- reproducible manifests and audit reports;
+- clear explanation of what was changed and why.
 
 ## What We Are Not Building First
 
@@ -45,6 +60,7 @@ The project should demonstrate:
 - Practical deployability.
 - Privacy preservation.
 - Hate-speech utility retention.
+- Lightweight enough processing for dataset-scale use.
 - Explainability and auditability.
 - Rights-aware framing: privacy, free expression, non-discrimination, and human
   oversight.
@@ -83,16 +99,25 @@ Framework Convention, and HUDERIA mapping.
 ## Webinar Method Notes
 
 - Presidio-style entity redaction is not enough on its own.
+- Simple named-entity anonymization can produce poor tradeoffs because privacy
+  in text includes more than names and contact details.
 - DPMLM-style rewriting is promising but complex and parameter-sensitive.
-- Generic LLM prompting is weak; any LLM use should be specialized, constrained,
-  and evaluated.
+- Generic LLM prompting is weak; any LLM use should be specialized,
+  constrained, reproducible, and evaluated behind reranking.
+- Large model calls on every row are risky for scale, cost, privacy, and
+  explainability.
 - Useful privacy evaluation should include authorship-risk reduction when an
   author column is available.
+- Differential privacy is a plausible foundation, but not required. The method
+  still needs empirical tradeoff evidence.
 
 ## Timeline From Webinar
 
 - 2026-06-15: starter kit and official development dataset expected.
+- 2026-06-15 onward: request team credentials for the challenge leaderboard.
 - 2026-06-17: hackathon begins.
 - 2026-06-18 afternoon: second dataset expected.
 - 2026-06-18 end of day: final code/system due.
 - 2026-06-19: final pitches and winners.
+
+See `docs/challenge/webinar_alignment.md` for the current deliverable focus.

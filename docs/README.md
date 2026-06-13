@@ -8,6 +8,7 @@ logs under ignored `data/`.
 
 - [project/quickstart.md](project/quickstart.md) - setup and common commands.
 - [project/pipeline_design.md](project/pipeline_design.md) - architecture and CLI map.
+- [project/manual_dataset_and_expectations.md](project/manual_dataset_and_expectations.md) - manual fixture, GUI expectations, and author-risk explanation.
 - [project/real_data_playbook.md](project/real_data_playbook.md) - official CSV workflow.
 - [project/roadmap.md](project/roadmap.md) - current technical strategy.
 - [project/experiment_verdict.md](project/experiment_verdict.md) - current evidence table.
@@ -17,6 +18,7 @@ logs under ignored `data/`.
 ## Challenge Docs
 
 - [challenge/challenge_requirements.md](challenge/challenge_requirements.md) - challenge interpretation and timeline.
+- [challenge/webinar_alignment.md](challenge/webinar_alignment.md) - webinar-derived aims, direction, and deliverables.
 - [challenge/official_submission_checklist.md](challenge/official_submission_checklist.md) - pre-upload checks.
 - [challenge/human_rights_legal_test_plan.md](challenge/human_rights_legal_test_plan.md) - legal and governance acceptance tests.
 - [challenge/final_pitch_outline.md](challenge/final_pitch_outline.md) - five-minute Dragon's Den story and demo plan.
@@ -28,11 +30,14 @@ logs under ignored `data/`.
 ## Current Workflow
 
 1. Profile the dataset and verify text, ID, label, source, and author columns.
-2. Create `balanced` exact-format output with `create-submission --replace-text`.
+2. Create `auto` exact-format output with `create-submission --replace-text`.
 3. Validate shape with `validate-submission`.
 4. Run `source-regression-report`, cue checks, and author-risk checks when the
    required columns exist.
-5. Compare alternates only after the baseline exists: style scrub, filtered
-   Presidio reranking, and token-policy advisory candidates.
-6. Record commands, commit hash, manifest paths, and official scores in a
+5. Compare alternates only after the exact-format baseline exists: `balanced`,
+   style scrub, filtered Presidio reranking, and token-policy advisory
+   candidates.
+6. Exercise the workbench on synthetic examples and a small CSV before the
+   pitch.
+7. Record commands, commit hash, manifest paths, and official scores in a
    dated run note under ignored `data/outputs/`, not in committed markdown.

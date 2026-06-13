@@ -36,6 +36,18 @@ commits, markdown, screenshots, and chat.
 LLM and DPMLM reports are optional research evidence. They are not required for
 a baseline upload and raw outputs must not be submitted directly.
 
+## Final Handoff Checks
+
+- Public code path is runnable from a clean install or documented environment.
+- The base smoke path does not require heavyweight optional extras.
+- Optional extras either install cleanly or skip their tests explicitly.
+- The workbench can demonstrate paste-text and small-CSV privatization with
+  synthetic or consented examples.
+- The final pitch includes the official score, local evidence, limitations, and
+  a rights-aware explanation of why the system is not a takedown tool.
+- A paper/method note exists or has a complete outline covering method,
+  privacy, utility, governance, evaluation, and limitations.
+
 ## Recommended Commands
 
 ```bash

@@ -139,11 +139,30 @@ def discover_hsd_advisory(config: AutoPipelineConfig) -> dict[str, Any]:
     dependency = dependency_status(("torch", "transformers"), kind="model")
     if dependency:
         return dependency
+    model_path = Path(config.hsd_advisory_model)
+    if model_path.exists():
+        return {
+            "status": "available",
+            "kind": "model",
+            "load": "lazy",
+            "model": str(model_path),
+            "local_only": True,
+        }
+    if config.allow_model_download:
+        return {
+            "status": "available",
+            "kind": "model",
+            "load": "lazy",
+            "model": config.hsd_advisory_model,
+            "local_only": False,
+        }
     return {
-        "status": "missing_artifact",
+        "status": "available",
         "kind": "model",
-        "load": "skipped",
-        "detail": "No local HSD advisory classifier artifact is configured for auto mode.",
+        "load": "lazy",
+        "model": config.hsd_advisory_model,
+        "local_only": True,
+        "detail": "Loads from the local Hugging Face cache only unless --allow-model-download is passed.",
     }
 
 
