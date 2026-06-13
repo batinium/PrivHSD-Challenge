@@ -6,10 +6,12 @@ import {
   Clipboard,
   Copy,
   Download,
+  FileText,
   Info,
   Play,
   RotateCcw,
-  ShieldCheck
+  ShieldCheck,
+  Upload
 } from "lucide-react";
 import "./styles.css";
 
@@ -136,6 +138,243 @@ function Tags({ values }) {
   );
 }
 
+function detectCsvHeaders(csvText) {
+  const firstLine = (csvText || "").split(/\r?\n/, 1)[0] || "";
+  return firstLine
+    .split(",")
+    .map((value) => value.trim().replace(/^"|"$/g, ""))
+    .filter(Boolean);
+}
+
+function preferredColumn(headers, names, fallback) {
+  const lowered = headers.map((value) => value.toLowerCase());
+  for (const name of names) {
+    const index = lowered.indexOf(name);
+    if (index >= 0) return headers[index];
+  }
+  return fallback !== undefined ? fallback : headers[0] || "";
+}
+
+function downloadTextFile(name, text, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function CsvWorkbench({ modelStatus }) {
+  const [csvText, setCsvText] = useState("");
+  const [csvName, setCsvName] = useState("contextsafe-hsd.csv");
+  const [headers, setHeaders] = useState([]);
+  const [textCol, setTextCol] = useState("");
+  const [idCol, setIdCol] = useState("");
+  const [mode, setMode] = useState("balanced");
+  const [replaceText, setReplaceText] = useState(false);
+  const [providers, setProviders] = useState({ presidio: false, gliner: false, scrubadub: false });
+  const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const selectedProviders = Object.entries(providers)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name);
+  const metrics = result?.audit?.summary?.metrics || {};
+  const csvGauges = {
+    privacy: Math.round((metrics.privacy_gain_mean || 0) * 100),
+    cue: Math.round((metrics.target_cue_retention_mean ?? 1) * 100),
+    similarity: Math.round((metrics.character_utility_retention_mean ?? 1) * 100),
+    residual: Math.min(100, (metrics.residual_identifier_count || 0) * 10)
+  };
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const detected = detectCsvHeaders(text);
+    setCsvText(text);
+    setCsvName(file.name || "contextsafe-hsd.csv");
+    setHeaders(detected);
+    setTextCol(preferredColumn(detected, ["text", "tweet", "content", "comment"]));
+    setIdCol(preferredColumn(detected, ["id", "source_id", "case_id"], ""));
+    setResult(null);
+    setError("");
+  }
+
+  async function runCsv() {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/csv/privatize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          csv_text: csvText,
+          text_col: textCol,
+          id_col: idCol || null,
+          output_col: "privatized_text",
+          replace_text: replaceText,
+          mode,
+          style_scrub: false,
+          providers: selectedProviders
+        })
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed with ${response.status}`);
+      }
+      setResult(await response.json());
+    } catch (err) {
+      setError(err.message || "CSV processing failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleProvider(name) {
+    setProviders((current) => ({ ...current, [name]: !current[name] }));
+  }
+
+  return (
+    <>
+      <section className="csv-grid">
+        <section className="panel csv-panel">
+          <div className="panel-heading">
+            <h2>CSV Input</h2>
+            <Upload size={18} />
+          </div>
+          <label className="file-drop">
+            <input accept=".csv,text/csv" onChange={handleFile} type="file" />
+            <FileText size={20} />
+            <span>{csvText ? csvName : "Choose a CSV"}</span>
+          </label>
+          <div className="form-grid">
+            <label>
+              <span>Text Column</span>
+              <select value={textCol} onChange={(event) => setTextCol(event.target.value)}>
+                {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>ID Column</span>
+              <select value={idCol} onChange={(event) => setIdCol(event.target.value)}>
+                <option value="">None</option>
+                {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="segmented wide-segment" role="group" aria-label="CSV mode">
+            {["balanced", "privacy", "rerank"].map((option) => (
+              <button
+                className={mode === option ? "active" : ""}
+                key={option}
+                onClick={() => setMode(option)}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <div className="provider-row">
+            {["presidio", "gliner", "scrubadub"].map((name) => (
+              <label className="check" key={name}>
+                <input
+                  checked={providers[name]}
+                  disabled={modelStatus?.span_providers?.[name]?.available === false}
+                  onChange={() => toggleProvider(name)}
+                  type="checkbox"
+                />
+                <span>{name}</span>
+              </label>
+            ))}
+          </div>
+          <label className="check">
+            <input checked={replaceText} onChange={(event) => setReplaceText(event.target.checked)} type="checkbox" />
+            <span>Replace text column for exact-format output</span>
+          </label>
+          <button className="primary full-width" disabled={busy || !csvText || !textCol} onClick={runCsv} type="button">
+            <Play size={18} />
+            {busy ? "Running" : "Run CSV"}
+          </button>
+        </section>
+
+        <section className="panel csv-panel">
+          <div className="panel-heading">
+            <h2>CSV Output</h2>
+            <Download size={18} />
+          </div>
+          <div className="gauge-grid compact">
+            <Gauge label="Privacy gain" value={csvGauges.privacy} />
+            <Gauge label="Cue retention" value={csvGauges.cue} />
+            <Gauge label="Similarity" value={csvGauges.similarity} tone="neutral" />
+            <Gauge label="Residual risk" value={csvGauges.residual} tone="risk" />
+          </div>
+          <div className="download-row">
+            <button
+              className="ghost"
+              disabled={!result}
+              onClick={() => downloadTextFile(`masked-${csvName}`, result.output_csv, "text/csv")}
+              type="button"
+            >
+              <Download size={17} />
+              CSV
+            </button>
+            <button
+              className="ghost"
+              disabled={!result}
+              onClick={() => downloadTextFile("contextsafe-hsd-audit.json", JSON.stringify(result.audit, null, 2), "application/json")}
+              type="button"
+            >
+              <Download size={17} />
+              Audit
+            </button>
+            <button
+              className="ghost"
+              disabled={!result}
+              onClick={() => downloadTextFile("contextsafe-hsd-manifest.json", JSON.stringify(result.manifest, null, 2), "application/json")}
+              type="button"
+            >
+              <Download size={17} />
+              Manifest
+            </button>
+          </div>
+          <div className="table-wrap csv-preview">
+            <table>
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Length</th>
+                  <th>Output Preview</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(result?.preview_rows || []).map((row) => (
+                  <tr key={row.row_id}>
+                    <td>{row.row_id}</td>
+                    <td>{row.text_length}</td>
+                    <td>{row.output}</td>
+                  </tr>
+                ))}
+                {!result?.preview_rows?.length ? (
+                  <tr><td className="muted-cell" colSpan="3">No CSV processed</td></tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+      {error ? (
+        <section className="error-line">
+          <AlertTriangle size={18} />
+          <span>{error}</span>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
 function ModelPanel({ status, result, runModel, setRunModel }) {
   const ensemble = status?.token_policy_ensemble || {};
   const advisory = result?.model_advisory;
@@ -237,6 +476,7 @@ function GuidancePanel({ result, status }) {
 }
 
 function App() {
+  const [activeTool, setActiveTool] = useState("csv");
   const [text, setText] = useState("");
   const [mode, setMode] = useState("balanced");
   const [styleScrub, setStyleScrub] = useState(false);
@@ -321,9 +561,17 @@ function App() {
           </div>
           <p>Local privacy review</p>
         </div>
-        <div className="status-pill">FastAPI + React</div>
+        <div className="top-actions">
+          <div className="segmented" role="group" aria-label="Workbench view">
+            <button className={activeTool === "csv" ? "active" : ""} onClick={() => setActiveTool("csv")} type="button">CSV</button>
+            <button className={activeTool === "text" ? "active" : ""} onClick={() => setActiveTool("text")} type="button">Text</button>
+          </div>
+          <div className="status-pill">FastAPI + React</div>
+        </div>
       </header>
 
+      {activeTool === "csv" ? <CsvWorkbench modelStatus={modelStatus} /> : (
+      <>
       <section className="toolbar" aria-label="Controls">
         <div className="segmented" role="group" aria-label="Mode">
           {["balanced", "utility", "privacy"].map((option) => (
@@ -477,6 +725,8 @@ function App() {
 
         <GuidancePanel result={result} status={modelStatus} />
       </section>
+      </>
+      )}
     </main>
   );
 }

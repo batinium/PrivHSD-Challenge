@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any, Iterable
 
-from .detectors import Span, detect_spans, merge_spans
+from .detectors import Span, detect_spans
+from .span_providers.base import SpanCandidate, candidates_from_spans
+from .span_providers.deterministic import DeterministicSpanProvider
+from .span_providers.fusion import FusionConfig, fuse_span_candidates
 from .style import scrub_style
 
 
@@ -38,6 +41,7 @@ class PrivatizationResult:
     spans: tuple[Span, ...]
     transformations: tuple[dict[str, Any], ...]
     metrics: dict[str, Any]
+    provider_audit: dict[str, Any] = field(default_factory=dict)
 
 
 def replacement_for(span: Span, config: PrivatizerConfig) -> str:
@@ -97,15 +101,50 @@ def privatize_text(
     text: str,
     config: PrivatizerConfig | None = None,
     extra_spans: Iterable[Span] | None = None,
+    provider_candidates: Iterable[SpanCandidate] | None = None,
 ) -> PrivatizationResult:
     config = config or PrivatizerConfig()
-    spans = detect_spans(
-        text,
-        include_context=config.include_context_detectors,
-        include_targets=config.target_generalization_enabled,
-    )
-    if extra_spans:
-        spans = merge_spans([*spans, *extra_spans])
+    extra_span_list = list(extra_spans or [])
+    provider_candidate_list = list(provider_candidates or [])
+    provider_audit: dict[str, Any]
+    if not extra_span_list and not provider_candidate_list:
+        spans = detect_spans(
+            text,
+            include_context=config.include_context_detectors,
+            include_targets=config.target_generalization_enabled,
+        )
+        provider_audit = {
+            "deterministic": {
+                "enabled": True,
+                "span_count": len(spans),
+                "fast_path": True,
+            },
+            "fusion": {
+                "enabled": False,
+                "skip_reason": "deterministic_baseline_fast_path",
+                "accepted_span_count": len(spans),
+            },
+        }
+    else:
+        deterministic = DeterministicSpanProvider(
+            include_context=config.include_context_detectors,
+            include_targets=config.target_generalization_enabled,
+        )
+        deterministic_output = deterministic.propose(text)
+        candidates = list(deterministic_output.spans)
+        if extra_span_list:
+            candidates.extend(candidates_from_spans(tuple(extra_span_list)))
+        candidates.extend(provider_candidate_list)
+        fusion = fuse_span_candidates(
+            text,
+            candidates,
+            FusionConfig(preserve_hsd_cues=True),
+        )
+        spans = fusion.spans
+        provider_audit = {
+            "deterministic": deterministic_output.audit,
+            "fusion": fusion.audit,
+        }
     privatized, transformations = apply_replacements(text, spans, config)
     style_metrics: dict[str, Any] = {
         "style_scrub_enabled": config.style_scrub,
@@ -125,4 +164,5 @@ def privatize_text(
         spans=tuple(spans),
         transformations=transformations,
         metrics=metrics,
+        provider_audit=provider_audit,
     )

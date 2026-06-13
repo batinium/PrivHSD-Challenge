@@ -9,6 +9,7 @@ from typing import Callable
 
 from .detectors import TARGET_GROUP_TERMS
 from .metrics import UTILITY_CUES
+from .resource_config import load_utility_cue_terms
 
 
 PLACEHOLDER_PATTERN = re.compile(
@@ -35,88 +36,9 @@ SIGNATURE_PATTERNS = (
     ),
 )
 
-NEGATION_MODALITY_TERMS = {
-    "do",
-    "does",
-    "did",
-    "no",
-    "not",
-    "never",
-    "cannot",
-    "cant",
-    "can't",
-    "should",
-    "must",
-    "will",
-    "would",
-    "could",
-    "may",
-    "might",
-}
+NEGATION_MODALITY_TERMS = set(load_utility_cue_terms("negation_modality_terms"))
 
-ACTION_TERMS = {
-    "attack",
-    "attacked",
-    "attacking",
-    "attacks",
-    "ban",
-    "banned",
-    "bans",
-    "burden",
-    "deport",
-    "deported",
-    "deporting",
-    "deports",
-    "destroy",
-    "destroyed",
-    "destroying",
-    "destroys",
-    "exclude",
-    "excluded",
-    "excludes",
-    "eliminate",
-    "eliminated",
-    "eliminates",
-    "eliminating",
-    "eradicate",
-    "eradicated",
-    "eradicates",
-    "eradicating",
-    "exterminate",
-    "exterminated",
-    "exterminates",
-    "exterminating",
-    "extinct",
-    "filthy",
-    "freak",
-    "freaks",
-    "hate",
-    "hated",
-    "hates",
-    "hating",
-    "kill",
-    "killed",
-    "kills",
-    "killing",
-    "inbred",
-    "inferior",
-    "lazy",
-    "leave",
-    "leaves",
-    "scum",
-    "smelly",
-    "threat",
-    "threats",
-    "threaten",
-    "threatened",
-    "threatening",
-    "threatens",
-    "violent",
-    "violence",
-    "ugly",
-    "vermin",
-    "worthless",
-}
+ACTION_TERMS = set(load_utility_cue_terms("action_terms"))
 
 
 def protected_terms() -> tuple[set[str], set[str]]:

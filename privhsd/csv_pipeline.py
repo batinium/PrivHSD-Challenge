@@ -111,6 +111,7 @@ def process_csv(
             "mode": mode,
             "changed": result.metrics["changed"],
             "metrics": row_metrics,
+            "provider_fusion": result.provider_audit.get("fusion", {}),
             "transformations": list(result.transformations),
         }
         if presidio_report:

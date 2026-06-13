@@ -24,6 +24,7 @@ from .csv_pipeline import read_csv, write_csv, write_json
 from .detectors import Span, detect_spans, target_group_spans
 from .metrics import DIRECT_IDENTIFIER_TYPES, QUASI_IDENTIFIER_TYPES, UTILITY_CUES, row_metric
 from .rationale_checks import parse_rationale_spans
+from .resource_config import load_expected_source_labels
 from .style import ACTION_TERMS, NEGATION_MODALITY_TERMS, scrub_style
 from .token_actions import (
     ACTION_GENERALIZE,
@@ -92,19 +93,7 @@ TOKEN_POLICY_WARNING = (
     "replacement for deterministic validation/reranking."
 )
 
-EXPECTED_SOURCE_LABELS = {
-    "dynahate": {"hate", "not_hate"},
-    "measuring_hate_speech": {"hate", "not_hate", "ambiguous"},
-    "davidson": {"hate", "offensive", "not_hate"},
-    "hatexplain": {"hate", "offensive", "not_hate"},
-    "toxic_spans": {"toxic", "not_abusive"},
-    "hatemoji_build": {"hate", "not_hate"},
-    "convabuse": {"abuse", "not_abuse", "ambiguous_abuse"},
-    "hatemoji_check": {"hate", "not_hate"},
-    "hatecheck": {"hate", "not_hate"},
-    "tweet_eval_hate": {"hate", "not_hate"},
-    "tweet_eval_offensive": {"offensive", "not_hate"},
-}
+EXPECTED_SOURCE_LABELS = load_expected_source_labels()
 ADJACENT_REVIEW_LABELS = {
     "abuse",
     "ambiguous",

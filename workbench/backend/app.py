@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from collections import Counter
+import csv
 from functools import lru_cache
+import importlib.util
+import io
 import json
 from pathlib import Path
 from typing import Any, Literal
@@ -14,16 +18,23 @@ from pydantic import BaseModel, Field
 from privhsd.context import analyze_context
 from privhsd.cue_checks import row_cue_report
 from privhsd.detectors import Span, target_group_spans
-from privhsd.metrics import row_metric
+from privhsd.metrics import aggregate_metrics, row_metric
 from privhsd.pipeline import MODES, PrivatizerConfig, privatize_text
 from privhsd.presidio_augment import (
     PresidioAugmentError,
     filtered_presidio_spans,
     load_presidio_analyzer,
 )
+from privhsd.rerank import choose_candidate, generate_candidates_with_rejections
+from privhsd.span_providers.registry import (
+    SpanProviderRegistryError,
+    load_span_providers,
+)
 
 
 MAX_TEXT_LENGTH = 20_000
+MAX_CSV_LENGTH = 5_000_000
+MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
 ENSEMBLE_MODEL_DIRS = [
     ROOT / "data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda",
@@ -58,6 +69,25 @@ class PrivatizeResponse(BaseModel):
     warnings: list[str]
     model_advisory: dict[str, Any]
     llm_guidance: dict[str, Any]
+
+
+class CsvPrivatizeRequest(BaseModel):
+    csv_text: str = Field(default="", max_length=MAX_CSV_LENGTH)
+    text_col: str
+    id_col: str | None = None
+    output_col: str = "privatized_text"
+    replace_text: bool = False
+    mode: Literal["utility", "balanced", "privacy", "rerank"] = "balanced"
+    style_scrub: bool = False
+    generalize_targets: bool | None = None
+    providers: list[str] = Field(default_factory=list)
+
+
+class CsvPrivatizeResponse(BaseModel):
+    output_csv: str
+    audit: dict[str, Any]
+    manifest: dict[str, Any]
+    preview_rows: list[dict[str, Any]]
 
 
 app = FastAPI(title="ContextSafe-HSD Privacy Review Workbench")
@@ -127,6 +157,54 @@ def clean_span(span: Span, *, role: str) -> dict[str, Any]:
     }
 
 
+def parse_csv_text(csv_text: str) -> tuple[list[dict[str, str]], list[str]]:
+    handle = io.StringIO(csv_text)
+    reader = csv.DictReader(handle)
+    if reader.fieldnames is None:
+        raise HTTPException(status_code=400, detail="CSV header is required.")
+    return [dict(row) for row in reader], list(reader.fieldnames)
+
+
+def write_csv_text(rows: list[dict[str, Any]], fieldnames: list[str]) -> str:
+    handle = io.StringIO()
+    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    return handle.getvalue()
+
+
+def validate_csv_request(
+    request: CsvPrivatizeRequest,
+    fieldnames: list[str],
+) -> None:
+    if request.text_col not in fieldnames:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing text column: {request.text_col}",
+        )
+    if request.id_col and request.id_col not in fieldnames:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing ID column: {request.id_col}",
+        )
+    if request.mode not in {*MODES, "rerank"}:
+        raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
+
+
+def csv_preview_row(
+    row: dict[str, str],
+    *,
+    row_id: Any,
+    text_col: str,
+    output_col: str,
+) -> dict[str, Any]:
+    return {
+        "row_id": row_id,
+        "text_length": len(str(row.get(text_col, "") or "")),
+        "output": str(row.get(output_col, "") or ""),
+    }
+
+
 def read_ensemble_metrics() -> dict[str, Any] | None:
     if not ENSEMBLE_REPORT.exists():
         return None
@@ -153,6 +231,10 @@ def presidio_available() -> bool:
     except ModuleNotFoundError:
         return False
     return True
+
+
+def module_available(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
 
 
 @lru_cache(maxsize=1)
@@ -201,6 +283,20 @@ def model_status() -> dict[str, Any]:
                 "spans, target lexicons, and target-preservation rules run "
                 "before optional models."
             ),
+        },
+        "span_providers": {
+            "presidio": {
+                "available": presidio_available(),
+                "active_by_default": False,
+            },
+            "gliner": {
+                "available": module_available("gliner"),
+                "active_by_default": False,
+            },
+            "scrubadub": {
+                "available": module_available("scrubadub"),
+                "active_by_default": False,
+            },
         },
     }
 
@@ -419,4 +515,163 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         "warnings": warnings,
         "model_advisory": model_advisory,
         "llm_guidance": llm_guidance,
+    }
+
+
+@app.post("/api/csv/privatize", response_model=CsvPrivatizeResponse)
+def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
+    rows, fieldnames = parse_csv_text(request.csv_text)
+    validate_csv_request(request, fieldnames)
+    provider_names = [name.strip().lower() for name in request.providers if name.strip()]
+    try:
+        providers = load_span_providers(provider_names)
+    except (SpanProviderRegistryError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    output_fieldnames = list(fieldnames)
+    output_col = request.text_col if request.replace_text else request.output_col
+    if not request.replace_text and output_col not in output_fieldnames:
+        output_fieldnames.append(output_col)
+
+    config = PrivatizerConfig(
+        mode=request.mode if request.mode in MODES else "balanced",
+        generalize_targets=request.generalize_targets,
+        style_scrub=request.style_scrub,
+    )
+    output_rows: list[dict[str, Any]] = []
+    audit_rows: list[dict[str, Any]] = []
+    metric_rows: list[dict[str, Any]] = []
+    chosen_counts: Counter[str] = Counter()
+    provider_errors: Counter[str] = Counter()
+    rejected_rewrite_counts: Counter[str] = Counter()
+
+    for row_index, row in enumerate(rows, start=1):
+        original = str(row.get(request.text_col, "") or "")
+        row_id = row.get(request.id_col) if request.id_col else str(row_index)
+        output_row = dict(row)
+        candidate_metadata: dict[str, Any] = {}
+        rejected_rewrite_candidates: list[dict[str, Any]] = []
+        chosen_name = request.mode
+        if request.mode == "rerank":
+            try:
+                candidates, rejected_rewrite_candidates = (
+                    generate_candidates_with_rejections(
+                        original,
+                        span_providers=providers,
+                    )
+                )
+            except Exception as exc:
+                provider_errors[type(exc).__name__] += 1
+                candidates, rejected_rewrite_candidates = (
+                    generate_candidates_with_rejections(original)
+                )
+            chosen, scores = choose_candidate(original, candidates)
+            chosen_counts[chosen.name] += 1
+            chosen_name = chosen.name
+            privatized = chosen.text
+            candidate_metadata = {
+                candidate.name: candidate.metadata
+                for candidate in candidates
+                if candidate.metadata
+            }
+        else:
+            provider_candidates = []
+            provider_reports = {}
+            for provider in providers:
+                try:
+                    provider_output = provider.propose(original)
+                except Exception as exc:
+                    provider_errors[type(exc).__name__] += 1
+                    continue
+                provider_candidates.extend(provider_output.spans)
+                provider_reports[provider_output.provider] = provider_output.audit
+            result = privatize_text(
+                original,
+                config,
+                provider_candidates=provider_candidates,
+            )
+            privatized = result.text
+            chosen_counts[request.mode] += 1
+            scores = []
+            candidate_metadata = {
+                "providers": provider_reports,
+                "provider_fusion": result.provider_audit,
+            }
+
+        output_row[output_col] = privatized
+        output_rows.append(output_row)
+        metrics = row_metric(original, privatized)
+        metric_rows.append(metrics)
+        for rejected in rejected_rewrite_candidates:
+            for reason in rejected.get("validation", {}).get("reasons", []):
+                rejected_rewrite_counts[str(reason)] += 1
+        audit_rows.append(
+            {
+                "row_id": row_id,
+                "row_index": row_index,
+                "changed": original != privatized,
+                "chosen": chosen_name,
+                "metrics": metrics,
+                "scores": scores,
+                "candidate_metadata": candidate_metadata,
+                "rejected_rewrite_candidates": rejected_rewrite_candidates,
+            }
+        )
+
+    output_csv = write_csv_text(output_rows, output_fieldnames)
+    validation = {
+        "valid": len(output_rows) == len(rows),
+        "source_row_count": len(rows),
+        "output_row_count": len(output_rows),
+        "source_columns": fieldnames,
+        "output_columns": output_fieldnames,
+        "replace_text": request.replace_text,
+        "helper_columns": [
+            column for column in output_fieldnames if column not in fieldnames
+        ],
+    }
+    summary = {
+        "artifact_type": "workbench_csv_audit",
+        "row_count": len(rows),
+        "text_col": request.text_col,
+        "id_col": request.id_col,
+        "output_col": output_col,
+        "mode": request.mode,
+        "style_scrub": request.style_scrub,
+        "generalize_targets": config.target_generalization_enabled,
+        "providers": provider_names,
+        "provider_error_counts": dict(sorted(provider_errors.items())),
+        "chosen_counts": dict(sorted(chosen_counts.items())),
+        "rejected_rewrite_counts": dict(sorted(rejected_rewrite_counts.items())),
+        "metrics": aggregate_metrics(metric_rows),
+        "validation": validation,
+    }
+    manifest = {
+        "artifact_type": "workbench_csv_manifest",
+        "row_count": len(rows),
+        "mode": request.mode,
+        "providers": provider_names,
+        "columns": {
+            "text_col": request.text_col,
+            "id_col": request.id_col,
+            "output_col": output_col,
+            "preserved_columns": fieldnames,
+        },
+        "validation": validation,
+        "metrics": summary["metrics"],
+    }
+    preview_rows = [
+        csv_preview_row(
+            row,
+            row_id=row.get(request.id_col) if request.id_col else str(index + 1),
+            text_col=request.text_col,
+            output_col=output_col,
+        )
+        for index, row in enumerate(output_rows[:MAX_PREVIEW_ROWS])
+    ]
+    return {
+        "output_csv": output_csv,
+        "audit": {"summary": summary, "rows": audit_rows},
+        "manifest": manifest,
+        "preview_rows": preview_rows,
     }

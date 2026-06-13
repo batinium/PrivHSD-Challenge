@@ -275,6 +275,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Add a filtered Presidio candidate when optional dependencies exist.",
     )
+    rerank.add_argument(
+        "--provider",
+        dest="providers",
+        action="append",
+        default=[],
+        help=(
+            "Optional span provider for audited candidates: presidio, gliner, "
+            "or scrubadub. Repeatable."
+        ),
+    )
     rerank.add_argument("--author-col")
     rerank.add_argument(
         "--candidate-col",
@@ -1038,6 +1048,7 @@ def main(argv: list[str] | None = None) -> int:
                 candidate_cols=args.candidate_cols,
                 audit_path=args.audit,
                 presidio_augment=args.presidio_augment,
+                providers=args.providers,
             )
         elif args.command == "dpmlm-spike":
             result = run_dpmlm_spike(

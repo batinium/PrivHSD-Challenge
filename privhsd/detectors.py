@@ -9,8 +9,11 @@ when a run explicitly wants group-category generalization.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import re
 from typing import Iterable, Sequence
+
+from .resource_config import load_target_group_terms, load_utility_cue_terms
 
 try:  # The package ships the sensitive word list; keep raw slurs out of source.
     from better_profanity import profanity as _external_profanity
@@ -213,136 +216,7 @@ CONTEXT_NAME_STOP_WORDS = {
 }
 
 
-TARGET_GROUP_TERMS: dict[str, Sequence[str]] = {
-    "nationality_or_origin": (
-        "immigrant",
-        "immigrants",
-        "migrant",
-        "migrants",
-        "refugee",
-        "refugees",
-        "foreigner",
-        "foreigners",
-        "foreign national",
-        "foreign nationals",
-        "asylum seeker",
-        "asylum seekers",
-        "arab",
-        "arabs",
-        "chinese people",
-        "chinese",
-        "indian",
-        "indians",
-        "french",
-        "romanian",
-        "romanians",
-    ),
-    "religion": (
-        "muslim",
-        "muslims",
-        "muslim people",
-        "muslim community",
-        "muslim communities",
-        "jew",
-        "jews",
-        "jewish",
-        "jewish people",
-        "jewish community",
-        "jewish communities",
-        "christian",
-        "christians",
-        "hindu",
-        "hindus",
-        "sikh",
-        "sikhs",
-    ),
-    "gender": (
-        "woman",
-        "women",
-        "man",
-        "men",
-        "girl",
-        "girls",
-        "boy",
-        "boys",
-        "trans woman",
-        "trans women",
-        "trans man",
-        "trans men",
-        "trans person",
-        "trans people",
-        "nonbinary people",
-        "non-binary people",
-    ),
-    "sexual_orientation": (
-        "gay",
-        "gays",
-        "gay people",
-        "lesbian",
-        "lesbians",
-        "lesbian people",
-        "bisexual",
-        "bisexuals",
-        "bisexual people",
-        "homosexual",
-        "homosexuals",
-        "lgbt",
-        "lgbt people",
-        "lgbtq",
-        "lgbtq people",
-        "lgbtqi",
-        "lgbtqia",
-        "same-sex couples",
-        "queer",
-        "queers",
-    ),
-    "disability": (
-        "disabled",
-        "disabled people",
-        "disabled persons",
-        "disabled students",
-        "people with disabilities",
-        "autistic",
-        "autistic people",
-        "deaf",
-        "deaf people",
-        "blind",
-        "blind people",
-    ),
-    "race_or_ethnicity": (
-        "african",
-        "africans",
-        "african people",
-        "black people",
-        "black",
-        "blacks",
-        "black community",
-        "black communities",
-        "asian people",
-        "asian",
-        "asians",
-        "roma",
-        "roma people",
-        "romani",
-        "sinti",
-        "traveller",
-        "travellers",
-        "people of color",
-        "people of colour",
-        "latino people",
-        "hispanic people",
-        "dalit",
-        "dalits",
-    ),
-    "historical_victim_group": (
-        "holocaust survivors",
-        "shoah survivors",
-        "genocide survivors",
-        "concentration camp survivors",
-        "auschwitz survivors",
-        "mauthausen survivors",
-    ),
-}
+TARGET_GROUP_TERMS: dict[str, Sequence[str]] = load_target_group_terms()
 
 
 CONTEXTUAL_TARGET_TERMS = {
@@ -357,32 +231,8 @@ CONTEXTUAL_TARGET_TERMS = {
     "women",
 }
 
-TARGET_GENERALIZATION_CONTEXT_CUES = (
-    "attack",
-    "ban",
-    "deport",
-    "deported",
-    "do not belong",
-    "destroy",
-    "eliminate",
-    "eradicate",
-    "exterminate",
-    "exclude",
-    "excluded",
-    "hate",
-    "inferior",
-    "kill",
-    "killed",
-    "killing",
-    "kills",
-    "not belong",
-    "scum",
-    "should leave",
-    "threat",
-    "violent",
-    "violence",
-    "vermin",
-    "worthless",
+TARGET_GENERALIZATION_CONTEXT_CUES = load_utility_cue_terms(
+    "target_generalization_context"
 )
 
 VARIANT_TRANSLATION = str.maketrans(
@@ -420,12 +270,9 @@ def contains_external_profanity(value: str) -> bool:
 
 def contains_target_group_term(value: str) -> bool:
     """Return whether a candidate span is itself a protected target cue."""
-    lowered = value.lower()
-    for terms in TARGET_GROUP_TERMS.values():
-        for term in terms:
-            pattern = r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])"
-            if re.search(pattern, lowered):
-                return True
+    for _category, _term, pattern in target_group_term_patterns():
+        if pattern.search(value):
+            return True
     return False
 
 
@@ -821,32 +668,50 @@ def external_profane_target_spans(text: str) -> list[Span]:
     return spans
 
 
-def target_group_spans(text: str) -> list[Span]:
-    spans: list[Span] = []
+@lru_cache(maxsize=1)
+def target_group_term_patterns() -> tuple[tuple[str, str, re.Pattern[str]], ...]:
+    patterns: list[tuple[str, str, re.Pattern[str]]] = []
     for category, terms in TARGET_GROUP_TERMS.items():
         for term in terms:
-            pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(term) + r"(?![A-Za-z0-9])", re.I)
-            for match in pattern.finditer(text):
-                if (
-                    term.lower() in CONTEXTUAL_TARGET_TERMS
-                    and not has_target_generalization_context(
-                        text,
-                        match.start(),
-                        match.end(),
-                    )
-                ):
-                    continue
-                spans.append(
-                    Span(
-                        start=match.start(),
-                        end=match.end(),
-                        entity_type="TARGET_GROUP",
-                        text=match.group(0),
-                        score=0.7,
-                        source="target_dictionary",
-                        category=category,
-                    )
+            patterns.append(
+                (
+                    category,
+                    term,
+                    re.compile(
+                        r"(?<![A-Za-z0-9])"
+                        + re.escape(term)
+                        + r"(?![A-Za-z0-9])",
+                        re.I,
+                    ),
                 )
+            )
+    return tuple(patterns)
+
+
+def target_group_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for category, term, pattern in target_group_term_patterns():
+        for match in pattern.finditer(text):
+            if (
+                term.lower() in CONTEXTUAL_TARGET_TERMS
+                and not has_target_generalization_context(
+                    text,
+                    match.start(),
+                    match.end(),
+                )
+            ):
+                continue
+            spans.append(
+                Span(
+                    start=match.start(),
+                    end=match.end(),
+                    entity_type="TARGET_GROUP",
+                    text=match.group(0),
+                    score=0.7,
+                    source="target_dictionary",
+                    category=category,
+                )
+            )
     spans.extend(hashtag_target_group_spans(text))
     spans.extend(variant_target_group_spans(text))
     spans.extend(spaced_variant_target_group_spans(text))

@@ -23,6 +23,10 @@ input {
   font: inherit;
 }
 
+select {
+  font: inherit;
+}
+
 button {
   align-items: center;
   border: 1px solid #cfd6df;
@@ -90,12 +94,110 @@ button:disabled {
   padding: 7px 11px;
 }
 
+.top-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
 .toolbar {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   padding: 10px;
+}
+
+.csv-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
+}
+
+.csv-panel {
+  min-height: 430px;
+}
+
+.file-drop {
+  align-items: center;
+  border: 1px dashed #aeb9c7;
+  border-radius: 8px;
+  color: #334155;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  min-height: 58px;
+  padding: 0 14px;
+}
+
+.file-drop input {
+  display: none;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 14px;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-grid label span {
+  color: #586474;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+select {
+  background: #ffffff;
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  color: #20242c;
+  min-height: 38px;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.wide-segment {
+  margin-top: 14px;
+  width: 100%;
+}
+
+.wide-segment button {
+  flex: 1;
+}
+
+.provider-row,
+.download-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.full-width {
+  margin-left: 0;
+  margin-top: 14px;
+  width: 100%;
+}
+
+.gauge-grid.compact {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.csv-preview {
+  max-height: 300px;
+}
+
+.csv-preview td:last-child {
+  max-width: 560px;
+  overflow-wrap: anywhere;
 }
 
 .segmented {
@@ -473,7 +575,8 @@ th {
 
 @media (max-width: 980px) {
   .workspace,
-  .evidence-grid {
+  .evidence-grid,
+  .csv-grid {
     grid-template-columns: 1fr;
   }
 
@@ -493,14 +596,26 @@ th {
     gap: 10px;
   }
 
+  .top-actions {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
   .toolbar {
     align-items: stretch;
   }
 
   .segmented,
   .toolbar button,
-  .check {
+  .check,
+  .form-grid {
     width: 100%;
+  }
+
+  .form-grid,
+  .gauge-grid.compact {
+    grid-template-columns: 1fr;
   }
 
   .gauge-grid {

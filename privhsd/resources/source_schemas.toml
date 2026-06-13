@@ -1,0 +1,13 @@
+[expected_source_labels]
+dynahate = ["hate", "not_hate"]
+measuring_hate_speech = ["hate", "not_hate", "ambiguous"]
+davidson = ["hate", "offensive", "not_hate"]
+hatexplain = ["hate", "offensive", "not_hate"]
+toxic_spans = ["toxic", "not_abusive"]
+hatemoji_build = ["hate", "not_hate"]
+convabuse = ["abuse", "not_abuse", "ambiguous_abuse"]
+hatemoji_check = ["hate", "not_hate"]
+hatecheck = ["hate", "not_hate"]
+tweet_eval_hate = ["hate", "not_hate"]
+tweet_eval_offensive = ["offensive", "not_hate"]
+

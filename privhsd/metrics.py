@@ -8,42 +8,16 @@ from __future__ import annotations
 
 from collections import Counter
 from difflib import SequenceMatcher
+from functools import lru_cache
 import re
 from statistics import mean
 from typing import Any, Iterable
 
 from .detectors import TAGS, TARGET_GROUP_CATEGORIES, Span, detect_spans
+from .resource_config import load_utility_cue_terms
 
 
-UTILITY_CUES = (
-    "threat",
-    "attack",
-    "ban",
-    "deport",
-    "destroy",
-    "eliminate",
-    "eradicate",
-    "exterminate",
-    "extinct",
-    "exclude",
-    "inferior",
-    "worthless",
-    "burden",
-    "filthy",
-    "lazy",
-    "smelly",
-    "ugly",
-    "inbred",
-    "freak",
-    "freaks",
-    "scum",
-    "vermin",
-    "should leave",
-    "not belong",
-    "hate",
-    "violent",
-    "violence",
-)
+UTILITY_CUES = load_utility_cue_terms("utility_cues")
 
 DIRECT_IDENTIFIER_TYPES = frozenset(
     {
@@ -81,12 +55,21 @@ LOW_CHARACTER_UTILITY_RETENTION = 0.55
 TARGET_CUE_LOSS_THRESHOLD = 0.8
 
 
+@lru_cache(maxsize=1)
+def utility_cue_patterns() -> tuple[re.Pattern[str], ...]:
+    return tuple(
+        re.compile(
+            r"(?<![a-z0-9])" + re.escape(cue) + r"(?![a-z0-9])",
+            re.I,
+        )
+        for cue in sorted(UTILITY_CUES, key=lambda value: (-len(value), value))
+    )
+
+
 def cue_count(text: str) -> int:
-    lowered = text.lower()
     count = 0
-    for cue in UTILITY_CUES:
-        pattern = r"(?<![a-z0-9])" + re.escape(cue) + r"(?![a-z0-9])"
-        count += len(re.findall(pattern, lowered))
+    for pattern in utility_cue_patterns():
+        count += len(pattern.findall(text))
     return count
 
 
