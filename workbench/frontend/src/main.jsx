@@ -138,6 +138,13 @@ function Tags({ values }) {
   );
 }
 
+function formatScore(value) {
+  if (typeof value !== "number") {
+    return "n/a";
+  }
+  return value.toFixed(3);
+}
+
 function detectCsvHeaders(csvText) {
   const firstLine = (csvText || "").split(/\r?\n/, 1)[0] || "";
   return firstLine
@@ -299,7 +306,7 @@ function CsvWorkbench({ modelStatus }) {
           </div>
           <label className="check">
             <input checked={replaceText} onChange={(event) => setReplaceText(event.target.checked)} type="checkbox" />
-            <span>Replace text column for exact-format output</span>
+            <span>Replace text column</span>
           </label>
           <button className="primary full-width" disabled={busy || !csvText || !textCol} onClick={runCsv} type="button">
             <Play size={18} />
@@ -392,9 +399,12 @@ function CsvWorkbench({ modelStatus }) {
   );
 }
 
-function ModelPanel({ status, result, runModel, setRunModel }) {
+function ModelPanel({ status, result, runModel, setRunModel, runHsdClassifier, setRunHsdClassifier }) {
   const ensemble = status?.token_policy_ensemble || {};
+  const hsdPrimary = status?.hsd_classifiers?.primary || {};
+  const hsdRegistered = status?.hsd_classifiers || {};
   const advisory = result?.model_advisory;
+  const hsd = result?.hsd_classifier;
   const metrics = advisory?.metrics || ensemble.metrics;
   const actionCounts = advisory?.action_counts || {};
   const modelSpans = advisory?.spans || [];
@@ -412,6 +422,10 @@ function ModelPanel({ status, result, runModel, setRunModel }) {
         <strong>RoBERTa + HateBERT ensemble</strong>
         <span>{runModel ? "Requested" : ensemble.available ? "Available" : "Missing"}</span>
       </div>
+      <div className={`layer-row ${hsdPrimary.available ? "ready" : "inactive"}`}>
+        <strong>HSD classifier</strong>
+        <span>{runHsdClassifier ? "Requested" : hsdPrimary.available ? "Available" : "Missing"}</span>
+      </div>
       <label className="check model-toggle">
         <input
           checked={runModel}
@@ -421,6 +435,22 @@ function ModelPanel({ status, result, runModel, setRunModel }) {
         />
         <span>Run ensemble on this text</span>
       </label>
+      <label className="check model-toggle">
+        <input
+          checked={runHsdClassifier}
+          disabled={!hsdPrimary.available}
+          onChange={(event) => setRunHsdClassifier(event.target.checked)}
+          type="checkbox"
+        />
+        <span>Run HSD classifier</span>
+      </label>
+      <Tags
+        values={[
+          `primary: ${hsdPrimary.model_id || "not configured"}`,
+          `cardiff: ${hsdRegistered.cardiff_hate_latest?.status || "registered"}`,
+          `local baseline: ${hsdRegistered.local_tfidf_logreg?.status || "unknown"}`
+        ]}
+      />
       {metrics ? (
         <div className="metric-strip">
           <span>Macro F1 {metrics.macro_f1 ?? "n/a"}</span>
@@ -444,6 +474,20 @@ function ModelPanel({ status, result, runModel, setRunModel }) {
                   <span>{span.confidence}</span>
                 </div>
               ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {hsd ? (
+        <div className="advisory-box">
+          <strong>HSD status: {hsd.status}</strong>
+          <p>{hsd.message || hsd.model_id || "Classifier drift scores are available below."}</p>
+          {hsd.active ? (
+            <div className="metric-strip">
+              <span>Original {formatScore(hsd.original_score)}</span>
+              <span>Protected {formatScore(hsd.candidate_score)}</span>
+              <span>Delta {formatScore(hsd.score_delta)}</span>
+              <span>{hsd.original_decision} to {hsd.candidate_decision}</span>
             </div>
           ) : null}
         </div>
@@ -498,8 +542,9 @@ function App() {
   const [mode, setMode] = useState("balanced");
   const [styleScrub, setStyleScrub] = useState(false);
   const [generalizeTargets, setGeneralizeTargets] = useState(false);
-  const [usePresidio, setUsePresidio] = useState(false);
+  const [textProviders, setTextProviders] = useState({ presidio: false, gliner: false, scrubadub: false });
   const [runModel, setRunModel] = useState(false);
+  const [runHsdClassifier, setRunHsdClassifier] = useState(false);
   const [modelStatus, setModelStatus] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -520,6 +565,13 @@ function App() {
     () => splitOutput(result?.privatized_text || "", result?.protected_output_spans || []),
     [result]
   );
+  const selectedTextProviders = Object.entries(textProviders)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) => name);
+
+  function toggleTextProvider(name) {
+    setTextProviders((current) => ({ ...current, [name]: !current[name] }));
+  }
 
   async function runPrivatize() {
     setBusy(true);
@@ -533,8 +585,10 @@ function App() {
           mode,
           style_scrub: styleScrub,
           generalize_targets: generalizeTargets ? true : null,
-          use_presidio: usePresidio,
-          run_model_ensemble: runModel
+          providers: selectedTextProviders,
+          use_presidio: false,
+          run_model_ensemble: runModel,
+          run_hsd_classifier: runHsdClassifier
         })
       });
       if (!response.ok) {
@@ -620,13 +674,24 @@ function App() {
         </label>
         <label className="check">
           <input
-            checked={usePresidio}
-            disabled={modelStatus?.lexicon_policy?.presidio_available === false}
-            onChange={(event) => setUsePresidio(event.target.checked)}
+            checked={textProviders.presidio}
+            disabled={modelStatus?.span_providers?.presidio?.available === false}
+            onChange={() => toggleTextProvider("presidio")}
             type="checkbox"
           />
-          <span>Filtered Presidio</span>
+          <span>presidio</span>
         </label>
+        {["gliner", "scrubadub"].map((name) => (
+          <label className="check" key={name}>
+            <input
+              checked={textProviders[name]}
+              disabled={modelStatus?.span_providers?.[name]?.available === false}
+              onChange={() => toggleTextProvider(name)}
+              type="checkbox"
+            />
+            <span>{name}</span>
+          </label>
+        ))}
         <button className="ghost" onClick={() => setText(SAMPLE_TEXT)} type="button">
           <Clipboard size={17} />
           Sample
@@ -735,7 +800,9 @@ function App() {
 
         <ModelPanel
           result={result}
+          runHsdClassifier={runHsdClassifier}
           runModel={runModel}
+          setRunHsdClassifier={setRunHsdClassifier}
           setRunModel={setRunModel}
           status={modelStatus}
         />

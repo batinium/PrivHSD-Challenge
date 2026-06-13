@@ -20,14 +20,12 @@ from privhsd.cue_checks import row_cue_report
 from privhsd.detectors import Span, target_group_spans
 from privhsd.metrics import aggregate_metrics, row_metric, row_metric_for_depth
 from privhsd.pipeline import MODES, PrivatizerConfig, privatize_text
-from privhsd.presidio_augment import (
-    PresidioAugmentError,
-    filtered_presidio_spans,
-    load_presidio_analyzer,
-)
 from privhsd.rerank import choose_candidate, generate_candidates_with_rejections
+from privhsd.span_providers.base import SpanProvider
 from privhsd.span_providers.registry import (
+    SUPPORTED_PROVIDER_NAMES,
     SpanProviderRegistryError,
+    load_span_provider,
     load_span_providers,
 )
 
@@ -36,6 +34,9 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
+HSD_ADVISORY_MODEL_ID = "facebook/roberta-hate-speech-dynabench-r4-target"
+CARDIFF_HATE_MODEL_ID = "cardiffnlp/twitter-roberta-base-hate-latest"
+LOCAL_CLASSIFIER_PATH = ROOT / "data/outputs/privhsd_classifier.pkl"
 ENSEMBLE_MODEL_DIRS = [
     ROOT / "data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda",
     ROOT / "data/outputs/token_policy_hatebert.action_balanced_train30000.cuda",
@@ -51,7 +52,9 @@ class PrivatizeRequest(BaseModel):
     style_scrub: bool = False
     generalize_targets: bool | None = None
     use_presidio: bool = False
+    providers: list[str] = Field(default_factory=list)
     run_model_ensemble: bool = False
+    run_hsd_classifier: bool = False
 
 
 class PrivatizeResponse(BaseModel):
@@ -68,7 +71,9 @@ class PrivatizeResponse(BaseModel):
     gauges: dict[str, int]
     warnings: list[str]
     model_advisory: dict[str, Any]
+    hsd_classifier: dict[str, Any]
     llm_guidance: dict[str, Any]
+    span_providers: dict[str, Any]
 
 
 class CsvPrivatizeRequest(BaseModel):
@@ -240,11 +245,6 @@ def module_available(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
 
-@lru_cache(maxsize=1)
-def cached_presidio_analyzer() -> Any:
-    return load_presidio_analyzer()
-
-
 def model_status() -> dict[str, Any]:
     model_dirs = [
         {
@@ -269,6 +269,33 @@ def model_status() -> dict[str, Any]:
             ),
             "members": model_dirs,
             "metrics": read_ensemble_metrics(),
+        },
+        "hsd_classifiers": {
+            "primary": {
+                "available": module_available("transformers")
+                and module_available("torch"),
+                "active_by_default": False,
+                "model_id": HSD_ADVISORY_MODEL_ID,
+                "role": (
+                    "Optional HSD utility classifier. It scores original and "
+                    "protected text to surface decision or score drift."
+                ),
+            },
+            "cardiff_hate_latest": {
+                "available": module_available("transformers")
+                and module_available("torch"),
+                "active_by_default": False,
+                "model_id": CARDIFF_HATE_MODEL_ID,
+                "status": "registered_not_loaded",
+            },
+            "local_tfidf_logreg": {
+                "available": LOCAL_CLASSIFIER_PATH.exists(),
+                "active_by_default": False,
+                "path": str(LOCAL_CLASSIFIER_PATH.relative_to(ROOT)),
+                "status": "available"
+                if LOCAL_CLASSIFIER_PATH.exists()
+                else "missing_artifact",
+            },
         },
         "llm_guidance": {
             "available": False,
@@ -380,6 +407,108 @@ def run_token_policy_ensemble(text: str) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=1)
+def load_hsd_classifier() -> Any:
+    from privhsd.models.hsd_advisory_runtime import HsdAdvisoryRuntime
+
+    return HsdAdvisoryRuntime.from_model_id(
+        HSD_ADVISORY_MODEL_ID,
+        allow_model_download=False,
+        device="auto",
+        decision_threshold=0.5,
+        large_drop_threshold=0.25,
+        max_abs_drift=0.35,
+    )
+
+
+def run_hsd_classifier(original: str, privatized: str) -> dict[str, Any]:
+    status = model_status()["hsd_classifiers"]["primary"]
+    if not status["available"]:
+        return {
+            "active": False,
+            "available": False,
+            "status": "missing_dependency",
+            "model_id": HSD_ADVISORY_MODEL_ID,
+            "message": "Install torch and transformers to run HSD classifier scoring.",
+        }
+    try:
+        classifier = load_hsd_classifier()
+        scores = classifier.score_texts([original, privatized], batch_size=2)
+        if len(scores) != 2:
+            return {
+                "active": False,
+                "available": True,
+                "status": "unexpected_model_output",
+                "model_id": HSD_ADVISORY_MODEL_ID,
+                "message": "Classifier returned an unexpected number of scores.",
+            }
+        comparison = classifier.compare(scores[0], scores[1])
+    except Exception as exc:  # pragma: no cover - optional dependency/model path
+        return {
+            "active": False,
+            "available": True,
+            "status": "runtime_error",
+            "model_id": HSD_ADVISORY_MODEL_ID,
+            "message": str(exc),
+        }
+    return {
+        "active": True,
+        "available": True,
+        "status": "ok",
+        "role": "hsd_utility_classifier",
+        **comparison,
+    }
+
+
+def provider_status_template() -> dict[str, Any]:
+    status = model_status()["span_providers"]
+    return {
+        name: {
+            "enabled": False,
+            "available": bool(status.get(name, {}).get("available", False)),
+            "status": "not_requested",
+        }
+        for name in sorted(SUPPORTED_PROVIDER_NAMES)
+    }
+
+
+def selected_provider_names(request: PrivatizeRequest) -> list[str]:
+    names = [name.strip().lower() for name in request.providers if name.strip()]
+    if request.use_presidio and "presidio" not in names:
+        names.append("presidio")
+    return [name for name in names if name in SUPPORTED_PROVIDER_NAMES]
+
+
+def run_selected_span_providers(
+    text: str,
+    names: list[str],
+) -> tuple[list[Any], dict[str, Any]]:
+    candidates = []
+    report = provider_status_template()
+    for name in names:
+        try:
+            provider: SpanProvider = load_span_provider(name)
+            output = provider.propose(text)
+        except Exception as exc:
+            report[name] = {
+                **report.get(name, {}),
+                "enabled": True,
+                "status": "error",
+                "error_class": type(exc).__name__,
+                "message": str(exc),
+            }
+            continue
+        candidates.extend(output.spans)
+        report[name] = {
+            **report.get(name, {}),
+            "enabled": True,
+            "status": "ready",
+            "audit": output.audit,
+            "accepted_span_count": len(output.spans),
+        }
+    return candidates, report
+
+
 def llm_review_guidance(
     *,
     metric: dict[str, Any],
@@ -440,25 +569,31 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         generalize_targets=request.generalize_targets,
         style_scrub=request.style_scrub,
     )
-    extra_spans: list[Span] = []
-    presidio_report: dict[str, Any] = {
-        "enabled": False,
-        "available": presidio_available(),
-    }
-    if request.use_presidio:
-        try:
-            extra_spans, presidio_report = filtered_presidio_spans(
-                request.text,
-                cached_presidio_analyzer(),
-            )
-            presidio_report["available"] = True
-        except PresidioAugmentError as exc:
-            presidio_report = {
-                "enabled": False,
-                "available": False,
-                "error": str(exc),
-            }
-    result = privatize_text(request.text, config, extra_spans=extra_spans)
+    provider_names = selected_provider_names(request)
+    provider_candidates, provider_report = run_selected_span_providers(
+        request.text,
+        provider_names,
+    )
+    presidio_status = provider_report.get("presidio", {})
+    presidio_audit = presidio_status.get("audit")
+    presidio_report: dict[str, Any] = (
+        {
+            **presidio_audit,
+            "available": presidio_status.get("available", presidio_available()),
+        }
+        if isinstance(presidio_audit, dict)
+        else {
+            "enabled": bool(presidio_status.get("enabled", False)),
+            "available": presidio_status.get("available", presidio_available()),
+            "status": presidio_status.get("status", "not_requested"),
+            "error": presidio_status.get("message"),
+        }
+    )
+    result = privatize_text(
+        request.text,
+        config,
+        provider_candidates=provider_candidates,
+    )
     metric = row_metric(request.text, result.text)
     cue = row_cue_report(
         row_index=1,
@@ -501,6 +636,17 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
             "metrics": read_ensemble_metrics(),
         }
     )
+    hsd_classifier = (
+        run_hsd_classifier(request.text, result.text)
+        if request.run_hsd_classifier
+        else {
+            "active": False,
+            "available": model_status()["hsd_classifiers"]["primary"]["available"],
+            "status": "not_requested",
+            "model_id": HSD_ADVISORY_MODEL_ID,
+            "message": "Enable Run HSD classifier to score original/protected drift.",
+        }
+    )
     llm_guidance = llm_review_guidance(metric=metric, cue=cue, context=context)
     return {
         "privatized_text": result.text,
@@ -517,7 +663,9 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         "gauges": gauges,
         "warnings": warnings,
         "model_advisory": model_advisory,
+        "hsd_classifier": hsd_classifier,
         "llm_guidance": llm_guidance,
+        "span_providers": provider_report,
     }
 
 

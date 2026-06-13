@@ -1,0 +1,11 @@
+id,source,label,author_hint,text
+demo-001,synthetic_demo,reported_hate,school_forum,"I am Priya Nair from Riverton High. @northgate99 wrote, ""Muslims should leave Boston,"" but I am reporting it to the moderators."
+demo-002,synthetic_demo,reported_hate,community_chat,"Contact Alex Morgan at alex.morgan@example.com or 202-555-0134; he keeps saying immigrants should be kicked out of Denver."
+demo-003,synthetic_demo,counterspeech,reply_thread,"No, @ryan77, refugees are not animals and they should not be banned from Lakeview Park."
+demo-004,synthetic_demo,direct_hate,workplace_report,"This is Lena Ortiz, badge ID TX-4472, working at Northstar Clinic; my neighbor says gay people should be fired."
+demo-005,synthetic_demo,reported_hate,shift_worker,"Call me at 202-555-0189 after shift at Harbor Plant; the post says Jewish families should be pushed out of town."
+demo-006,synthetic_demo,privacy_only,signature_leak,"Maya Chen signed off as Maya from Apt 4B, 19 Cedar Street, Austin, TX, maya.chen@example.com."
+demo-007,synthetic_demo,direct_hate,event_comment,"A user named @quietbadge says trans people should be chased away from Metro College events."
+demo-008,synthetic_demo,negated_hate,moderator_note,"Moderator Samir Patel wrote that Christians should not be excluded from the meeting at Westbrook Library."
+demo-009,synthetic_demo,author_risk,local_identity,"I am the only night nurse at Blue River Hospice in Keene; my handle is @nightowl_keene and I saw racist flyers downtown."
+demo-010,synthetic_demo,organization_location,public_complaint,"Jordan Ellis from Eastview City Hall said the downtown group is angry at Roma families near Pine Street."
