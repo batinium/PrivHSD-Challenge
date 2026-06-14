@@ -633,6 +633,37 @@ def test_auto_hsd_advisory_scores_candidates_in_one_batch():
         )
 
 
+def test_auto_hsd_advisory_scores_single_candidate_rows():
+    hsd_batches = []
+
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            max_model_batch_size=8,
+            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
+            disabled_models=frozenset({"token_policy_ensemble", "semantic"}),
+        ),
+        model_factories={"hsd_advisory": lambda _context: CountingHsdAdvisory(hsd_batches)},
+    )
+    rows = [
+        {"id": "1", "text": "Muslims should leave."},
+    ]
+
+    result = AutoPipelineEngine(context).process_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        replace_text=True,
+    )
+
+    assert hsd_batches == [{"count": 2, "batch_size": 8}]
+    assert result.summary["stages"]["verification"]["hsd_advisory_status"] == "ok"
+    assert result.summary["stages"]["verification"]["hsd_advisory"]["candidate_comparisons"] == 1
+    hsd = result.audit_rows[0]["scores"][0]["metrics"]["hsd_advisory"]
+    assert hsd["candidate_score"] == 0.9
+    assert hsd["original_score"] == 0.9
+
+
 def test_testing_dataset_fast_submission_path_is_practical(tmp_path):
     source = Path("data/external_unseen/tweet_eval_hate_offensive_test.csv")
     if not source.exists():

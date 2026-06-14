@@ -1,127 +1,22 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertTriangle,
-  Brain,
-  Clipboard,
-  Copy,
+  Archive,
+  CheckCircle2,
+  Database,
   Download,
+  FileCheck2,
   FileText,
-  Info,
+  LayoutDashboard,
+  LockKeyhole,
   Play,
-  RotateCcw,
+  ShieldAlert,
   ShieldCheck,
-  Upload
+  Target,
+  UploadCloud,
 } from "lucide-react";
 import "./styles.css";
-
-const SAMPLE_TEXT =
-  "My name is Alex Morgan, email alex.morgan@example.com. @angry_user said Muslims should leave Boston on Jan 12, 2025.";
-
-function Gauge({ label, value, tone = "good" }) {
-  return (
-    <section className="gauge">
-      <div className="gauge-top">
-        <span>{label}</span>
-        <strong>{value}%</strong>
-      </div>
-      <div className="meter" aria-hidden="true">
-        <div className={`meter-fill ${tone}`} style={{ width: `${value}%` }} />
-      </div>
-    </section>
-  );
-}
-
-function splitByRanges(text, ranges) {
-  if (!text || !ranges?.length) {
-    return [{ text, marked: false, key: "plain" }];
-  }
-  const spans = ranges
-    .filter((item) => Number.isInteger(item.start) && Number.isInteger(item.end) && item.end > item.start)
-    .sort((a, b) => a.start - b.start || b.priority - a.priority);
-  const parts = [];
-  let cursor = 0;
-  spans.forEach((span, index) => {
-    if (span.start < cursor) {
-      return;
-    }
-    if (span.start > cursor) {
-      parts.push({ text: text.slice(cursor, span.start), marked: false, key: `p-${index}` });
-    }
-    parts.push({
-      text: text.slice(span.start, span.end),
-      marked: true,
-      type: span.type,
-      role: span.role,
-      key: `m-${index}`
-    });
-    cursor = span.end;
-  });
-  if (cursor < text.length) {
-    parts.push({ text: text.slice(cursor), marked: false, key: "tail" });
-  }
-  return parts;
-}
-
-function splitOriginal(text, transformations, protectedSpans) {
-  const masked = (transformations || []).map((item) => ({
-    start: item.source_start,
-    end: item.source_end,
-    type: item.entity_type,
-    role: "mask",
-    priority: 2
-  }));
-  const protectedRanges = (protectedSpans || []).map((item) => ({
-    start: item.start,
-    end: item.end,
-    type: item.category || item.entity_type,
-    role: "protect",
-    priority: 1
-  }));
-  return splitByRanges(text, [...masked, ...protectedRanges]);
-}
-
-function splitOutput(text, protectedSpans) {
-  const pattern = /(\[[A-Z][A-Z_]*(?::[A-Za-z0-9_/-]+)?\])/g;
-  const ranges = [];
-  let match;
-  while ((match = pattern.exec(text)) !== null) {
-    ranges.push({
-      start: match.index,
-      end: pattern.lastIndex,
-      type: "placeholder",
-      role: "mask",
-      priority: 2
-    });
-  }
-  const protectedRanges = (protectedSpans || []).map((item) => ({
-    start: item.start,
-    end: item.end,
-    type: item.category || item.entity_type,
-    role: "protect",
-    priority: 1
-  }));
-  return splitByRanges(text, [...ranges, ...protectedRanges]);
-}
-
-function HighlightedText({ parts, empty }) {
-  if (empty) {
-    return <div className="empty-output">No output yet</div>;
-  }
-  return (
-    <pre className="highlight-box">
-      {parts.map((part) =>
-        part.marked ? (
-          <mark className={part.role || "mask"} key={part.key} title={part.type || "placeholder"}>
-            {part.text}
-          </mark>
-        ) : (
-          <span key={part.key}>{part.text}</span>
-        )
-      )}
-    </pre>
-  );
-}
 
 function Tags({ values }) {
   if (!values?.length) {
@@ -138,11 +33,803 @@ function Tags({ values }) {
   );
 }
 
-function formatScore(value) {
+function formatPercentRate(value) {
   if (typeof value !== "number") {
     return "n/a";
   }
-  return value.toFixed(3);
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatCount(value) {
+  if (typeof value !== "number") {
+    return "0";
+  }
+  return value.toLocaleString();
+}
+
+function formatScoreValue(value) {
+  if (typeof value !== "number") {
+    return "n/a";
+  }
+  return value.toFixed(2);
+}
+
+const CATEGORY_LABELS = {
+  disability: "Disability",
+  gender: "Gender",
+  historical_victim_group: "Historical victim group",
+  nationality_or_origin: "Nationality / origin",
+  race_or_ethnicity: "Race / ethnicity",
+  religion: "Religion",
+  slur_or_profanity: "Slur / profanity",
+  sexual_orientation: "Sexual orientation"
+};
+const AUTO_DASHBOARD_DISABLED_MODELS = ["semantic", "local_llm"];
+const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub", "gliner"];
+const AUTO_MODEL_ORDER = ["token_policy_ensemble", "hsd_advisory"];
+const PROCESSING_STAGES = [
+  {
+    after: 0,
+    value: 12,
+    label: "Checking saved result",
+    detail: "Matching this CSV and option set against the local demo cache."
+  },
+  {
+    after: 1.4,
+    value: 30,
+    label: "Privacy detection",
+    detail: "Scanning protected output for identifiers and residual PII."
+  },
+  {
+    after: 4,
+    value: 52,
+    label: "Candidate selection",
+    detail: "Selecting the least destructive masked candidate for each row."
+  },
+  {
+    after: 7,
+    value: 74,
+    label: "Context checks",
+    detail: "Checking HSD cues, target references, and safeguard metrics."
+  },
+  {
+    after: 10,
+    value: 90,
+    label: "Preparing dashboard",
+    detail: "Building review queue, target statistics, and export artifacts."
+  }
+];
+const NAV_ITEMS = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    title: "NGO Admin Dashboard",
+    eyebrow: "Privacy-preserving review operations"
+  },
+  {
+    id: "review",
+    label: "Review queue",
+    icon: ShieldAlert,
+    title: "Review Queue",
+    eyebrow: "Protected human review"
+  },
+  {
+    id: "targets",
+    label: "Target groups",
+    icon: Target,
+    title: "Target Groups",
+    eyebrow: "Aggregate platform impact"
+  },
+  {
+    id: "reports",
+    label: "Reports",
+    icon: Archive,
+    title: "Reports",
+    eyebrow: "Export and technical audit"
+  }
+];
+
+function categoryLabel(value) {
+  return CATEGORY_LABELS[value] || value.replaceAll("_", " ");
+}
+
+function PortalMetric({ icon: Icon, label, value, meta, tone = "default" }) {
+  return (
+    <section className={`portal-metric ${tone}`}>
+      <div className="portal-metric-icon" aria-hidden="true">
+        <Icon size={21} />
+      </div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{meta}</p>
+      </div>
+    </section>
+  );
+}
+
+function TargetImpactPanel({ targetGroups }) {
+  const categories = Object.entries(targetGroups?.categories || {})
+    .sort(([, left], [, right]) => (right.hatred_rows || 0) - (left.hatred_rows || 0) || (right.rows || 0) - (left.rows || 0))
+    .slice(0, 7);
+  return (
+    <section className="portal-panel">
+      <div className="portal-panel-head">
+        <div>
+          <h2>Target Group Impact</h2>
+          <p>Aggregate exposure by protected category.</p>
+        </div>
+        <Target size={20} />
+      </div>
+      <div className="impact-list">
+        {categories.length ? categories.map(([name, item]) => (
+          <div className="impact-row" key={name}>
+            <div>
+              <strong>{categoryLabel(name)}</strong>
+              <span>{formatCount(item.rows)} mentions</span>
+            </div>
+            <div className="impact-meter" aria-hidden="true">
+              <div style={{ width: formatPercentRate(item.hatred_rate || 0) }} />
+            </div>
+            <div className="impact-rate">
+              <strong>{formatPercentRate(item.hatred_rate || 0)}</strong>
+              <span>{formatCount(item.hatred_rows)} flagged</span>
+            </div>
+          </div>
+        )) : (
+          <div className="empty-state">No target-group statistics yet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ReviewQueuePanel({ ngoReview }) {
+  const queue = ngoReview?.queue_preview || [];
+  return (
+    <section className="portal-panel">
+      <div className="portal-panel-head">
+        <div>
+          <h2>Review Queue</h2>
+          <p>Protected cases routed for NGO assessment.</p>
+        </div>
+        <ShieldAlert size={20} />
+      </div>
+      {queue.length ? (
+        <div className="queue-list">
+          {queue.slice(0, 6).map((item) => (
+            <article className="queue-item" key={item.row_id}>
+              <div className="queue-topline">
+                <strong>{item.row_id}</strong>
+                <span>{formatScoreValue(item.score)}</span>
+              </div>
+              <p>{item.protected_preview}</p>
+              <Tags values={(item.target_categories || []).map(categoryLabel)} />
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">No protected cases are currently queued for NGO review.</div>
+      )}
+    </section>
+  );
+}
+
+function PortalViewHeading({ description, icon: Icon, title }) {
+  return (
+    <section className="view-heading">
+      <div>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      <Icon size={22} />
+    </section>
+  );
+}
+
+function countValue(counts, key) {
+  return typeof counts?.[key] === "number" ? counts[key] : 0;
+}
+
+function percentFromCounts(part, total) {
+  if (!total) return "0%";
+  return `${Math.round((part / total) * 100)}%`;
+}
+
+function statusText(value) {
+  return String(value || "unknown").replaceAll("_", " ");
+}
+
+function SafeguardOverviewPanel({ result }) {
+  const safeguards = result?.platform_insights?.safeguards || {};
+  const privacy = result?.platform_insights?.privacy_posture || {};
+  const harmCounts = safeguards.harm_risk_counts || {};
+  const privacyCounts = safeguards.privacy_status_counts || {};
+  const contextCounts = safeguards.context_status_counts || {};
+  const reviewRows = safeguards.human_review_required_rows || 0;
+  const rowCount = result?.platform_insights?.row_count || result?.manifest?.row_count || 0;
+  return (
+    <section className="portal-panel safeguard-overview">
+      <div className="portal-panel-head">
+        <div>
+          <h2>Human-Rights Safeguard</h2>
+          <p>Derived review controls for harm, privacy, context, and proportionate response.</p>
+        </div>
+        <ShieldCheck size={20} />
+      </div>
+      <div className="safeguard-grid">
+        <div>
+          <span>High harm risk</span>
+          <strong>{formatCount(countValue(harmCounts, "high"))}</strong>
+          <small>{formatCount(reviewRows)} cases routed to human review</small>
+        </div>
+        <div>
+          <span>Privacy clear</span>
+          <strong>{formatCount(countValue(privacyCounts, "clear"))}</strong>
+          <small>{formatCount(privacy.rows_with_privacy_warnings || 0)} rows with leakage warnings</small>
+        </div>
+        <div>
+          <span>Context preserved</span>
+          <strong>{formatCount(countValue(contextCounts, "preserved"))}</strong>
+          <small>{formatCount(rowCount)} rows analyzed</small>
+        </div>
+        <div>
+          <span>Response policy</span>
+          <strong>Human</strong>
+          <small>No automatic moderation decision</small>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ContextPreservationMeter({ result }) {
+  const context = result?.platform_insights?.context_preservation || {};
+  const components = context.component_status_counts || {};
+  const rows = [
+    ["target_group_reference", "Target-group reference"],
+    ["harm_signal", "Threat / insult signal"],
+    ["quotation_or_counterspeech_context", "Quote / counterspeech context"]
+  ];
+  return (
+    <section className="portal-panel">
+      <div className="portal-panel-head">
+        <div>
+          <h2>Context Preservation Meter</h2>
+          <p>Checks whether HSD-relevant context survived masking.</p>
+        </div>
+        <Target size={20} />
+      </div>
+      <div className="meter-list">
+        {rows.map(([key, label]) => {
+          const counts = components[key] || {};
+          const preserved = countValue(counts, "preserved");
+          const atRisk = countValue(counts, "at_risk");
+          const total = preserved + atRisk;
+          return (
+            <div className="meter-row" key={key}>
+              <div>
+                <strong>{label}</strong>
+                <span>{formatCount(preserved)} preserved / {formatCount(total)} applicable</span>
+              </div>
+              <div className="impact-meter" aria-hidden="true">
+                <div style={{ width: percentFromCounts(preserved, total) }} />
+              </div>
+              <small>{formatCount(atRisk)} at risk</small>
+            </div>
+          );
+        })}
+      </div>
+      <div className="context-retention-strip">
+        <span><strong>{formatPercentRate(context.target_cue_retention_mean ?? null)}</strong> target cues</span>
+        <span><strong>{formatPercentRate(context.utility_cue_retention_mean ?? null)}</strong> HSD signals</span>
+        <span><strong>{formatPercentRate(context.character_utility_retention_mean ?? null)}</strong> similarity</span>
+      </div>
+    </section>
+  );
+}
+
+function PrivacyLeakagePanel({ result }) {
+  if (!result) {
+    return (
+      <section className="portal-panel leakage-panel">
+        <div className="portal-panel-head">
+          <div>
+            <h2>Privacy Leakage Warning Layer</h2>
+            <p>Final scan over protected output before review/export.</p>
+          </div>
+          <AlertTriangle size={20} />
+        </div>
+        <div className="empty-state">No CSV processed yet.</div>
+      </section>
+    );
+  }
+  const privacy = result?.platform_insights?.privacy_posture || {};
+  const statusCounts = privacy.leakage_status_counts || {};
+  const entityCounts = privacy.residual_identifier_counts_by_entity_type || {};
+  const warningCounts = privacy.privacy_warning_counts || {};
+  const status = countValue(statusCounts, "review_required")
+    ? "review_required"
+    : countValue(statusCounts, "warning")
+      ? "warning"
+      : "clear";
+  return (
+    <section className={`portal-panel leakage-panel ${status}`}>
+      <div className="portal-panel-head">
+        <div>
+          <h2>Privacy Leakage Warning Layer</h2>
+          <p>Final scan over protected output before review/export.</p>
+        </div>
+        <AlertTriangle size={20} />
+      </div>
+      <div className="leakage-status">
+        <strong>{status === "clear" ? "Clear" : status === "warning" ? "Warnings" : "Review required"}</strong>
+        <span>{formatCount(privacy.residual_identifier_count || 0)} residual identifier signals</span>
+      </div>
+      <div className="detail-grid compact">
+        <div>
+          <span>Clear rows</span>
+          <strong>{formatCount(countValue(statusCounts, "clear"))}</strong>
+        </div>
+        <div>
+          <span>Warning rows</span>
+          <strong>{formatCount(countValue(statusCounts, "warning"))}</strong>
+        </div>
+        <div>
+          <span>Review rows</span>
+          <strong>{formatCount(countValue(statusCounts, "review_required"))}</strong>
+        </div>
+      </div>
+      <Tags values={[
+        ...Object.entries(entityCounts).map(([name, value]) => `${name}: ${value}`),
+        ...Object.entries(warningCounts).map(([name, value]) => `${name}: ${value}`)
+      ]} />
+    </section>
+  );
+}
+
+function SafeguardCard({ item }) {
+  const safeguard = item?.safeguard || {};
+  const context = item?.context_preservation || {};
+  const privacy = item?.privacy_leakage || {};
+  const rows = [
+    ["Harm risk", safeguard.harm_risk?.label || "Not assessed"],
+    ["Privacy", privacy.label || safeguard.privacy_status?.label || "Not assessed"],
+    ["Context", context.label || safeguard.context_preservation?.label || "Not assessed"],
+    ["Human review", safeguard.human_review?.label || "Not routed"],
+    ["Response", safeguard.proportionate_response?.label || "Human assessment only"]
+  ];
+  return (
+    <div className="safeguard-card">
+      {rows.map(([label, value]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <strong>{value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReviewQueueDetailPanel({ ngoReview }) {
+  const queue = ngoReview?.queue_preview || [];
+  return (
+    <section className="review-detail-list">
+      {queue.length ? queue.map((item) => (
+        <article className="review-case" key={item.row_id}>
+          <div className="review-case-main">
+            <div className="queue-topline">
+              <strong>{item.row_id}</strong>
+              <span>{formatScoreValue(item.score)}</span>
+            </div>
+            <p>{item.protected_preview}</p>
+            <Tags values={[
+              ...(item.target_categories || []).map(categoryLabel),
+              ...(item.context_tags || []).map(statusText)
+            ]} />
+            <div className="context-retention-strip">
+              <span><strong>{formatPercentRate(item.context_preservation?.retention?.target_cue ?? null)}</strong> target refs</span>
+              <span><strong>{formatPercentRate(item.context_preservation?.retention?.utility_cue ?? null)}</strong> HSD signals</span>
+              <span><strong>{formatPercentRate(item.context_preservation?.retention?.character ?? null)}</strong> similarity</span>
+            </div>
+          </div>
+          <SafeguardCard item={item} />
+        </article>
+      )) : (
+        <section className="portal-panel">
+          <div className="empty-state">No protected cases are currently queued for NGO review.</div>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function TargetGroupsDetailPanel({ targetGroups }) {
+  const categories = Object.entries(targetGroups?.categories || {})
+    .sort(([, left], [, right]) => (right.hatred_rows || 0) - (left.hatred_rows || 0) || (right.rows || 0) - (left.rows || 0));
+  return (
+    <section className="portal-panel">
+      <div className="portal-panel-head">
+        <div>
+          <h2>Target Category Analytics</h2>
+          <p>Post-classification hatred by protected target group.</p>
+        </div>
+        <Target size={20} />
+      </div>
+      <div className="table-wrap detail-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Target category</th>
+              <th>Mentions</th>
+              <th>Flagged</th>
+              <th>Hatred rate</th>
+              <th>Cue preservation</th>
+              <th>Mean score</th>
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map(([name, item]) => (
+              <tr key={name}>
+                <td>{categoryLabel(name)}</td>
+                <td>{formatCount(item.rows)}</td>
+                <td>{formatCount(item.hatred_rows)}</td>
+                <td>{formatPercentRate(item.hatred_rate || 0)}</td>
+                <td>{formatCount(item.target_cue_count_after)} / {formatCount(item.target_cue_count_before)}</td>
+                <td>{formatScoreValue(item.mean_hatred_score)}</td>
+              </tr>
+            ))}
+            {!categories.length ? (
+              <tr><td className="muted-cell" colSpan="6">No target-group statistics yet.</td></tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownloadManifest }) {
+  const summary = result?.audit?.summary || {};
+  const validation = summary.validation || {};
+  const manifest = result?.manifest || {};
+  return (
+    <section className="portal-panel report-summary">
+      <div className="portal-panel-head">
+        <div>
+          <h2>Report Center</h2>
+          <p>Export protected artifacts and verify run metadata.</p>
+        </div>
+        <Archive size={20} />
+      </div>
+      <div className="report-actions">
+        <button className="ghost" disabled={!result} onClick={onDownloadCsv} type="button">
+          <Download size={17} />
+          Protected CSV
+        </button>
+        <button className="ghost" disabled={!result} onClick={onDownloadAudit} type="button">
+          <Archive size={17} />
+          Audit JSON
+        </button>
+        <button className="ghost" disabled={!result} onClick={onDownloadManifest} type="button">
+          <Archive size={17} />
+          Manifest
+        </button>
+      </div>
+      <div className="detail-grid">
+        <div>
+          <span>Rows</span>
+          <strong>{formatCount(manifest.row_count || 0)}</strong>
+        </div>
+        <div>
+          <span>Validation</span>
+          <strong>{validation.valid ? "Valid" : result ? "Check" : "Waiting"}</strong>
+        </div>
+        <div>
+          <span>Mode</span>
+          <strong>{manifest.mode || "auto"}</strong>
+        </div>
+        <div>
+          <span>Cache</span>
+          <strong>{result?.cache?.hit ? "Loaded" : result ? "Saved" : "None"}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NgoDashboard({ result }) {
+  const insight = result?.platform_insights || {};
+  const classification = insight.classification || {};
+  const targetGroups = insight.target_groups || {};
+  const ngoReview = insight.ngo_review || {};
+  const rowCount = insight.row_count || result?.manifest?.row_count || 0;
+  const sourceLabel = classification.source === "pipeline_hsd_advisory"
+    ? "HSD advisory model flags"
+    : classification.source === "csv_post_classification_columns"
+      ? "CSV classification labels"
+      : "Awaiting CSV run";
+
+  return (
+    <>
+      <section className="portal-hero">
+        <div>
+          <span className="eyebrow">NGO operations portal</span>
+          <h1>Platform Review Desk</h1>
+          <p>Aggregate hate-speech monitoring, protected case intake, and privacy-preserving review evidence.</p>
+        </div>
+        <div className="hero-badge">
+          <LockKeyhole size={18} />
+          <span>Aggregate-only report</span>
+        </div>
+      </section>
+
+      <section className="portal-metrics" aria-label="NGO review summary">
+        <PortalMetric
+          icon={FileCheck2}
+          label="Cases analyzed"
+          meta={`${formatCount(classification.classified_rows || 0)} assessed by ${sourceLabel}`}
+          value={formatCount(rowCount)}
+        />
+        <PortalMetric
+          icon={ShieldAlert}
+          label="Needs review"
+          meta={`${formatPercentRate(ngoReview.queue_rate || 0)} of analyzed cases`}
+          tone="attention"
+          value={formatCount(ngoReview.queue_rows || 0)}
+        />
+        <PortalMetric
+          icon={Target}
+          label="Target-group mentions"
+          meta={`${formatPercentRate(targetGroups.target_group_row_rate || 0)} of analyzed cases`}
+          tone="neutral"
+          value={formatCount(targetGroups.rows_with_target_group || 0)}
+        />
+        <PortalMetric
+          icon={Database}
+          label="Raw text retained"
+          meta="Insight report stores aggregate counts and protected previews only."
+          tone="safe"
+          value="0"
+        />
+      </section>
+
+      <section className="portal-insight-grid">
+        <SafeguardOverviewPanel result={result} />
+        <ContextPreservationMeter result={result} />
+      </section>
+    </>
+  );
+}
+
+function ProcessingProgress({ progress }) {
+  if (!progress) return null;
+  return (
+    <div className="processing-progress" aria-live="polite">
+      <div className="progress-topline">
+        <strong>{progress.label}</strong>
+        <span>{progress.value}%</span>
+      </div>
+      <div className="progress-track" aria-hidden="true">
+        <div style={{ width: `${progress.value}%` }} />
+      </div>
+      <p>{progress.detail}</p>
+    </div>
+  );
+}
+
+function DataIntakePanel({
+  busy,
+  cacheBusy,
+  cacheNotice,
+  csvName,
+  csvText,
+  headers,
+  idCol,
+  onFile,
+  onIdCol,
+  onReplaceText,
+  onRunCsv,
+  onTextCol,
+  progress,
+  replaceText,
+  textCol
+}) {
+  return (
+    <section className="portal-panel intake-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Data Intake</h2>
+          <p>Upload a platform export for privacy-safe review preparation.</p>
+        </div>
+        <UploadCloud size={20} />
+      </div>
+      <label className="file-drop">
+        <input accept=".csv,text/csv" onChange={onFile} type="file" />
+        <FileText size={20} />
+        <span>{csvText ? csvName : "Choose a CSV"}</span>
+      </label>
+      {cacheNotice || cacheBusy ? (
+        <div className={`cache-note ${cacheBusy ? "pending" : ""}`}>
+          <Archive size={17} />
+          <span>{cacheBusy ? "Checking saved results" : cacheNotice}</span>
+        </div>
+      ) : null}
+      <div className="form-grid">
+        <label>
+          <span>Text Column</span>
+          <select value={textCol} onChange={(event) => onTextCol(event.target.value)}>
+            {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>ID Column</span>
+          <select value={idCol} onChange={(event) => onIdCol(event.target.value)}>
+            <option value="">None</option>
+            {headers.map((header) => <option key={header} value={header}>{header}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="auto-mode-note">
+        <ShieldCheck size={18} />
+        <div>
+          <strong>Protected processing</strong>
+          <span>PII masking, meaning checks, and HSD preservation run automatically.</span>
+        </div>
+      </div>
+      <label className="check">
+        <input checked={replaceText} onChange={(event) => onReplaceText(event.target.checked)} type="checkbox" />
+        <span>Replace text column</span>
+      </label>
+      <button className="primary full-width" disabled={busy || cacheBusy || !csvText || !textCol} onClick={onRunCsv} type="button">
+        <Play size={18} />
+        {busy ? "Running" : cacheBusy ? "Checking cache" : "Run CSV"}
+      </button>
+      <ProcessingProgress progress={busy ? progress : null} />
+    </section>
+  );
+}
+
+function ProtectedCasePreviewPanel({ csvGauges, result }) {
+  return (
+    <section className="portal-panel preview-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Protected Case Preview</h2>
+          <p>Sanitized text for review and export.</p>
+        </div>
+        <FileCheck2 size={20} />
+      </div>
+      <div className="quality-strip">
+        <span><strong>{csvGauges.privacy}%</strong> privacy gain</span>
+        <span><strong>{csvGauges.cue}%</strong> cue retention</span>
+        <span><strong>{csvGauges.similarity}%</strong> similarity</span>
+        <span><strong>{csvGauges.residual}%</strong> residual risk</span>
+      </div>
+      <div className="table-wrap csv-preview">
+        <table>
+          <thead>
+            <tr>
+              <th>Case</th>
+              <th>Protected Preview</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(result?.preview_rows || []).map((row) => (
+              <tr key={row.row_id}>
+                <td>{row.row_id}</td>
+                <td>{row.output}</td>
+              </tr>
+            ))}
+            {!result?.preview_rows?.length ? (
+              <tr><td className="muted-cell" colSpan="2">No CSV processed</td></tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function orderedStatusItems(items, order, options = {}) {
+  const source = items || {};
+  const includeDisabled = options.includeDisabled || false;
+  return order
+    .filter((name) => {
+      const status = source[name];
+      if (!status) return false;
+      const statusText = String(status.status || "");
+      if (
+        name === "gliner"
+        && (statusText.startsWith("disabled") || status.pipeline_role === "explicit_research_only")
+      ) {
+        return false;
+      }
+      if (!includeDisabled && statusText.startsWith("disabled")) return false;
+      return true;
+    })
+    .map((name) => [name, source[name]]);
+}
+
+function modelStatusFromSummary(modelStatus) {
+  const hsd = modelStatus?.hsd_advisory;
+  const tokenPolicy = modelStatus?.token_policy_ensemble;
+  return {
+    token_policy_ensemble: tokenPolicy
+      ? {
+          status: tokenPolicy.available ? "available" : "missing_artifact",
+          ...tokenPolicy
+        }
+      : undefined,
+    hsd_advisory: hsd
+      ? {
+          status: hsd.available ? "available" : "missing_dependency",
+          ...hsd
+        }
+      : undefined
+  };
+}
+
+function providerStatusFromSummary(modelStatus) {
+  const providers = modelStatus?.span_providers || {};
+  return Object.fromEntries(
+    AUTO_PROVIDER_ORDER
+      .filter((name) => providers[name])
+      .map((name) => [
+        name,
+        {
+          status: providers[name].available ? "available" : providers[name].status || "missing_dependency",
+          ...providers[name]
+        }
+      ])
+  );
+}
+
+function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownloadCsv, onDownloadAudit, onDownloadManifest }) {
+  const verification = result?.audit?.summary?.stages?.verification || {};
+  const providers = result?.manifest?.providers || providerStatusFromSummary(modelStatus);
+  const models = result?.manifest?.models || modelStatusFromSummary(modelStatus);
+  const providerItems = orderedStatusItems(providers, AUTO_PROVIDER_ORDER);
+  const modelItems = orderedStatusItems(models, AUTO_MODEL_ORDER, { includeDisabled: true });
+  return (
+    <section className="audit-strip" aria-label="Technical audit">
+      <div className="audit-summary">
+        <div>
+          <span>Residual identifiers</span>
+          <strong>{formatCount(metrics.residual_identifier_count || 0)}</strong>
+        </div>
+        <div>
+          <span>Cue retention</span>
+          <strong>{csvGauges.cue}%</strong>
+        </div>
+        <div>
+          <span>HSD preservation</span>
+          <strong>{verification.hsd_advisory_status || "waiting"}</strong>
+        </div>
+      </div>
+      <div className="audit-tags">
+        <Tags values={[
+          ...providerItems.map(([name, item]) => `${name}: ${item.status || "unknown"}`),
+          ...modelItems.map(([name, item]) => `${name}: ${item.status || "unknown"}`)
+        ]} />
+      </div>
+      <div className="audit-actions">
+        <button className="ghost" disabled={!result} onClick={onDownloadCsv} type="button">
+          <Download size={17} />
+          CSV
+        </button>
+        <button className="ghost" disabled={!result} onClick={onDownloadAudit} type="button">
+          <Archive size={17} />
+          Audit
+        </button>
+        <button className="ghost" disabled={!result} onClick={onDownloadManifest} type="button">
+          <Archive size={17} />
+          Manifest
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function detectCsvHeaders(csvText) {
@@ -172,74 +859,236 @@ function downloadTextFile(name, text, type) {
   URL.revokeObjectURL(url);
 }
 
-function CsvWorkbench({ modelStatus }) {
+function csvRequestPayload({ csvText, idCol, replaceText, textCol }) {
+  return {
+    csv_text: csvText,
+    text_col: textCol,
+    id_col: idCol || null,
+    output_col: "privatized_text",
+    replace_text: replaceText,
+    mode: "auto",
+    style_scrub: false,
+    disabled_providers: [],
+    disabled_models: AUTO_DASHBOARD_DISABLED_MODELS,
+    metric_depth: "fast"
+  };
+}
+
+function CsvWorkbench({ activeView, modelStatus }) {
   const [csvText, setCsvText] = useState("");
   const [csvName, setCsvName] = useState("contextsafe-hsd.csv");
   const [headers, setHeaders] = useState([]);
   const [textCol, setTextCol] = useState("");
   const [idCol, setIdCol] = useState("");
-  const [mode, setMode] = useState("auto");
   const [replaceText, setReplaceText] = useState(true);
-  const [providers, setProviders] = useState({ presidio: true, gliner: true, scrubadub: true });
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [cacheBusy, setCacheBusy] = useState(false);
+  const [cacheNotice, setCacheNotice] = useState("");
+  const [processingProgress, setProcessingProgress] = useState(null);
   const [error, setError] = useState("");
 
-  const selectedProviders = Object.entries(providers)
-    .filter(([, enabled]) => enabled)
-    .map(([name]) => name);
-  const disabledProviders = Object.entries(providers)
-    .filter(([, enabled]) => !enabled)
-    .map(([name]) => name);
+  useEffect(() => {
+    if (!busy) {
+      return undefined;
+    }
+    const startedAt = Date.now();
+    setProcessingProgress(PROCESSING_STAGES[0]);
+    const timer = window.setInterval(() => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const stage = [...PROCESSING_STAGES]
+        .reverse()
+        .find((item) => elapsed >= item.after) || PROCESSING_STAGES[0];
+      const drift = Math.min(8, Math.floor(Math.max(0, elapsed - stage.after) * 2));
+      setProcessingProgress({
+        ...stage,
+        value: Math.min(96, stage.value + drift)
+      });
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [busy]);
+
   const metrics = result?.audit?.summary?.metrics || {};
-  const providerItems = result?.manifest?.providers || {};
-  const modelItems = result?.manifest?.models || {};
   const csvGauges = {
     privacy: Math.round((metrics.privacy_gain_mean || 0) * 100),
     cue: Math.round((metrics.target_cue_retention_mean ?? 1) * 100),
     similarity: Math.round((metrics.character_utility_retention_mean ?? 1) * 100),
     residual: Math.min(100, (metrics.residual_identifier_count || 0) * 10)
   };
+  const insight = result?.platform_insights || {};
+  const targetGroups = insight.target_groups || {};
+  const ngoReview = insight.ngo_review || {};
+
+  const intakePanel = (
+    <DataIntakePanel
+      busy={busy}
+      cacheBusy={cacheBusy}
+      cacheNotice={cacheNotice}
+      csvName={csvName}
+      csvText={csvText}
+      headers={headers}
+      idCol={idCol}
+      onFile={handleFile}
+      onIdCol={handleIdColChange}
+      onReplaceText={handleReplaceTextChange}
+      onRunCsv={runCsv}
+      onTextCol={handleTextColChange}
+      progress={processingProgress}
+      replaceText={replaceText}
+      textCol={textCol}
+    />
+  );
+  const previewPanel = <ProtectedCasePreviewPanel csvGauges={csvGauges} result={result} />;
+  const downloadCsv = () => {
+    if (!result) return;
+    downloadTextFile(`masked-${csvName}`, result.output_csv, "text/csv");
+  };
+  const downloadAudit = () => {
+    if (!result) return;
+    downloadTextFile("contextsafe-hsd-audit.json", JSON.stringify(result.audit, null, 2), "application/json");
+  };
+  const downloadManifest = () => {
+    if (!result) return;
+    downloadTextFile("contextsafe-hsd-manifest.json", JSON.stringify(result.manifest, null, 2), "application/json");
+  };
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
     const text = await file.text();
+    event.target.value = "";
     const detected = detectCsvHeaders(text);
+    const nextTextCol = preferredColumn(detected, ["text", "tweet", "content", "comment"]);
+    const nextIdCol = preferredColumn(detected, ["id", "case_id", "source_id", "author_id", "user_id"], "");
     setCsvText(text);
     setCsvName(file.name || "contextsafe-hsd.csv");
     setHeaders(detected);
-    setTextCol(preferredColumn(detected, ["text", "tweet", "content", "comment"]));
-    setIdCol(preferredColumn(detected, ["id", "source_id", "case_id"], ""));
+    setTextCol(nextTextCol);
+    setIdCol(nextIdCol);
     setResult(null);
     setError("");
+    if (nextTextCol) {
+      await lookupCachedCsv({
+        csvTextValue: text,
+        idColValue: nextIdCol,
+        replaceTextValue: replaceText,
+        textColValue: nextTextCol
+      });
+    } else {
+      setCacheNotice("No text column detected. Select a column and run CSV.");
+    }
+  }
+
+  function handleTextColChange(value) {
+    setTextCol(value);
+    setResult(null);
+    if (csvText && value) {
+      void lookupCachedCsv({
+        csvTextValue: csvText,
+        idColValue: idCol,
+        replaceTextValue: replaceText,
+        textColValue: value
+      });
+    } else {
+      setCacheNotice("Text column changed. Run CSV to process with these settings.");
+    }
+  }
+
+  function handleIdColChange(value) {
+    setIdCol(value);
+    setResult(null);
+    if (csvText && textCol) {
+      void lookupCachedCsv({
+        csvTextValue: csvText,
+        idColValue: value,
+        replaceTextValue: replaceText,
+        textColValue: textCol
+      });
+    } else {
+      setCacheNotice("ID column changed. Run CSV to process with these settings.");
+    }
+  }
+
+  function handleReplaceTextChange(value) {
+    setReplaceText(value);
+    setResult(null);
+    if (csvText && textCol) {
+      void lookupCachedCsv({
+        csvTextValue: csvText,
+        idColValue: idCol,
+        replaceTextValue: value,
+        textColValue: textCol
+      });
+    } else {
+      setCacheNotice("Output setting changed. Run CSV to process with these settings.");
+    }
+  }
+
+  async function lookupCachedCsv({ csvTextValue, idColValue, replaceTextValue, textColValue }) {
+    setCacheBusy(true);
+    setCacheNotice("");
+    try {
+      const response = await fetch("/api/csv/cache", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(csvRequestPayload({
+          csvText: csvTextValue,
+          idCol: idColValue,
+          replaceText: replaceTextValue,
+          textCol: textColValue
+        }))
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Cache lookup failed with ${response.status}`);
+      }
+      const body = await response.json();
+      if (body.cache_hit && body.result) {
+        setResult(body.result);
+        setCacheNotice("Loaded existing processed result from local demo cache.");
+      } else {
+        setCacheNotice("No saved result for this CSV and option set yet.");
+      }
+    } catch (err) {
+      setCacheNotice(err.message || "Cache lookup unavailable. Run CSV to process.");
+    } finally {
+      setCacheBusy(false);
+    }
   }
 
   async function runCsv() {
     setBusy(true);
     setError("");
+    setCacheNotice("");
     try {
       const response = await fetch("/api/csv/privatize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          csv_text: csvText,
-          text_col: textCol,
-          id_col: idCol || null,
-          output_col: "privatized_text",
-          replace_text: replaceText,
-          mode,
-          style_scrub: false,
-          providers: mode === "auto" ? [] : selectedProviders,
-          disabled_providers: mode === "auto" ? disabledProviders : [],
-          metric_depth: "fast"
-        })
+        body: JSON.stringify(csvRequestPayload({
+          csvText,
+          idCol,
+          replaceText,
+          textCol
+        }))
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.detail || `Request failed with ${response.status}`);
       }
-      setResult(await response.json());
+      const body = await response.json();
+      setProcessingProgress({
+        value: 100,
+        label: body.cache?.hit ? "Loaded saved result" : "Processing complete",
+        detail: body.cache?.hit
+          ? "A matching local result was restored without rerunning the pipeline."
+          : "The processed result was saved to the local demo cache."
+      });
+      setResult(body);
+      setCacheNotice(
+        body.cache?.hit
+          ? "Loaded existing processed result from local demo cache."
+          : "Processed and saved result to local demo cache."
+      );
     } catch (err) {
       setError(err.message || "CSV processing failed");
     } finally {
@@ -247,148 +1096,86 @@ function CsvWorkbench({ modelStatus }) {
     }
   }
 
-  function toggleProvider(name) {
-    setProviders((current) => ({ ...current, [name]: !current[name] }));
-  }
-
   return (
     <>
-      <section className="csv-grid">
-        <section className="panel csv-panel">
-          <div className="panel-heading">
-            <h2>CSV Input</h2>
-            <Upload size={18} />
-          </div>
-          <label className="file-drop">
-            <input accept=".csv,text/csv" onChange={handleFile} type="file" />
-            <FileText size={20} />
-            <span>{csvText ? csvName : "Choose a CSV"}</span>
-          </label>
-          <div className="form-grid">
-            <label>
-              <span>Text Column</span>
-              <select value={textCol} onChange={(event) => setTextCol(event.target.value)}>
-                {headers.map((header) => <option key={header} value={header}>{header}</option>)}
-              </select>
-            </label>
-            <label>
-              <span>ID Column</span>
-              <select value={idCol} onChange={(event) => setIdCol(event.target.value)}>
-                <option value="">None</option>
-                {headers.map((header) => <option key={header} value={header}>{header}</option>)}
-              </select>
-            </label>
-          </div>
-          <div className="segmented wide-segment" role="group" aria-label="CSV mode">
-            {["auto", "balanced", "privacy", "rerank"].map((option) => (
-              <button
-                className={mode === option ? "active" : ""}
-                key={option}
-                onClick={() => setMode(option)}
-                type="button"
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-          <div className="provider-row">
-            {["presidio", "gliner", "scrubadub"].map((name) => (
-              <label className="check" key={name}>
-                <input
-                  checked={providers[name]}
-                  disabled={modelStatus?.span_providers?.[name]?.available === false}
-                  onChange={() => toggleProvider(name)}
-                  type="checkbox"
-                />
-                <span>{name}</span>
-              </label>
-            ))}
-          </div>
-          <label className="check">
-            <input checked={replaceText} onChange={(event) => setReplaceText(event.target.checked)} type="checkbox" />
-            <span>Replace text column</span>
-          </label>
-          <button className="primary full-width" disabled={busy || !csvText || !textCol} onClick={runCsv} type="button">
-            <Play size={18} />
-            {busy ? "Running" : "Run CSV"}
-          </button>
-        </section>
+      {activeView === "dashboard" ? (
+        <>
+          <NgoDashboard result={result} />
+          <section className="portal-workflow">
+            {intakePanel}
+            {previewPanel}
+          </section>
+          <TechnicalAuditStrip
+            csvGauges={csvGauges}
+            metrics={metrics}
+            modelStatus={modelStatus}
+            onDownloadAudit={downloadAudit}
+            onDownloadCsv={downloadCsv}
+            onDownloadManifest={downloadManifest}
+            result={result}
+          />
+        </>
+      ) : null}
 
-        <section className="panel csv-panel">
-          <div className="panel-heading">
-            <h2>CSV Output</h2>
-            <Download size={18} />
-          </div>
-          <div className="gauge-grid compact">
-            <Gauge label="Privacy gain" value={csvGauges.privacy} />
-            <Gauge label="Cue retention" value={csvGauges.cue} />
-            <Gauge label="Similarity" value={csvGauges.similarity} tone="neutral" />
-            <Gauge label="Residual risk" value={csvGauges.residual} tone="risk" />
-          </div>
-          <div className="download-row">
-            <button
-              className="ghost"
-              disabled={!result}
-              onClick={() => downloadTextFile(`masked-${csvName}`, result.output_csv, "text/csv")}
-              type="button"
-            >
-              <Download size={17} />
-              CSV
-            </button>
-            <button
-              className="ghost"
-              disabled={!result}
-              onClick={() => downloadTextFile("contextsafe-hsd-audit.json", JSON.stringify(result.audit, null, 2), "application/json")}
-              type="button"
-            >
-              <Download size={17} />
-              Audit
-            </button>
-            <button
-              className="ghost"
-              disabled={!result}
-              onClick={() => downloadTextFile("contextsafe-hsd-manifest.json", JSON.stringify(result.manifest, null, 2), "application/json")}
-              type="button"
-            >
-              <Download size={17} />
-              Manifest
-            </button>
-          </div>
-          <div className="status-grid">
-            <div>
-              <strong>Providers</strong>
-              <Tags values={Object.entries(providerItems).map(([name, item]) => `${name}: ${item.status}`)} />
+      {activeView === "review" ? (
+        <>
+          <PortalViewHeading
+            description="Case-level safeguard cards for NGO assessment. Protected previews only; no automatic moderation decision."
+            icon={ShieldAlert}
+            title="Review Queue"
+          />
+          <section className="portal-focus-grid review-layout">
+            <ReviewQueueDetailPanel ngoReview={ngoReview} />
+            <div className="side-stack">
+              <SafeguardOverviewPanel result={result} />
+              <PrivacyLeakagePanel result={result} />
             </div>
-            <div>
-              <strong>Models</strong>
-              <Tags values={Object.entries(modelItems).map(([name, item]) => `${name}: ${item.status}`)} />
-            </div>
-          </div>
-          <div className="table-wrap csv-preview">
-            <table>
-              <thead>
-                <tr>
-                  <th>Row</th>
-                  <th>Length</th>
-                  <th>Output Preview</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(result?.preview_rows || []).map((row) => (
-                  <tr key={row.row_id}>
-                    <td>{row.row_id}</td>
-                    <td>{row.text_length}</td>
-                    <td>{row.output}</td>
-                  </tr>
-                ))}
-                {!result?.preview_rows?.length ? (
-                  <tr><td className="muted-cell" colSpan="3">No CSV processed</td></tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </section>
+          </section>
+        </>
+      ) : null}
+
+      {activeView === "targets" ? (
+        <>
+          <PortalViewHeading
+            description="Aggregate target-group exposure by protected category, calculated after classification."
+            icon={Target}
+            title="Target Groups"
+          />
+          <section className="portal-focus-grid target-layout">
+            <TargetGroupsDetailPanel targetGroups={targetGroups} />
+            <ContextPreservationMeter result={result} />
+          </section>
+        </>
+      ) : null}
+
+      {activeView === "reports" ? (
+        <>
+          <PortalViewHeading
+            description="Download the protected CSV, audit JSON, and run manifest for the current platform export."
+            icon={Archive}
+            title="Reports"
+          />
+          <ReportSummaryPanel
+            onDownloadAudit={downloadAudit}
+            onDownloadCsv={downloadCsv}
+            onDownloadManifest={downloadManifest}
+            result={result}
+          />
+          <TechnicalAuditStrip
+            csvGauges={csvGauges}
+            metrics={metrics}
+            modelStatus={modelStatus}
+            onDownloadAudit={downloadAudit}
+            onDownloadCsv={downloadCsv}
+            onDownloadManifest={downloadManifest}
+            result={result}
+          />
+          <section className="portal-focus-grid">
+            <PrivacyLeakagePanel result={result} />
+            <ContextPreservationMeter result={result} />
+          </section>
+        </>
+      ) : null}
       {error ? (
         <section className="error-line">
           <AlertTriangle size={18} />
@@ -399,156 +1186,32 @@ function CsvWorkbench({ modelStatus }) {
   );
 }
 
-function ModelPanel({ status, result, runModel, setRunModel, runHsdClassifier, setRunHsdClassifier }) {
-  const ensemble = status?.token_policy_ensemble || {};
-  const hsdPrimary = status?.hsd_classifiers?.primary || {};
-  const hsdRegistered = status?.hsd_classifiers || {};
-  const advisory = result?.model_advisory;
-  const hsd = result?.hsd_classifier;
-  const metrics = advisory?.metrics || ensemble.metrics;
-  const actionCounts = advisory?.action_counts || {};
-  const modelSpans = advisory?.spans || [];
+function PortalNav({ activeView, className, onSelect }) {
   return (
-    <section className="panel model-panel">
-      <div className="panel-heading">
-        <h2>Model Guidance</h2>
-        <Brain size={18} />
-      </div>
-      <div className="layer-row active">
-        <strong>Deterministic layer</strong>
-        <span>Active</span>
-      </div>
-      <div className={`layer-row ${ensemble.available ? "ready" : "inactive"}`}>
-        <strong>RoBERTa + HateBERT ensemble</strong>
-        <span>{runModel ? "Requested" : ensemble.available ? "Available" : "Missing"}</span>
-      </div>
-      <div className={`layer-row ${hsdPrimary.available ? "ready" : "inactive"}`}>
-        <strong>HSD classifier</strong>
-        <span>{runHsdClassifier ? "Requested" : hsdPrimary.available ? "Available" : "Missing"}</span>
-      </div>
-      <label className="check model-toggle">
-        <input
-          checked={runModel}
-          disabled={!ensemble.available}
-          onChange={(event) => setRunModel(event.target.checked)}
-          type="checkbox"
-        />
-        <span>Run ensemble on this text</span>
-      </label>
-      <label className="check model-toggle">
-        <input
-          checked={runHsdClassifier}
-          disabled={!hsdPrimary.available}
-          onChange={(event) => setRunHsdClassifier(event.target.checked)}
-          type="checkbox"
-        />
-        <span>Run HSD classifier</span>
-      </label>
-      <Tags
-        values={[
-          `primary: ${hsdPrimary.model_id || "not configured"}`,
-          `cardiff: ${hsdRegistered.cardiff_hate_latest?.status || "registered"}`,
-          `local baseline: ${hsdRegistered.local_tfidf_logreg?.status || "unknown"}`
-        ]}
-      />
-      {metrics ? (
-        <div className="metric-strip">
-          <span>Macro F1 {metrics.macro_f1 ?? "n/a"}</span>
-          <span>Target F1 {metrics.protect_target_f1 ?? "n/a"}</span>
-          <span>HSD F1 {metrics.protect_hsd_f1 ?? "n/a"}</span>
-        </div>
-      ) : null}
-      {advisory ? (
-        <div className="advisory-box">
-          <strong>Status: {advisory.status}</strong>
-          <p>{advisory.message || "Advisory token actions are available below."}</p>
-          {Object.keys(actionCounts).length ? (
-            <Tags values={Object.entries(actionCounts).map(([key, value]) => `${key}: ${value}`)} />
-          ) : null}
-          {modelSpans.length ? (
-            <div className="mini-table">
-              {modelSpans.slice(0, 8).map((span, index) => (
-                <div className="mini-row" key={`${span.action}-${index}`}>
-                  <span>{span.action}</span>
-                  <span>{span.start}-{span.end}</span>
-                  <span>{span.confidence}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-      {hsd ? (
-        <div className="advisory-box">
-          <strong>HSD status: {hsd.status}</strong>
-          <p>{hsd.message || hsd.model_id || "Classifier drift scores are available below."}</p>
-          {hsd.active ? (
-            <div className="metric-strip">
-              <span>Original {formatScore(hsd.original_score)}</span>
-              <span>Protected {formatScore(hsd.candidate_score)}</span>
-              <span>Delta {formatScore(hsd.score_delta)}</span>
-              <span>{hsd.original_decision} to {hsd.candidate_decision}</span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function GuidancePanel({ result, status }) {
-  const llm = result?.llm_guidance || status?.llm_guidance;
-  const lexicon = status?.lexicon_policy;
-  const presidio = result?.presidio_augment;
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <h2>Fallbacks</h2>
-        <Info size={18} />
-      </div>
-      <div className="guidance-block">
-        <strong>LLM guidance</strong>
-        <p>{llm?.message || llm?.role || "Last-resort semantic review is not automatic."}</p>
-        {result?.llm_guidance ? (
-          <Tags
-            values={
-              result.llm_guidance.recommend_review
-                ? result.llm_guidance.reasons
-                : ["no_llm_review_recommended"]
-            }
-          />
-        ) : null}
-      </div>
-      <div className="guidance-block">
-        <strong>Lexicon and rules</strong>
-        <p>{lexicon?.role || "Street suffixes, target lexicons, and cue checks run first."}</p>
-        {presidio ? (
-          <Tags
-            values={[
-              `presidio: ${presidio.enabled ? "enabled" : "off"}`,
-              `accepted: ${presidio.accepted_span_count ?? 0}`,
-              `rejected: ${presidio.rejected_span_count ?? 0}`
-            ]}
-          />
-        ) : null}
-      </div>
-    </section>
+    <nav className={className}>
+      {NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            aria-current={activeView === item.id ? "page" : undefined}
+            className={activeView === item.id ? "active" : ""}
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+            type="button"
+          >
+            <Icon size={17} />
+            {item.label}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
 function App() {
-  const [activeTool, setActiveTool] = useState("csv");
-  const [text, setText] = useState("");
-  const [mode, setMode] = useState("balanced");
-  const [styleScrub, setStyleScrub] = useState(false);
-  const [generalizeTargets, setGeneralizeTargets] = useState(false);
-  const [textProviders, setTextProviders] = useState({ presidio: false, gliner: false, scrubadub: false });
-  const [runModel, setRunModel] = useState(false);
-  const [runHsdClassifier, setRunHsdClassifier] = useState(false);
   const [modelStatus, setModelStatus] = useState(null);
-  const [result, setResult] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [activeView, setActiveView] = useState("dashboard");
+  const activeNav = NAV_ITEMS.find((item) => item.id === activeView) || NAV_ITEMS[0];
 
   useEffect(() => {
     fetch("/api/model-status")
@@ -557,260 +1220,34 @@ function App() {
       .catch(() => setModelStatus(null));
   }, []);
 
-  const originalParts = useMemo(
-    () => splitOriginal(text, result?.transformations || [], result?.protected_spans || []),
-    [text, result]
-  );
-  const outputParts = useMemo(
-    () => splitOutput(result?.privatized_text || "", result?.protected_output_spans || []),
-    [result]
-  );
-  const selectedTextProviders = Object.entries(textProviders)
-    .filter(([, enabled]) => enabled)
-    .map(([name]) => name);
-
-  function toggleTextProvider(name) {
-    setTextProviders((current) => ({ ...current, [name]: !current[name] }));
-  }
-
-  async function runPrivatize() {
-    setBusy(true);
-    setError("");
-    try {
-      const response = await fetch("/api/privatize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          mode,
-          style_scrub: styleScrub,
-          generalize_targets: generalizeTargets ? true : null,
-          providers: selectedTextProviders,
-          use_presidio: false,
-          run_model_ensemble: runModel,
-          run_hsd_classifier: runHsdClassifier
-        })
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || `Request failed with ${response.status}`);
-      }
-      setResult(await response.json());
-    } catch (err) {
-      setError(err.message || "Request failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function copyOutput() {
-    if (result?.privatized_text) {
-      navigator.clipboard.writeText(result.privatized_text);
-    }
-  }
-
-  function downloadAudit() {
-    if (!result) return;
-    const blob = new Blob([JSON.stringify(result, null, 2)], {
-      type: "application/json"
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "contextsafe-hsd-audit.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
-    <main className="shell">
-      <header className="topbar">
-        <div>
-          <div className="brand">
-            <ShieldCheck size={22} />
-            <span>ContextSafe-HSD Workbench</span>
+    <main className="app-frame">
+      <aside className="portal-sidebar" aria-label="Portal navigation">
+        <div className="sidebar-brand">
+          <ShieldCheck size={24} />
+          <div>
+            <strong>ContextSafe-HSD</strong>
+            <span>NGO Portal</span>
           </div>
-          <p>Local privacy review</p>
         </div>
-        <div className="top-actions">
-          <div className="segmented" role="group" aria-label="Workbench view">
-            <button className={activeTool === "csv" ? "active" : ""} onClick={() => setActiveTool("csv")} type="button">CSV</button>
-            <button className={activeTool === "text" ? "active" : ""} onClick={() => setActiveTool("text")} type="button">Text</button>
-          </div>
-          <div className="status-pill">FastAPI + React</div>
+        <PortalNav activeView={activeView} className="sidebar-nav" onSelect={setActiveView} />
+        <div className="sidebar-status">
+          <CheckCircle2 size={17} />
+          <span>Local auto pipeline</span>
         </div>
-      </header>
+      </aside>
+      <section className="portal-shell">
+        <header className="portal-topbar">
+          <div>
+            <span className="eyebrow">{activeNav.eyebrow}</span>
+            <h1>{activeNav.title}</h1>
+          </div>
+          <div className="status-pill">Auto pipeline</div>
+        </header>
+        <PortalNav activeView={activeView} className="mobile-nav" onSelect={setActiveView} />
 
-      {activeTool === "csv" ? <CsvWorkbench modelStatus={modelStatus} /> : (
-      <>
-      <section className="toolbar" aria-label="Controls">
-        <div className="segmented" role="group" aria-label="Mode">
-          {["balanced", "utility", "privacy"].map((option) => (
-            <button
-              className={mode === option ? "active" : ""}
-              key={option}
-              onClick={() => setMode(option)}
-              type="button"
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-        <label className="check">
-          <input
-            checked={styleScrub}
-            onChange={(event) => setStyleScrub(event.target.checked)}
-            type="checkbox"
-          />
-          <span>Style scrub</span>
-        </label>
-        <label className="check">
-          <input
-            checked={generalizeTargets}
-            onChange={(event) => setGeneralizeTargets(event.target.checked)}
-            type="checkbox"
-          />
-          <span>Generalize targets</span>
-        </label>
-        <label className="check">
-          <input
-            checked={textProviders.presidio}
-            disabled={modelStatus?.span_providers?.presidio?.available === false}
-            onChange={() => toggleTextProvider("presidio")}
-            type="checkbox"
-          />
-          <span>presidio</span>
-        </label>
-        {["gliner", "scrubadub"].map((name) => (
-          <label className="check" key={name}>
-            <input
-              checked={textProviders[name]}
-              disabled={modelStatus?.span_providers?.[name]?.available === false}
-              onChange={() => toggleTextProvider(name)}
-              type="checkbox"
-            />
-            <span>{name}</span>
-          </label>
-        ))}
-        <button className="ghost" onClick={() => setText(SAMPLE_TEXT)} type="button">
-          <Clipboard size={17} />
-          Sample
-        </button>
-        <button className="ghost icon-only" onClick={() => { setText(""); setResult(null); }} title="Reset" type="button">
-          <RotateCcw size={18} />
-        </button>
-        <button className="primary" disabled={busy} onClick={runPrivatize} type="button">
-          <Play size={18} />
-          {busy ? "Running" : "Run"}
-        </button>
+        <CsvWorkbench activeView={activeView} modelStatus={modelStatus} />
       </section>
-
-      {error ? (
-        <section className="error-line">
-          <AlertTriangle size={18} />
-          <span>{error}</span>
-        </section>
-      ) : null}
-
-      <section className="workspace">
-        <section className="editor-pane">
-          <div className="pane-title">
-            <h2>Input</h2>
-            <span>{text.length} chars</span>
-          </div>
-          <textarea
-            aria-label="Input text"
-            onChange={(event) => setText(event.target.value)}
-            placeholder="Paste text here"
-            spellCheck="false"
-            value={text}
-          />
-          <div className="preview-block">
-            <h3>Detected spans</h3>
-            <HighlightedText parts={originalParts} empty={!text} />
-          </div>
-        </section>
-
-        <section className="editor-pane">
-          <div className="pane-title">
-            <h2>Output</h2>
-            <div className="pane-actions">
-              <button className="ghost icon-only" disabled={!result} onClick={copyOutput} title="Copy output" type="button">
-                <Copy size={17} />
-              </button>
-              <button className="ghost icon-only" disabled={!result} onClick={downloadAudit} title="Download audit JSON" type="button">
-                <Download size={17} />
-              </button>
-            </div>
-          </div>
-          <HighlightedText parts={outputParts} empty={!result} />
-        </section>
-      </section>
-
-      <section className="evidence-grid">
-        <section className="panel">
-          <h2>Gauges</h2>
-          <div className="gauge-grid">
-            <Gauge label="Privacy gain" value={result?.gauges?.privacy_gain ?? 0} />
-            <Gauge label="Cue retention" value={result?.gauges?.cue_retention ?? 100} />
-            <Gauge label="Text similarity" value={result?.gauges?.text_similarity ?? 100} tone="neutral" />
-            <Gauge label="Residual risk" value={result?.gauges?.residual_risk ?? 0} tone="risk" />
-          </div>
-        </section>
-
-        <section className="panel">
-          <h2>Context</h2>
-          <Tags values={result?.context?.original?.context_tags || []} />
-          <h3>Warnings</h3>
-          <Tags values={result?.warnings || []} />
-        </section>
-
-        <section className="panel wide">
-          <h2>Transformations</h2>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Replacement</th>
-                  <th>Source</th>
-                  <th>Input Offset</th>
-                  <th>Output Offset</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(result?.transformations || []).map((item, index) => (
-                  <tr key={`${item.entity_type}-${index}`}>
-                    <td>{item.entity_type || "STYLE"}</td>
-                    <td>{item.replacement || "-"}</td>
-                    <td>{item.source || "-"}</td>
-                    <td>{Number.isInteger(item.source_start) ? `${item.source_start}-${item.source_end}` : "-"}</td>
-                    <td>{Number.isInteger(item.output_start) ? `${item.output_start}-${item.output_end}` : "-"}</td>
-                  </tr>
-                ))}
-                {!result?.transformations?.length ? (
-                  <tr>
-                    <td colSpan="5" className="muted-cell">No transformations</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <ModelPanel
-          result={result}
-          runHsdClassifier={runHsdClassifier}
-          runModel={runModel}
-          setRunHsdClassifier={setRunHsdClassifier}
-          setRunModel={setRunModel}
-          status={modelStatus}
-        />
-
-        <GuidancePanel result={result} status={modelStatus} />
-      </section>
-      </>
-      )}
     </main>
   );
 }

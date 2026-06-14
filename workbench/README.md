@@ -53,15 +53,17 @@ npm run dev
 
 ## Data Handling
 
-The backend processes pasted text in memory and returns aggregate metrics,
-offsets, placeholders, and warnings. It does not write raw text, logs, CSVs, or
-reports. Use synthetic or consented text for public demos.
+The dashboard processes CSV text locally and returns aggregate metrics,
+protected previews, and raw-text-free insight statistics. For demonstration
+flow, processed CSV results are cached under `workbench/.cache/csv_results/`
+using a hash of the uploaded CSV and the active processing options. The cache is
+local-only and intended for repeat demos; delete `workbench/.cache/` to clear it.
+Use synthetic or consented text for public demos.
 
-Paste-text mode defaults to deterministic `balanced` privatization. CSV uploads
-are processed in memory and default to `auto` with fast metrics and local-only
-optional model behavior. When "Replace text column" is enabled, the downloaded
-CSV preserves the original schema and writes the privatized text back into the
-selected text column. When it is disabled, the backend adds a
+CSV uploads are processed through the auto pipeline with fast metrics and
+local-only optional model behavior. When "Replace text column" is enabled, the
+downloaded CSV preserves the original schema and writes the privatized text back
+into the selected text column. When it is disabled, the backend adds a
 `privatized_text` helper column for local audit only.
 
 ## Highlighting
@@ -74,16 +76,19 @@ selected text column. When it is disabled, the backend adds a
 ## Detection Layers
 
 - Deterministic rules and small lexicons run for every CSV row.
-- Auto mode reports status for Presidio, scrubadub, GLiNER, token-policy,
-  semantic, local LLM, and HSD advisory components from installed local
-  dependencies and artifacts. Available providers/models used by the current
-  engine are lazy-loaded only for routed rows. Missing optional components are
-  shown as skipped/missing and fall back to the deterministic candidate.
+- Auto mode reports the active dashboard path: deterministic baseline,
+  Presidio/scrubadub PII assist, token-policy candidate evidence when local
+  artifacts are present, and HSD advisory preservation checks.
+- GLiNER is not shown in the dashboard unless an explicit local GLiNER model is
+  configured for a research run.
 - Filtered Presidio adds broader NER spans for likely names, locations, and
   durable dates, then rejects protected HSD cues and noisy spans.
 - RoBERTa + HateBERT token-policy ensemble is advisory guidance. It predicts
   token actions such as `MASK_IDENTIFIER`, `PROTECT_TARGET`, and `PROTECT_HSD`;
   auto mode batches model rows and never uses token-policy output as a direct
   rewrite.
-- LLM guidance is last-resort routing advice only. The workbench does not call
-  a local LLM automatically.
+- HSD advisory uses the registered hate-speech classifiers to score the
+  original and chosen protected candidate for each row, then rejects candidate
+  rewrites that lose too much hatred-detection signal. Platform insight uses
+  CSV post-classification labels when present; otherwise it uses these real
+  pipeline HSD advisory scores. It is not auto-moderation.

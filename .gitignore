@@ -13,3 +13,4 @@ data/evaluation/
 data/temp/
 node_modules/
 workbench/frontend/dist/
+workbench/.cache/

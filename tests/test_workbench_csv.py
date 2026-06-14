@@ -13,7 +13,137 @@ from contextsafe_hsd.span_providers.base import (
     SpanCandidate,
     SpanProviderOutput,
 )
-from workbench.backend.app import app
+import workbench.backend.app as workbench_app
+from workbench.backend.app import app, platform_insight_report
+
+
+def test_platform_insight_uses_pipeline_hsd_advisory_without_label_columns():
+    report = platform_insight_report(
+        original_rows=[
+            {
+                "id": "1",
+                "text": "Alex said Muslims should leave Boston.",
+            }
+        ],
+        output_rows=[
+            {
+                "id": "1",
+                "text": "[PERSON] said Muslims should leave [LOCATION].",
+            }
+        ],
+        text_col="text",
+        output_col="text",
+        aggregate={"residual_identifier_count": 0},
+        audit_rows=[
+            {
+                "chosen_candidate": "balanced",
+                "scores": [
+                    {
+                        "name": "balanced",
+                        "metrics": {
+                            "hsd_advisory": {
+                                "original_score": 0.92,
+                                "candidate_score": 0.89,
+                                "candidate_decision": "positive",
+                                "decision_threshold": 0.5,
+                            }
+                        },
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert report["classification"]["source"] == "pipeline_hsd_advisory"
+    assert report["classification"]["classified_rows"] == 1
+    assert report["classification"]["hatred_rows"] == 1
+    assert report["classification"]["mean_hatred_score"] == 0.89
+    assert report["target_groups"]["categories"]["religion"]["hatred_rows"] == 1
+    assert report["ngo_review"]["routing_rule"] == "pipeline_hsd_advisory_positive"
+
+
+def test_platform_insight_counts_positive_hsd_member_vote():
+    report = platform_insight_report(
+        original_rows=[
+            {
+                "id": "1",
+                "text": "Refugees should be banned from town.",
+            }
+        ],
+        output_rows=[
+            {
+                "id": "1",
+                "text": "Refugees should be banned from town.",
+            }
+        ],
+        text_col="text",
+        output_col="text",
+        aggregate={"residual_identifier_count": 0},
+        audit_rows=[
+            {
+                "chosen_candidate": "balanced",
+                "scores": [
+                    {
+                        "name": "balanced",
+                        "metrics": {
+                            "hsd_advisory": {
+                                "original_score": 0.44,
+                                "candidate_score": 0.48,
+                                "candidate_max_score": 0.96,
+                                "candidate_positive_model_count": 1,
+                                "model_count": 2,
+                                "candidate_decision": "negative",
+                                "decision_threshold": 0.5,
+                            }
+                        },
+                    }
+                ],
+            }
+        ],
+    )
+
+    assert report["classification"]["hatred_rows"] == 1
+    assert report["classification"]["mean_hatred_score"] == 0.96
+    assert report["classification"]["total_positive_model_votes"] == 1
+    assert report["classification"]["total_model_votes"] == 2
+    assert (
+        report["classification"]["model_vote_rule"]
+        == "one_or_more_registered_hsd_models_positive"
+    )
+
+
+def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
+    report = platform_insight_report(
+        original_rows=[
+            {
+                "case_id": "case-1",
+                "text": 'A user wrote "Muslims should leave" and I reported it.',
+                "hsd_answer": "1",
+            }
+        ],
+        output_rows=[
+            {
+                "case_id": "case-1",
+                "text": 'A user wrote "Muslims should leave" and I reported it.',
+                "hsd_answer": "1",
+            }
+        ],
+        text_col="text",
+        output_col="text",
+        aggregate={"residual_identifier_count": 0},
+        id_col="case_id",
+    )
+
+    assert report["classification"]["source"] == "csv_post_classification_columns"
+    assert report["classification"]["label_column"] == "hsd_answer"
+    assert report["classification"]["hatred_rows"] == 1
+    item = report["ngo_review"]["queue_preview"][0]
+    assert item["row_id"] == "case-1"
+    assert item["privacy_leakage"]["status"] == "clear"
+    assert item["context_preservation"]["components"]["target_group_reference"] == "preserved"
+    assert item["safeguard"]["human_review"]["required"] is True
+    assert item["safeguard"]["proportionate_response"]["auto_moderation"] is False
+    assert report["safeguards"]["human_review_required_rows"] == 1
 
 
 def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing():
@@ -22,8 +152,8 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
         "/api/csv/privatize",
         json={
             "csv_text": (
-                "id,text,label\n"
-                "1,Email alex@example.test because Muslims should leave.,hate\n"
+                "id,text,predicted_is_hate_speech,hate_speech_score\n"
+                "1,Email alex@example.test because Muslims should leave.,1,0.91\n"
             ),
             "text_col": "text",
             "id_col": "id",
@@ -37,11 +167,49 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
     assert response.status_code == 200
     body = response.json()
     rows = list(csv.DictReader(io.StringIO(body["output_csv"])))
-    assert list(rows[0]) == ["id", "text", "label"]
+    assert list(rows[0]) == ["id", "text", "predicted_is_hate_speech", "hate_speech_score"]
     assert rows[0]["text"] == "Email [EMAIL] because Muslims should leave."
     assert body["audit"]["summary"]["validation"]["valid"] is True
     assert body["manifest"]["mode"] == "auto"
     assert body["manifest"]["columns"]["output_col"] == "text"
+    insights = body["platform_insights"]
+    assert insights["classification"]["label"] == "post_classification_hatred"
+    assert insights["classification"]["hatred_rows"] == 1
+    assert insights["classification"]["hatred_rate"] == 1.0
+    assert insights["target_groups"]["categories"]["religion"]["hatred_rows"] == 1
+    assert insights["ngo_review"]["auto_moderation"] is False
+
+
+def test_workbench_csv_endpoint_persists_and_reuses_cached_result(tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+    client = TestClient(workbench_app.app)
+    payload = {
+        "csv_text": "id,text\n1,Email alex@example.test because Muslims should leave.\n",
+        "text_col": "text",
+        "id_col": "id",
+        "mode": "auto",
+        "replace_text": True,
+        "disabled_providers": ["presidio", "scrubadub", "gliner"],
+        "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+    }
+
+    first = client.post("/api/csv/privatize", json=payload)
+    assert first.status_code == 200
+    first_body = first.json()
+    assert first_body["cache"]["hit"] is False
+
+    lookup = client.post("/api/csv/cache", json=payload)
+    assert lookup.status_code == 200
+    lookup_body = lookup.json()
+    assert lookup_body["cache_hit"] is True
+    assert lookup_body["result"]["cache"]["hit"] is True
+    assert lookup_body["result"]["output_csv"] == first_body["output_csv"]
+
+    second = client.post("/api/csv/privatize", json=payload)
+    assert second.status_code == 200
+    second_body = second.json()
+    assert second_body["cache"]["hit"] is True
+    assert second_body["output_csv"] == first_body["output_csv"]
 
 
 def test_workbench_text_endpoint_uses_selected_span_provider(monkeypatch):
