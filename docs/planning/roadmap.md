@@ -2,16 +2,16 @@
 
 Status: active
 Owner area: future engineering plan
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: all workstreams
 
-This roadmap contains future work only. Current evidence lives in
-`docs/planning/current_status.md`; stable architecture lives in
-`docs/reference/pipeline.md`.
+This roadmap tracks maintained capabilities plus remaining future work. Current
+evidence lives in `docs/planning/current_status.md`; stable architecture lives
+in `docs/reference/pipeline.md`.
 
 ## Phase A: Performance And Fast Metrics
 
-Tasks:
+Maintain:
 
 - Keep fast metrics separate from deep metrics.
 - Ensure `create-submission` defaults to fast metrics.
@@ -28,7 +28,7 @@ Acceptance:
 
 ## Phase B: Auto Context And Provider Lifecycle
 
-Tasks:
+Maintain:
 
 - Keep provider/model discovery in `privhsd/auto/`.
 - Load providers/models once per run.
@@ -43,22 +43,22 @@ Acceptance:
 
 ## Phase C: Row Routing And Candidate Selection
 
-Tasks:
+Maintain:
 
 - Compute cheap row features.
 - Route only risky rows to optional providers/models.
 - Fuse spans and generate candidates.
 - Rerank and select the least destructive safe candidate.
 - Fall back to baseline on uncertainty/errors.
-- Implement the PII provider and edge-case plan in
-  `docs/planning/pii_provider_edge_case_plan.md`: obfuscated email detection,
-  reported-person contexts, short-name threat cue preservation, conservative
-  alias handling, and provider benchmarks.
-- Implement the privacy span model integration plan in
-  `docs/planning/privacy_span_model_integration_plan.md`: expose GLiNER model
-  selection, add a PII GLiNER profile, batch provider inference, benchmark
-  `nvidia/gliner-PII`, and keep `openai/privacy-filter` as a secondary
-  optional provider.
+- Preserve implemented PII edge-case fixes for obfuscated email, reported
+  names, short-name threat cue preservation, and conservative alias handling.
+
+Remaining work:
+
+- Add provider benchmarks for the PII provider/edge-case plan.
+- Benchmark `nvidia/gliner-PII` and other GLiNER alternatives before changing
+  defaults.
+- Keep `openai/privacy-filter` as a secondary proposed optional provider.
 
 Acceptance:
 
@@ -69,7 +69,7 @@ Acceptance:
 
 ## Phase D: Token-Policy Runtime
 
-Tasks:
+Maintain:
 
 - Keep token-policy ensemble as an advisory provider.
 - Batch inference.
@@ -84,7 +84,7 @@ Acceptance:
 
 ## Phase E: Workbench Auto UX
 
-Tasks:
+Maintain or extend:
 
 - Keep CSV auto mode as the default workbench path.
 - Show provider/model status.

@@ -63,17 +63,29 @@ python -m privhsd.cli sanitize-classify \
   --max-model-batch-size 32
 ```
 
-This command runs `auto` sanitization, appends hate-speech prediction columns,
-and writes a raw-text-free manifest with a `tradeoff` summary for identifier
-removal, cue retention, overmask warnings, and original-vs-sanitized HSD score
-drift. It is local-only by default; pass `--allow-model-download` only when you
-explicitly want the approved OSS Hugging Face classifiers downloaded or
-refreshed. Because prediction columns are added, this is an enriched analysis
-output, not an exact-format upload.
+This command runs the single `auto` sanitization path with a deterministic
+balanced baseline, replaces `text` in place, appends hate-speech prediction
+columns, and writes a raw-text-free manifest with a `tradeoff` summary for
+identifier removal, cue retention, overmask warnings, and
+original-vs-sanitized HSD score drift. Default hate columns are
+`is_hate_speech`, `hate_speech_score`, and `hate_speech_model_count`; if the
+label column already exists, the prediction label is written to
+`predicted_is_hate_speech` unless `--overwrite-hate-columns` is set. Because
+prediction columns are added, this is an enriched analysis output, not an
+exact-format upload.
 
-The trusted local configuration uses deterministic masking, Presidio,
-scrubadub, the token-policy ensemble, and a two-model RoBERTa HSD advisory
-ensemble.
+The always-available layer is deterministic masking. Auto mode reports status
+for optional Presidio, scrubadub, GLiNER, token-policy, semantic, local LLM,
+and HSD advisory components. Providers and models that are actually available
+to the current engine are lazy-loaded only when the route needs them. Model
+downloads are off by default; pass `--allow-model-download` only when you
+explicitly want approved OSS Hugging Face models downloaded or refreshed. The
+default HSD advisory registry is:
+
+```text
+facebook/roberta-hate-speech-dynabench-r4-target
+cardiffnlp/twitter-roberta-base-hate-latest
+```
 
 ## Create An Exact-Format Candidate
 
@@ -89,11 +101,14 @@ python -m privhsd.cli create-submission \
   --manifest data/outputs/recommended_merged.auto.manifest.json
 ```
 
-`--mode auto` runs deterministic balanced masking for every row, discovers
-local optional providers/models, routes only risky rows to them, and writes the
-selected text back into the original text column. A four-column CSV such as
-`source,author_id,text,is_hate_speech` stays exactly four columns in that order
-when `--replace-text` is used.
+`create-submission` requires `--replace-text`. `--mode auto` runs deterministic
+balanced masking for every row, discovers local optional providers/models,
+routes only risky rows to them, and writes the selected text back into the
+original text column. The output preserves the source columns and order; a
+four-column CSV such as `source,author_id,text,is_hate_speech` stays exactly
+four columns in that order. The manifest records `artifact_type:
+exact_format_submission`, input/output hashes, preserved columns, metrics,
+provider/model status for `auto`, and strict validation results.
 
 Validate upload shape:
 
@@ -130,8 +145,10 @@ Current evidence, readiness, and caveats live in
 
 The short version: `auto` is the primary exact-format path, `balanced` remains
 the deterministic fallback, token-policy models are advisory/reranking support,
-and exact submissions use `--metric-depth fast` by default. Use sampled or deep
-metrics only for explicit local audits under ignored `data/` paths.
+and exact submissions use `--metric-depth fast` by default. `privacy` mode, or
+`--generalize-targets`, can generalize protected target cues; the default
+submission path preserves them for HSD review. Use sampled or deep metrics only
+for explicit local audits under ignored `data/` paths.
 
 ## Demo Workbench
 

@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: challenge interpretation
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 ## Expected Output
 
@@ -31,8 +31,15 @@ We are building a preprocessing layer:
 - Input: CSV with a text column.
 - Output: same rows, same IDs, same labels, and either an added
   `privatized_text` column for local audit or text replaced in place for an
-  exact-format submission.
-- Audit: JSON file explaining every transformation.
+  exact-format submission. The official upload path is
+  `create-submission --replace-text`, normally with `--mode auto --metric-depth
+  fast`.
+- Enriched local output: `sanitize-classify` replaces text in place and appends
+  HSD advisory prediction columns, so it is useful for unseen-data triage but
+  is not exact-format.
+- Audit: exact submissions produce a manifest and validation report; local
+  `anonymize --audit` and `sanitize-classify --audit` runs can produce
+  raw-text-free row audit JSON.
 - Metrics: local proxy metrics for privacy gain and utility retention.
 
 The real privacy adversary is broader than PII lookup. The method should reduce
@@ -91,8 +98,8 @@ It should pass these legal-design checks:
   vulnerable or historically targeted groups.
 - It treats missing speaker, recipient, audience, and social-context data as
   uncertainty, not as permission to make a definitive legal conclusion.
-- It keeps row-level reasons, typed placeholders, manifests, hashes, and metrics
-  available for audit.
+- It keeps typed placeholders, manifests, hashes, and metrics available for
+  audit, with row-level reasons available in local audit/review artifacts.
 - It identifies where human reviewers must step in: high-risk protected-group
   targeting, threats, large semantic drift, uncertain context, and any
   moderation consequence beyond dataset anonymisation.

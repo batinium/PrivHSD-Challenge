@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: architectural decisions
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: repository-wide
 
 Use this file for short decisions that multiple agents need to respect.
@@ -49,3 +49,16 @@ slow.
 
 Implication: deep or sampled reports are explicit local audits under ignored
 `data/` paths.
+
+## ADR-005: Enriched Classification Output Is Not Submission Output
+
+Decision: `sanitize-classify` may replace text in place and append advisory HSD
+prediction columns for local triage, but exact-format uploads still use
+`create-submission`.
+
+Reason: challenge submissions need stable input schema, while local triage
+benefits from prediction columns and aggregate original-vs-sanitized score
+drift.
+
+Implication: do not present appended `is_hate_speech`, `hate_speech_score`, or
+`hate_speech_model_count` columns as upload-ready unless challenge rules change.

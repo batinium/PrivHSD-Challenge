@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: documentation navigation
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 This directory is split so multiple agents can work without editing the same
 markdown files. Use the authoritative doc for the area you are changing, then
@@ -20,6 +20,14 @@ link out instead of duplicating content.
   architecture.
 - [planning/current_status.md](planning/current_status.md) - current evidence
   and readiness snapshot.
+
+## Current Operational Shape
+
+The repository now has one local preprocessing/privacy pipeline, not a
+production HSD classifier. Use `create-submission --replace-text --mode auto`
+for exact-format candidate CSVs, `sanitize-classify` only for enriched local
+analysis with appended HSD advisory columns, and token-policy/LLM/model paths
+as optional advisory evidence rather than direct upload outputs.
 
 ## Runbooks
 

@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: proposal and team pitch
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 ## PNG Chart
 
@@ -18,8 +18,8 @@ flowchart LR
     B["Privacy + Author Doxxing Risk<br/>PII spans, handles, locations, author clues"]:::task
     C["Risk Hiding<br/>typed placeholders + style reduction"]:::task
     D["Meaning Protection<br/>target, threat, negation, quote, counterspeech"]:::task
-    E["HSD Classification<br/>label + confidence on protected text"]:::task
-    F["Output + Audit<br/>safe text, prediction, model versions, validation"]:::output
+    E["Optional HSD Advisory<br/>drift check or local enriched predictions"]:::task
+    F["Output + Manifest<br/>exact protected text, validation, provider/model status"]:::output
 
     A --> B --> C --> D --> E --> F
     D -- "meaning changed too much" --> C
@@ -34,8 +34,9 @@ flowchart LR
 ContextSafe-HSD is a modular privacy layer for hate-speech datasets. It does not
 try to be a legal decision system or one giant black-box rewrite model. It takes
 a raw row, detects privacy and author-doxxing risks, hides risky details,
-checks that hate-speech meaning survived, classifies the protected text, and
-exports an auditable reviewer-safe result.
+checks that hate-speech meaning survived, optionally scores protected text for
+utility drift or local enriched analysis, and exports an auditable
+reviewer-safe result.
 
 The main design choice is: **use pretrained models per task, but keep each model
 output narrow and checkable.**
@@ -44,13 +45,13 @@ output narrow and checkable.**
 
 | Task | What it does | Model / technology |
 | --- | --- | --- |
-| Privacy risk detection | Finds names, emails, handles, locations, organizations, IDs, phone numbers. | `nvidia/gliner-PII` as transformer span detector; Microsoft Presidio, scrubadub, and regex as framework/rule fallbacks |
+| Privacy risk detection | Finds names, emails, handles, locations, organizations, IDs, phone numbers. | Deterministic regex/rule detector is always present; optional local Presidio, scrubadub, GLiNER, and token-policy spans can add candidates in auto mode |
 | Author doxxing risk identification | Detects details that can expose or re-identify the author or target: repeated handle, school/workplace, city, contact info, signature, unique style markers. | PII span combinations, metadata checks, style-risk heuristics, optional author-risk classifier |
 | Risk hiding | Replaces accepted spans with placeholders and optionally reduces author-style leakage. | Deterministic policy: `[PERSON]`, `[USER]`, `[EMAIL]`, `[LOCATION]`, `[ORG]`, `[ID]`; style scrubber |
 | Meaning protection | Checks whether masking removed target group, threat, negation, quote, counterspeech, or other HSD cues. | Rule-based cue checks plus HSD model drift check |
-| HSD classification | Predicts hate-speech risk on protected text. | `cardiffnlp/twitter-roberta-base-hate-latest`, `facebook/roberta-hate-speech-dynabench-r4-target`, local TF-IDF + Logistic Regression baseline |
-| Optional rationale | Explains which tokens influenced the HSD prediction. | `Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two` |
-| Audit | Records what changed without storing raw sensitive text. | Model names, versions, span counts, leakage gate, validation status |
+| HSD advisory / local classification | Scores original and protected text for candidate selection or appends local prediction columns in `sanitize-classify`. | Default approved advisory ensemble: `facebook/roberta-hate-speech-dynabench-r4-target` and `cardiffnlp/twitter-roberta-base-hate-latest`; local TF-IDF + Logistic Regression baseline commands are available |
+| Optional rationale | Proposed/research evidence for explaining abusive/normal predictions. | `Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two` is not part of the current official auto path |
+| Audit | Records what changed without storing raw sensitive text. | Exact manifest, validation status, provider/model status, load counts, span/metric counts; optional row audit for local `anonymize`/`sanitize-classify` runs |
 
 ## Author Doxxing Risk
 
@@ -77,7 +78,14 @@ Action: mask direct identifiers and flag for reviewer-safe display
 
 ## Model Notes
 
-- `nvidia/gliner-PII`: PII/PHI span detector for broad privacy-risk detection.
+These are approved or proposed components, not a claim that every model runs on
+every official row. The current official auto path keeps deterministic balanced
+masking as the always-available fallback and uses optional local components only
+when dependencies/artifacts are ready.
+
+- `nvidia/gliner-PII`: optional PII/PHI span detector for broad privacy-risk
+  detection when GLiNER dependency and a local or download-allowed model are
+  available.
 - Microsoft Presidio: mature PII detection and anonymization framework; useful
   as a fallback/comparison detector and for custom recognizers/operators.
 - scrubadub: lightweight PII detector for emails, URLs, phones, handles, names,
@@ -89,7 +97,8 @@ Action: mask direct identifiers and flag for reviewer-safe display
 - `facebook/roberta-hate-speech-dynabench-r4-target`: hate-detection model
   useful as a robustness/advisory check.
 - `Hate-speech-CNERG/bert-base-uncased-hatexplain-rationale-two`: optional
-  rationale/classification model for explaining abusive/normal predictions.
+  proposed rationale/classification model for explaining abusive/normal
+  predictions.
 
 Source links:
 

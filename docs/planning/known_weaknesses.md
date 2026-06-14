@@ -18,6 +18,8 @@ This file keeps risks visible so they do not get buried in run logs.
 | Source regression can be slow | A report that silently runs deep checks blocks iteration. | Keep metric-depth controls and fast source-slice reporting. |
 | Weak token labels | Token-policy models learn the current rule policy, not human privacy labels. | Keep token-policy advisory until official or human labels exist. |
 | Advisory hate predictions are not ground truth | OSS classifiers are useful for triage and drift checks but can be biased or wrong. | Keep prediction columns in enriched outputs only and preserve exact submission labels. |
+| `--auto-profile` is registered but inert | The CLI exposes the option, but no runtime config or output path currently consumes it. | Avoid documenting it as operational until code threads it into manifests or removes it. |
+| Optional GLiNER/PII providers lack gold-span proof | GLiNER profiles and batching exist, but public PII span benchmarks are not implemented. | Keep PII models optional and require benchmark evidence before changing defaults. |
 | `PROTECT_TARGET` is imperfect | Target protection is legally and clinically important for HSD evidence. | Preserve deterministic target protection and add target-rich external evaluation. |
 | Author-risk not proven on authorless data | True stylometric privacy needs repeated author/user IDs. | Use `bound-contributions` when filtering is allowed and run author-risk only when repeated author IDs exist. |
 | LLM/DPMLM candidates are low-yield | They can drift semantically or lose cues. | Keep them candidate-only behind validation and reranking. |

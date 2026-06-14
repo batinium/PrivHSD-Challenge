@@ -57,11 +57,12 @@ The backend processes pasted text in memory and returns aggregate metrics,
 offsets, placeholders, and warnings. It does not write raw text, logs, CSVs, or
 reports. Use synthetic or consented text for public demos.
 
-CSV uploads are processed in memory. The default CSV mode is `auto` with fast
-metrics. When "Replace text column" is enabled, the downloaded CSV preserves the
-original schema and writes the privatized text back into the selected text
-column. When it is disabled, the backend adds a `privatized_text` helper column
-for local audit only.
+Paste-text mode defaults to deterministic `balanced` privatization. CSV uploads
+are processed in memory and default to `auto` with fast metrics and local-only
+optional model behavior. When "Replace text column" is enabled, the downloaded
+CSV preserves the original schema and writes the privatized text back into the
+selected text column. When it is disabled, the backend adds a
+`privatized_text` helper column for local audit only.
 
 ## Highlighting
 
@@ -73,10 +74,11 @@ for local audit only.
 ## Detection Layers
 
 - Deterministic rules and small lexicons run for every CSV row.
-- Auto mode discovers Presidio, scrubadub, GLiNER, token-policy, semantic, and
-  HSD advisory components from installed local dependencies and artifacts.
-  Missing optional components are shown as skipped/missing and fall back to the
-  deterministic candidate.
+- Auto mode reports status for Presidio, scrubadub, GLiNER, token-policy,
+  semantic, local LLM, and HSD advisory components from installed local
+  dependencies and artifacts. Available providers/models used by the current
+  engine are lazy-loaded only for routed rows. Missing optional components are
+  shown as skipped/missing and fall back to the deterministic candidate.
 - Filtered Presidio adds broader NER spans for likely names, locations, and
   durable dates, then rejects protected HSD cues and noisy spans.
 - RoBERTa + HateBERT token-policy ensemble is advisory guidance. It predicts

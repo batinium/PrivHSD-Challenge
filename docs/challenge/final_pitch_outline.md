@@ -4,7 +4,7 @@ Date: 2026-06-12
 
 Status: active
 Owner area: pitch and demo narrative
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 Use this as the five-minute Dragon's Den story. The goal is to show a working
 system, a rights-aware privacy/utility tradeoff, and a plausible public-impact
@@ -24,8 +24,9 @@ preserving the evidence needed to detect and review hate.
 2. System: a local CSV-to-CSV privatization pipeline with exact-format
    validation, typed placeholders, manifests, hashes, cue checks, slice
    regression, and human-review queues.
-3. Evidence: show the current `balanced` result and transformer token-policy
-   ensemble results without raw text.
+3. Evidence: show the current exact-format `auto` result, the deterministic
+   `balanced` fallback, and transformer token-policy/advisory evidence without
+   raw text.
 4. Rights framing: this is not a takedown engine. It preserves target/action
    and negation cues so vulnerable-group abuse is not hidden and lawful
    expression is not flattened into "hate" by a noisy model.
@@ -33,6 +34,9 @@ preserving the evidence needed to detect and review hate.
    show the audit, risk gauges, and export manifest.
 
 ## Evidence To Show
+
+Historical/local evidence below should be replaced with the final exact
+`auto` submission metrics before the pitch.
 
 | Evidence | Number | Why it matters |
 | --- | ---: | --- |
@@ -51,19 +55,20 @@ preserving the evidence needed to detect and review hate.
 ```bash
 python -m privhsd.cli create-submission \
   --input INPUT.csv \
-  --output data/outputs/SUBMISSION.balanced.csv \
+  --output data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
   --replace-text \
-  --mode balanced \
-  --manifest data/outputs/SUBMISSION.balanced.manifest.json
+  --mode auto \
+  --metric-depth fast \
+  --manifest data/outputs/SUBMISSION.auto.manifest.json
 
 python -m privhsd.cli validate-submission \
   --source INPUT.csv \
-  --submission data/outputs/SUBMISSION.balanced.csv \
+  --submission data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/SUBMISSION.balanced.validation.json
+  --output data/outputs/SUBMISSION.auto.validation.json
 ```
 
 Show:

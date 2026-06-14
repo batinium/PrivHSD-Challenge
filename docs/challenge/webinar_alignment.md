@@ -4,7 +4,7 @@ Date: 2026-06-13
 
 Status: active
 Owner area: challenge alignment and deliverables
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 This note converts the PrivHSD webinar transcript into concrete project aims,
 direction, and deliverables. It should guide what we build and what we show
@@ -63,8 +63,10 @@ not as an automated takedown engine or legal hate-speech judge.
 3. Treat the problem as a privacy/utility tradeoff, not generic PII redaction.
    Simple named-entity anonymization was called out as insufficient.
 4. Keep deterministic, auditable masking as the reliable baseline. Optional
-   Presidio, GLiNER, scrubadub, token-policy, DPMLM, or LLM candidates must
-   pass cue, drift, and residual-identifier checks before they affect output.
+   Presidio, GLiNER, scrubadub, and token-policy candidates must pass cue,
+   drift, and residual-identifier checks before they affect auto output. DPMLM
+   and LLM candidates are separate research/helper outputs that must go through
+   reranking and exact validation before any upload.
 5. Avoid broad zero-shot LLM rewriting as a direct solution. The webinar noted
    poor tradeoffs from generic prompting; any LLM use should be specialized,
    constrained, local or reproducible, and behind reranking.
@@ -105,7 +107,7 @@ Deliver:
 - row count, column order, IDs, labels, source/split fields, author IDs, and
   metadata preserved;
 - manifest with command, commit, input/output hashes, mode, provider/model
-  status, validation, and aggregate metrics;
+  status when auto runs, validation, and aggregate metrics;
 - official score screenshot or run note under ignored `data/outputs/`.
 
 Success standard:

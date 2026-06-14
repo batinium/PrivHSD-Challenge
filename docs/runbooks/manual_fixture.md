@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: synthetic/manual fixtures
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `tests/fixtures/manual_privacy_expectations.csv`,
 `privhsd/pipeline.py`, `privhsd/cue_checks.py`
 
@@ -44,5 +44,8 @@ python -m privhsd.cli validate-submission \
 - Identifiers should become typed placeholders.
 - Protected target words should remain available for HSD review.
 - Output should avoid broad target generalization in the default path.
+- The exact-format command should keep the fixture's original columns and row
+  order; no `privatized_text` helper column should appear when `--replace-text`
+  is used.
 - The workbench should show changed spans, protected spans, warning codes,
   provider/model status, and downloadable audit artifacts.

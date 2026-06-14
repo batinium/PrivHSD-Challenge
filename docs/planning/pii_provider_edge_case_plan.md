@@ -2,13 +2,19 @@
 
 Status: active
 Owner area: planning handoff for deterministic masking and optional PII providers
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/detectors.py`, `privhsd/pipeline.py`,
 `privhsd/span_providers/`, `privhsd/auto/`, `tests/fixtures/`
 
 This file is an implementation handoff for agents working on PII provider
 selection and the current edge-case gaps. It records the benchmark conclusion
 for HydroXai PII Masker and gives concrete next tasks.
+
+Status note: the deterministic edge-case fixes for obfuscated email/contact
+forms, reported-person contexts, short-name threat cue preservation, and
+conservative alias handling are now implemented and covered by
+`tests/test_pipeline.py` plus `tests/test_synthetic_pii_stress.py`. The
+HydroXai and provider-benchmark sections remain historical/proposed.
 
 ## Decision
 
@@ -19,17 +25,21 @@ local provider wrapper, but it should not become the official or default
 provider until packaging, license, offset handling, and edge-case performance
 are resolved.
 
-The immediate engineering work should be:
+Current engineering policy:
 
-1. Patch deterministic detection for the known edge cases.
+1. Preserve deterministic coverage for the known edge cases.
 2. Keep filtered Presidio as the stronger optional provider, routed
    conservatively.
 3. Keep all optional provider output behind fusion, cue protection, candidate
    scoring, and exact-format validation.
-4. Add a small provider benchmark command or runbook only after the detector
-   fixes are in place.
+4. Add a small provider benchmark command or runbook only if future provider
+   changes need comparable evidence.
 
-## Benchmark Evidence
+## Historical Benchmark Evidence
+
+The following generated reports predate the later deterministic detector
+tuning. They still explain why HydroXai should not be promoted, but they should
+not be read as the current manual-fixture detector status.
 
 Generated reports:
 
@@ -113,11 +123,12 @@ If an agent still implements a HydroXai provider, it must be experimental:
 
 ### Task 1: Obfuscated Email Detection
 
-Problem:
+Status: implemented as of 2026-06-14. Keep this section as regression context.
 
-The current deterministic detector catches normal email addresses but misses
-synthetic obfuscated contacts such as `lina [at] example dot test` in row
-`M006`.
+Historical problem:
+
+The deterministic detector caught normal email addresses but missed synthetic
+obfuscated contacts such as `lina [at] example dot test` in row `M006`.
 
 Implementation target:
 
@@ -183,10 +194,12 @@ python -m pytest tests/test_pipeline.py tests/test_synthetic_pii_stress.py -q
 
 ### Task 2: Reported/Counterspeech Person Names
 
-Problem:
+Status: implemented as of 2026-06-14. Keep this section as regression context.
+
+Historical problem:
 
 Row `M002` contains a reported/counterspeech context with a person name. The
-current baseline leaves the expected person placeholder missing.
+old baseline left the expected person placeholder missing.
 
 Implementation target:
 
@@ -224,10 +237,12 @@ Acceptance tests:
 
 ### Task 3: Short-Name Threat Context Without Cue Loss
 
-Problem:
+Status: implemented as of 2026-06-14. Keep this section as regression context.
 
-Row `M012` currently risks masking `Kill Alex` as a single `PERSON` span in
-the deterministic baseline, which removes the HSD action cue `Kill`.
+Historical problem:
+
+Row `M012` risked masking `Kill Alex` as a single `PERSON` span in the
+deterministic baseline, which removed the HSD action cue `Kill`.
 
 Implementation target:
 
@@ -277,9 +292,12 @@ Acceptance tests:
 
 ### Task 4: Alias And Platform Handle Coverage
 
-Problem:
+Status: implemented for the documented high-precision forms as of 2026-06-14.
+Keep this section as regression context and as guidance for future expansion.
 
-The current system handles some alias forms, but provider benchmarks show that
+Historical problem:
+
+The system handled some alias forms, but provider benchmarks showed that
 social/contact identifiers remain an important class. These should be handled
 deterministically where high precision is possible.
 
@@ -331,6 +349,10 @@ Acceptance tests:
 
 ### Task 5: Provider Fusion Should Not Replace Deterministic Strength
 
+Status: implemented in the current `privatize_text()` provider-candidate path
+and covered by span-provider/auto tests. Keep this section as a regression
+policy.
+
 Problem:
 
 HydroXai candidate spans sometimes caused fewer placeholders than the
@@ -357,6 +379,9 @@ Suggested tests:
   according to existing cue-preservation rules.
 
 ### Task 6: Conservative Presidio Routing
+
+Status: implemented as the current auto routing policy. Presidio remains
+optional, discovered lazily, and routed through fusion/scoring/fallback.
 
 Problem:
 
@@ -391,6 +416,8 @@ Acceptance tests:
   fixtures.
 
 ### Task 7: First-Class PII Provider Benchmark Command
+
+Status: not implemented. This remains proposed future work.
 
 Problem:
 
@@ -441,9 +468,9 @@ Acceptance tests:
 - JSON output has no raw text unless `--include-text-debug` is set.
 - Public-dev sampling is deterministic for a fixed seed.
 
-## Recommended Acceptance Gate For This Work
+## Regression Gate For Existing Edge Fixes
 
-After Tasks 1 to 4, run:
+When changing deterministic detectors, run:
 
 ```bash
 python -m pytest tests/test_pipeline.py tests/test_span_providers.py tests/test_synthetic_pii_stress.py -q
@@ -516,11 +543,13 @@ python -m privhsd.cli source-regression-report \
 
 Recommended next agent assignment:
 
-1. Implement Task 1 and Task 3 first. They fix the clearest precision bugs.
-2. Implement Task 2 next to handle reported/counterspeech names.
-3. Implement Task 4 if time remains.
-4. Run the manual fixture and cue-check gate.
-5. Only then revisit provider-level benchmarking or official-path routing.
+1. Preserve the implemented deterministic edge-case regressions.
+2. Add provider-level benchmarking only if future provider changes need
+   comparable evidence.
+3. Keep HydroXai research-only unless packaging, license, offset grouping, and
+   benchmark performance change materially.
+4. Continue using optional providers only through fusion, cue protection,
+   candidate scoring, and exact-format validation.
 
 Expected impact:
 

@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: official CSV workflow
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/csv_pipeline.py`, `privhsd/submission.py`,
 `privhsd/auto/`
 
@@ -54,6 +54,11 @@ python -m privhsd.cli create-submission \
 Do not pass `--allow-model-download` on official data unless the run note
 explicitly approves downloading optional local model weights.
 
+This command must use `--replace-text`. It preserves the source column names,
+column order, row count, row order, IDs, and non-text metadata, and the manifest
+records hashes, metrics, provider/model status, load counts, preserved columns,
+and strict validation. It does not append helper columns or HSD predictions.
+
 ## 4. Validate Shape
 
 ```bash
@@ -98,7 +103,9 @@ structured skip rather than inventing an author label.
    exact-format validation.
 
 Never upload raw Presidio, raw GLiNER, raw scrubadub, DPMLM, SanText, or LLM
-output directly.
+output directly. Those historical/planning paths are candidate or comparison
+tools only; the current operational upload path is the single exact-format
+submission pipeline.
 
 ## Decision Rule
 

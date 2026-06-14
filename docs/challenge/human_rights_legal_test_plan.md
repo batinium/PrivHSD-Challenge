@@ -4,7 +4,7 @@ Date: 2026-06-11
 
 Status: active
 Owner area: legal and governance stress tests
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 
 This note captures the legal and governance constraints that should guide the
 PrivHSD proof of concept. The challenge system is a privacy-preserving text
@@ -122,7 +122,7 @@ concept, the practical mapping is:
 
 | Requirement | PoC response |
 | --- | --- |
-| Transparency | Deterministic default rules, typed placeholders, row-level audit JSON, manifests, hashes, and explicit utility/privacy metrics. |
+| Transparency | Deterministic default rules, typed placeholders, exact-submission manifests, hashes, validation reports, optional local row-level audit JSON, and explicit utility/privacy metrics. |
 | Accountability | The tool produces transformations and evidence; the deploying organisation remains responsible for moderation, takedown, appeal, and remedy decisions. |
 | Human oversight | The system stops at anonymisation plus risk/utility evidence. Human reviewers step in for high-risk hate cues, large semantic drift, missing context, or any operational sanction. |
 | Risk assessment | Evaluate both false positives against lawful expression and false negatives against vulnerable groups. |

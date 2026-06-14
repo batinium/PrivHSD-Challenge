@@ -3,7 +3,7 @@
 Status: active planning handoff
 Owner area: public dataset adapters, deep evaluation, PII span benchmarks,
 source-slice utility reports
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/datasets.py`, `privhsd/rationale_checks.py`,
 `privhsd/source_report.py`, future `privhsd/pii_span_benchmark.py`, future
 dataset-specific report modules
@@ -78,8 +78,9 @@ Main gaps:
 - HateCheck is normalized, but there is no functionality-level drift report.
 - Jigsaw identity-slice fairness/utility drift is not integrated.
 - ToxiGen, CONAN, CAD, and PIIMB are not integrated or license-gated.
-- Optional GLiNER model choice is configurable in some paths, but Gretel
-  PII-tuned GLiNER models are not benchmarked as provider replacements.
+- Optional GLiNER model/profile choice is configurable on auto-capable CLI/API
+  paths, but Gretel PII-tuned GLiNER models are not benchmarked as provider
+  replacements.
 
 ## Live Metadata Snapshot
 
@@ -221,7 +222,7 @@ privhsd/datasets.py
 tests/test_prepare_public_eval_datasets.py
 ```
 
-Recommended CLI:
+Proposed CLI name:
 
 ```text
 prepare-public-eval-datasets
@@ -605,8 +606,8 @@ Implementation checklist:
 
 1. Keep `DEFAULT_GLINER_MODEL` stable until benchmark evidence supports a
    change.
-2. Ensure all CLI paths that load GLiNER accept `--gliner-model` or config
-   equivalent.
+2. Preserve current CLI/API support for `--gliner-model` and
+   `--gliner-profile`.
 3. Add provider benchmark metadata:
    - provider name;
    - model ID/path;

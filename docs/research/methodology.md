@@ -4,15 +4,21 @@ Date: 2026-06-12
 
 Status: active
 Owner area: research methodology
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/detectors.py`, `privhsd/pipeline.py`,
 `privhsd/rerank.py`, `privhsd/token_policy.py`
 
 This note explains why the pipeline uses deterministic rules, lexicons,
-misspelling handling, optional Presidio/DPMLM/LLM candidates, token-policy
+misspelling handling, optional provider/model evidence, token-policy
 fine-tuning, and reranking. It is meant to support judge questions about
 provenance, redundancy, and the privacy/utility tradeoff. The relevant research
 support is summarized in the references at the end of this file.
+
+Current operational boundary: `create-submission` is the exact-format upload
+path, `anonymize` is the helper-column or replace-text CSV path, and
+`sanitize-classify` is an enriched local triage path that appends advisory HSD
+prediction columns. Optional model/provider outputs remain evidence behind
+fusion, scoring, and validation rather than standalone final text.
 
 For the human-rights and legal test framing, see
 [human_rights_legal_test_plan.md](../challenge/human_rights_legal_test_plan.md).
@@ -57,7 +63,7 @@ Academic support:
 | Action/utility cues | Needed to preserve whether the text expresses hate, exclusion, threat, or dehumanization. | Existing utility cues, observed local false negatives/DPMLM failures, and literature on target-specific hate language. | `check-hsd-cues` must keep action/negation/utility retention near 1.0. |
 | Identifier regexes | Direct privacy baseline for emails, handles, phones, URLs, IDs, dates, locations, names in context. | Conventional PII classes plus local synthetic tests. | Must reduce residual identifiers without changing row shape. |
 | Repeated-letter and spelling variants | Social media hate often uses noisy spelling, obfuscation, and filter-evasion. | Social-media hate-speech literature and local error analysis. | Normalize only when it preserves protected cue meaning; freeze repeated-letter tokens for DPMLM. |
-| Presidio spans | High-recall optional detector for names, locations, and dates. | Presidio output filtered by local policy. | Reject `NRP`, target/action overlaps, transient dates, and noisy shape false positives. |
+| Optional provider spans | High-recall evidence for names, locations, dates, handles, and other PII-like spans. | Filtered Presidio, scrubadub, GLiNER profiles, and token-policy span evidence when dependencies/artifacts exist. | Keep local-only by default; reject invalid offsets, target/action overlaps, transient dates, noisy shape false positives, and lower-priority overlaps. |
 
 The lexicons are not presented as complete dictionaries of hate. They are a
 guardrail for preserving HSD utility and preventing neural rewrites from
@@ -148,7 +154,14 @@ dataset provides explicit evidence spans.
 Reranking means the pipeline generates multiple row-local candidates, scores
 each candidate, and chooses the best privacy/HSD tradeoff per row.
 
-Current candidates include:
+Current auto candidates include:
+
+- balanced deterministic baseline,
+- style-scrubbed deterministic candidate when routed or requested,
+- provider-fusion augmented candidate,
+- token-policy candidate when local artifacts are available.
+
+The separate reranking research path can also compare:
 
 - `balanced`,
 - `style_scrubbed`,

@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: workbench
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `workbench/backend/`, `workbench/frontend/`, `launch.py`
 
 The workbench is a local FastAPI + React demo around the existing `privhsd`
@@ -33,7 +33,10 @@ Open `http://127.0.0.1:5173`.
 ## Expected Behavior
 
 - Paste-text mode processes text in memory.
-- CSV upload mode defaults to `auto` with fast metrics.
+- Paste-text mode uses the deterministic `balanced` path by default; selected
+  providers are explicit local additions.
+- CSV upload mode defaults to `auto` with fast metrics and local-only optional
+  model behavior.
 - Replace-text CSV output preserves the original schema.
 - Helper-column CSV output adds `privatized_text` for local audit only.
 - Provider/model status is visible but the user should not need to manually

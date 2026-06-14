@@ -23,6 +23,26 @@ column with sanitized text, appends HSD prediction columns, and records
 original-vs-sanitized advisory score drift without row text. It is not an
 exact-format upload path.
 
+## Current CLI Contract
+
+- `create-submission` is the exact-format path. It requires `--replace-text`,
+  preserves row count/order/columns, and rejects helper columns during
+  validation.
+- `anonymize` is the general CSV path. It defaults to `mode=balanced`,
+  `output_col=privatized_text`, and `metric-depth=fast`; `--mode auto`
+  enables routed optional providers/models.
+- `sanitize-classify` always uses auto orchestration, replaces the selected
+  text column, and appends advisory HSD columns. If a gold
+  `is_hate_speech` column exists, predictions are written to
+  `predicted_is_hate_speech` unless `--overwrite-hate-columns` is passed.
+- Optional Presidio, scrubadub, GLiNER, token-policy, and HSD advisory outputs
+  are advisory evidence behind routing, fusion, candidate scoring, and
+  fallback. GLiNER model/profile selection and provider batching are
+  implemented; `openai/privacy-filter`, HydroXai, and public PII span
+  benchmarking are still proposed work.
+- Exact and auto CSV paths default to `metric-depth=fast`; sampled/deep metrics
+  are opt-in local audits.
+
 ## Latest Verification Snapshot
 
 Most recent local configuration search and final enriched CSV run:
@@ -59,6 +79,10 @@ Final aggregate result:
 Focused regression after detector tuning:
 
 - `python -m pytest tests/test_pipeline.py -q`: 26 passed.
+- `python -m pytest tests/test_pipeline.py tests/test_synthetic_pii_stress.py -q`: 29 passed during the docs refresh.
+- Point-in-time optional dependency import check during the docs refresh:
+  GLiNER, Presidio, scrubadub, torch, and transformers importable;
+  sentence-transformers and Detoxify not importable.
 
 Most recent local verification after the simplified pipeline and HSD advisory
 ensemble update:

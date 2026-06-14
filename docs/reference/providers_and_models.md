@@ -10,8 +10,8 @@ This is the authoritative reference for optional providers and local model
 behavior.
 
 Detailed implementation handoffs live in planning docs. For GLiNER PII,
-`openai/privacy-filter`, provider batching, and benchmark gates, use
-`docs/planning/privacy_span_model_integration_plan.md`.
+future `openai/privacy-filter` work, provider lifecycle history, and benchmark
+gates, use `docs/planning/privacy_span_model_integration_plan.md`.
 
 ## Lifecycle Rules
 
@@ -65,8 +65,10 @@ Example manifest status:
   "providers": {
     "deterministic": {"status": "ready"},
     "presidio": {"status": "ready"},
-    "gliner": {"status": "missing_dependency"},
-    "scrubadub": {"status": "missing_dependency"},
+    "gliner": {"status": "missing_artifact"},
+    "scrubadub": {"status": "ready"}
+  },
+  "models": {
     "token_policy_ensemble": {"status": "ready", "device": "cuda"}
   }
 }

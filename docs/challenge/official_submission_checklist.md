@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: final upload checklist
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary runbook: `docs/runbooks/official_submission.md`
 
 Use this before any leaderboard upload. Keep raw challenge examples out of
@@ -20,7 +20,8 @@ commits, markdown, screenshots, and chat.
 - `validate-submission` passes with no helper columns.
 - Row count, column order, ID order, labels, and metadata match the source.
 - Manifest exists and records command, git commit, input/output hashes, mode,
-  metric depth, provider/model status, validation, and aggregate metrics.
+  metric depth, validation, and aggregate metrics. For the recommended
+  `--mode auto` run, it also records provider/model status and load counts.
 - Exact submission metrics use `--metric-depth fast` unless a separate local
   audit explicitly requests `sampled` or `deep`.
 - Generated reports, datasets, model weights, and run notes are under ignored
@@ -36,7 +37,9 @@ commits, markdown, screenshots, and chat.
 - Author-risk report when an author/user column has repeated values.
 - Token-policy ensemble report if using it as advisory evidence or candidates.
 - Candidate-reranking audit if using reranked output.
-- Presidio comparison or filtered Presidio audit if using Presidio augmentation.
+- Provider/model status from the auto manifest, plus a separate Presidio
+  comparison or filtered Presidio audit if Presidio behavior is part of the
+  evidence packet.
 
 LLM and DPMLM reports are optional research evidence. They are not required for
 a baseline upload and raw outputs must not be submitted directly.

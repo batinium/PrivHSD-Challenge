@@ -2,12 +2,14 @@
 
 Status: active
 Owner area: token-policy training and runtime
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/token_policy.py`, `privhsd/token_actions.py`,
 `privhsd/models/token_policy_runtime.py`
 
-The token-policy model learns weak token-action labels. It is advisory evidence
-for routing, fusion, and reranking; it is not a direct text replacement path.
+The token-policy model learns weak token-action labels. It is optional advisory
+evidence for auto routing, fusion, and reranking; it is not a direct text
+replacement path and is not required for the deterministic exact-format
+baseline.
 
 ## Install
 
@@ -93,4 +95,5 @@ python -m privhsd.cli apply-token-policy-candidates \
 ```
 
 Candidate outputs still require reranking, cue checks, and exact-format
-validation before they can affect a submission.
+validation before they can affect a submission. Do not upload
+`token_policy_candidate` helper columns directly.

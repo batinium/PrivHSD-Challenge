@@ -2,7 +2,7 @@
 
 Status: active planning handoff
 Owner area: deep evaluation, optional HSD advisory models, model-probe runtime
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/hf_utility.py`, `privhsd/models/`,
 `privhsd/auto/`, `privhsd/rationale_checks.py`
 
@@ -14,8 +14,9 @@ pipeline.
 ## Decision
 
 Keep the current anonymization architecture. Add a richer, opt-in utility-probe
-layer and upgrade the optional HSD advisory path from a single classifier to a
-small ensemble.
+layer. The optional HSD advisory path has already moved from a single default
+classifier to a small approved binary ensemble; calibration and richer probe
+taxonomy remain planned.
 
 The existing core is already aligned with the research:
 
@@ -267,15 +268,15 @@ Acceptance:
 
 ## Phase 3: Auto HSD Advisory Ensemble
 
-Status on 2026-06-13: implemented the backward-compatible single wrapper,
+Status on 2026-06-14: implemented the backward-compatible single wrapper,
 `HsdAdvisoryEnsembleRuntime`, repeatable `--hsd-advisory-model`, approved-model
 discovery, mean-score aggregate, per-model audit comparisons, and local-only
 default loading. Remaining work is calibration and richer consensus gates.
 
-Earlier behavior used one model in `HsdAdvisoryRuntime`. Upgrade this without
-breaking callers.
+Earlier behavior used one model in `HsdAdvisoryRuntime`. The implementation
+now keeps that wrapper and layers the ensemble on top.
 
-Preferred approach:
+Implemented approach and remaining gates:
 
 1. Keep `HsdAdvisoryRuntime` as the single pipeline wrapper.
 2. Add `HsdAdvisoryEnsembleRuntime` in

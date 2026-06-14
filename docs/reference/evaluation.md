@@ -16,9 +16,9 @@ Exact submissions default to `--metric-depth fast`.
 
 | Depth | Use | Expected behavior |
 | --- | --- | --- |
-| `fast` | Default exact submissions and progress summaries | Avoid expensive target-variant, spaced-token, external profanity, and semantic scans on every row. |
-| `sampled` | Local audit | Run deep checks on a bounded sample or risky rows. |
-| `deep` | Explicit local audit | Enable expensive cue/profanity/semantic checks where implemented. |
+| `fast` | Default exact submissions and progress summaries | Use fast target-cue counting and avoid the deeper target/profanity-style scans on every row. |
+| `sampled` | Local audit | Run deep checks on a bounded prefix sample, currently the first 100 rows by default, and fast checks afterward. |
+| `deep` | Explicit local audit | Enable the deeper target-term scan for every row. |
 
 Deep metrics must not block basic exact-format submission creation.
 
@@ -27,7 +27,7 @@ Deep metrics must not block basic exact-format submission creation.
 Run these before upload or before declaring a pipeline change ready:
 
 ```bash
-python -m pytest tests/test_pipeline.py tests/test_csv_pipeline.py tests/test_submission.py -q
+python -m pytest tests/test_pipeline.py tests/test_csv_pipeline.py tests/test_submission.py tests/test_auto_pipeline.py tests/test_simple_pipeline.py -q
 python -m privhsd.cli validate-submission \
   --source INPUT.csv \
   --submission OUTPUT.csv \
@@ -93,14 +93,19 @@ Use this sequence when choosing the trusted single CSV pipeline:
 4. Choose on privacy first, then HSD decision stability, then overmasking and
    character utility. Do not choose a lower-residual config if it destroys HSD
    decisions.
-5. Run the selected command end to end through `sanitize-classify` and verify
-   row count, column contract, manifest validity, provider/model load counts,
-   identifier residuals, cue retention, and classification drift.
+5. Run the selected official command end to end through
+   `create-submission --replace-text`, then validate row count, column contract,
+   manifest validity, provider/model load counts where auto ran, identifier
+   residuals, and cue retention.
+6. Optionally mirror the same configuration through `sanitize-classify` for
+   local enriched analysis of HSD advisory score drift. Do not upload that CSV,
+   because it appends prediction columns.
 
-Latest local 3,830-row TweetEval unseen run selected the default
-`sanitize-classify` path: deterministic baseline, Presidio, scrubadub,
-token-policy ensemble, and two-model RoBERTa HSD advisory selection. Final
-manifest summary:
+Latest recorded local 3,830-row TweetEval unseen enriched-analysis run used
+the default `sanitize-classify` path: deterministic baseline, Presidio,
+scrubadub, token-policy ensemble, and two-model RoBERTa HSD advisory
+selection. This was not an exact-format upload because `sanitize-classify`
+appends prediction columns. Final manifest summary:
 
 - validation: passed, 3,830 input rows -> 3,830 output rows;
 - residual direct identifiers: 1 detector hit after 4,205 before;

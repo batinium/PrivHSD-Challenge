@@ -3,15 +3,16 @@
 Status: active planning handoff
 Owner area: author-aware privacy, contribution bounding, authorship-risk
 evaluation, style-obfuscation candidates
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/contribution_bounding.py`, `privhsd/author_risk.py`,
 `privhsd/rerank.py`, `privhsd/style.py`, `privhsd/auto/`,
 future optional runtimes under `privhsd/models/`
 
 This file turns the author-aware group privacy research into implementable
-tasks for future agents. It is intentionally more detailed than the stable
-reference docs. Keep commands in `docs/runbooks/`, stable contracts in
-`docs/reference/`, and current scores in `docs/planning/current_status.md`.
+tasks. Contribution bounding, baseline author-risk evaluation, style scrub, and
+reranking hooks are current; richer misattribution metrics and optional style
+generators remain planned. Keep commands in `docs/runbooks/`, stable contracts
+in `docs/reference/`, and current scores in `docs/planning/current_status.md`.
 
 ## Decision
 
@@ -28,11 +29,11 @@ The repo already has the right backbone for the challenge:
 - author-risk evaluation when repeated author IDs exist;
 - candidate reranking that can reject semantic drift and cue loss.
 
-The missing research-backed layer is user-level handling of repeated authors.
-Contribution bounding is the first operational control because it limits how
-many records any one author can dominate before release or training. After that,
-the next useful work is better author-risk evaluation and optional,
-candidate-only style obfuscators that must pass the existing HSD utility gates.
+The implemented user-level control is contribution bounding: it limits how many
+records any one author can dominate before release or training when row
+filtering is allowed. The remaining research-backed layer is better
+author-risk reporting and optional, candidate-only style obfuscators that must
+pass the existing HSD utility gates.
 
 ## Non-Goals
 
@@ -82,8 +83,8 @@ Already present:
   schema among retained rows but drops rows, so it is not exact-format by
   default.
 
-Treat contribution bounding as Phase 0 if these files exist in the working
-tree. If an agent starts from a branch without them, implement Phase 0 first.
+Phase 0 is implemented in the current tree. If an agent starts from an older
+branch without these files, implement Phase 0 first.
 
 ## Source Notes
 
@@ -104,6 +105,9 @@ or changing defaults.
 | ER-AE paper: https://aclanthology.org/2021.naacl-main.314.pdf | DP text generation with a two-set exponential mechanism and semantic reward. Useful context, but not recommended for core implementation now. |
 
 ## Phase 0: Contribution Bounding
+
+Status: implemented. Remaining useful follow-ups are report enrichment and
+runbook examples.
 
 Goal:
 
@@ -193,6 +197,11 @@ Do not call this command from `create-submission` by default. The exact CSV
 contract must continue to preserve row count.
 
 ## Phase 1: Stronger Author-Risk Evaluation
+
+Status: partially implemented. The current command is a local char n-gram
+logistic adversary with accuracy, macro-F1, confidence, privacy-gain ratios,
+and residual high-risk rows. Chance baselines, entropy, and misattribution harm
+metrics below are proposed upgrades.
 
 Goal:
 
@@ -460,10 +469,10 @@ class StyleRemixOutput:
     error: str | None = None
 ```
 
-CLI shape:
+Proposed CLI shape:
 
 Do not add a direct "rewrite and output" command first. Add candidate
-generation:
+generation after the StyleRemix runtime exists:
 
 ```bash
 python -m privhsd.cli generate-style-remix-candidates \
@@ -538,7 +547,7 @@ Focused tests:
 python -m pytest -q tests/test_rerank.py tests/test_auto_pipeline.py
 ```
 
-Optional local smoke only when model artifacts exist:
+Proposed local smoke after implementation, only when model artifacts exist:
 
 ```bash
 python -m privhsd.cli generate-style-remix-candidates \
@@ -755,7 +764,7 @@ Suggested behavior:
   note, no raw values.
 - Default: do not alter official challenge submissions.
 
-Suggested command:
+Suggested future command:
 
 ```bash
 python -m privhsd.cli pseudonymize-metadata \

@@ -2,15 +2,14 @@
 
 Status: active
 Owner area: planning handoff for optional privacy span models
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/span_providers/`, `privhsd/auto/`,
 `privhsd/pipeline.py`, `privhsd/cli.py`, `privhsd/csv_pipeline.py`,
 `privhsd/submission.py`, `privhsd/rerank.py`
 
-This file is an implementation handoff for agents integrating newer privacy
-span models into ContextSafe-HSD. It covers GLiNER PII models and
-`openai/privacy-filter`, explains how they should fit into the existing
-pipeline, and gives concrete acceptance gates.
+This file is a planning handoff for optional privacy span models in
+ContextSafe-HSD. Some GLiNER/provider lifecycle tasks below are now completed;
+the benchmark and `openai/privacy-filter` sections remain proposed work.
 
 The recommendation is intentionally conservative: integrate stronger privacy
 models as optional span providers and benchmark them. Do not replace the
@@ -21,16 +20,22 @@ validation.
 
 Do not replace the current pipeline with any single PII model.
 
-Implement the following in order:
+Current implementation status:
 
-1. Expose the existing `gliner_model` configuration through the public CLI and
-   Python APIs.
-2. Add a first-class PII GLiNER profile, with `nvidia/gliner-PII` as the
-   primary model to benchmark.
-3. Add provider batching for span providers, especially GLiNER.
-4. Benchmark the PII GLiNER path against `balanced`, filtered Presidio, and
+- Done: `--gliner-model` and `--gliner-profile` are exposed on auto-capable CLI
+  paths and threaded through CSV/submission/rerank APIs.
+- Done: `general` and `pii` GLiNER profiles exist, including a PII-oriented
+  label map and thresholds.
+- Done: optional span providers can implement `propose_many()`, and auto mode
+  batches routed provider rows when supported.
+- Not done: no public PII gold-span benchmark exists yet, and
+  `openai/privacy-filter` is not implemented.
+
+Remaining order of work:
+
+1. Benchmark the PII GLiNER path against `balanced`, filtered Presidio, and
    the current `auto` path.
-5. Consider `openai/privacy-filter` only as a second optional provider after
+2. Consider `openai/privacy-filter` only as a second optional provider after
    the GLiNER path is wired and benchmarked.
 
 Keep the official output policy:
@@ -57,14 +62,14 @@ Current facts:
 - `privhsd/auto/engine.py` already creates a deterministic baseline for every
   row, routes risky rows to optional providers/models, generates provider
   candidates, scores them, and falls back to baseline on uncertainty.
-- `privhsd/auto/config.py` already has `gliner_model`, but the CLI and public
-  APIs do not yet expose it.
+- `privhsd/auto/config.py` has `gliner_model` and `gliner_profile`, and the
+  CLI/public APIs expose them on auto-capable paths.
 - Token-policy artifacts already exist under `data/outputs/`, and the
   token-policy ensemble should remain advisory rather than being replaced by a
   generic PII detector.
 
-The missing work is not a rewrite. It is provider selection, configuration
-surface area, batching, and evaluation.
+The missing work is not a rewrite. It is provider benchmarking, promotion
+criteria, and any secondary privacy-filter adapter.
 
 ## Model Recommendations
 
@@ -202,12 +207,15 @@ candidate scoring, and validation.
 
 ## Implementation Task 1: Expose GLiNER Model Selection
 
-Problem:
+Status: implemented as of 2026-06-14. Keep this section as historical context
+and regression criteria.
 
-`AutoPipelineConfig` has `gliner_model`, but normal users cannot select it from
-`create-submission`, `anonymize`, or `rerank-candidates`.
+Historical problem:
 
-Goal:
+`AutoPipelineConfig` had `gliner_model`, but normal users could not select it
+from `create-submission`, `anonymize`, or `rerank-candidates`.
+
+Current command shape:
 
 Make this command possible:
 
@@ -234,18 +242,17 @@ Files likely to change:
 - `tests/test_submission.py`
 - `tests/test_csv_pipeline.py`
 
-Concrete code changes:
+Implemented code changes:
 
-1. Add a `--gliner-model` argument in `add_auto_runtime_arguments()`.
-   Suggested help text:
+1. `add_auto_runtime_arguments()` defines `--gliner-model`.
+   Current help text:
 
    ```text
    GLiNER model ID or local path for the optional GLiNER provider.
-   Defaults to the built-in GLiNER provider default. Remote IDs require
-   --allow-model-download unless already cached.
+   Remote IDs require --allow-model-download unless already cached.
    ```
 
-2. Add `gliner_model: str | None = None` to these public functions if missing:
+2. `gliner_model: str | None = None` is present on these public functions:
 
    - `process_csv(...)`
    - `create_submission(...)`
@@ -286,9 +293,12 @@ python -m pytest tests/test_auto_pipeline.py tests/test_submission.py tests/test
 
 ## Implementation Task 2: Add GLiNER Profiles
 
-Problem:
+Status: implemented as of 2026-06-14. Keep this section as historical context
+and regression criteria.
 
-The current provider has one hard-coded label set and default model:
+Historical problem:
+
+The provider previously had one hard-coded label set and default model:
 
 ```text
 DEFAULT_GLINER_MODEL = "urchade/gliner_medium-v2.1"
@@ -297,7 +307,7 @@ DEFAULT_GLINER_MODEL = "urchade/gliner_medium-v2.1"
 That is a generalist setup. PII-specific GLiNER models need a richer label set,
 different thresholds, and model metadata.
 
-Goal:
+Current behavior:
 
 Support at least two profiles:
 
@@ -483,13 +493,16 @@ Acceptance tests:
 
 ## Implementation Task 3: Add Provider Batch Inference
 
-Problem:
+Status: implemented as of 2026-06-14. Keep this section as historical context
+and regression criteria.
 
-Auto mode batches token-policy inference, but optional span providers are
-called one row at a time. GLiNER on GPU will be unnecessarily slow without
+Historical problem:
+
+Auto mode batched token-policy inference, but optional span providers were
+called one row at a time. GLiNER on GPU would be unnecessarily slow without
 provider batching.
 
-Goal:
+Current behavior:
 
 Allow providers to implement `propose_many()` while keeping `propose()` as the
 minimum protocol.
@@ -663,7 +676,8 @@ Current durable evidence in `data/outputs/` includes:
 
 Integration policy:
 
-- GLiNER and privacy-filter provide supplemental privacy spans.
+- GLiNER and any future privacy-filter adapter provide supplemental privacy
+  spans.
 - Token-policy remains advisory evidence for privacy, protected HSD cues,
   style, and review.
 - Final text still comes from candidate scoring and validation.
@@ -682,7 +696,12 @@ run.
 
 ### Dependency Setup
 
-The active environment checked on 2026-06-13 was missing:
+The local environment checked during the 2026-06-14 docs refresh had GLiNER,
+torch, transformers, Presidio, and scrubadub importable. It did not have
+sentence-transformers or Detoxify importable. Agents should not assume this is
+portable.
+
+An earlier environment checked on 2026-06-13 was missing:
 
 ```text
 gliner
@@ -1014,35 +1033,35 @@ Operational safety:
 
 ## Recommended Agent Assignments
 
-Agent 1: GLiNER config surface
+Agent 1: GLiNER config surface - completed
 
-- Add `--gliner-model`.
-- Add `--gliner-profile` if doing profiles in the same pass.
-- Thread config through CLI, public APIs, auto config, and rerank.
-- Add parser and fallback tests.
+- Implemented `--gliner-model`.
+- Implemented `--gliner-profile`.
+- Threaded config through CLI, public APIs, auto config, and rerank.
+- Added parser and fallback tests.
 
-Agent 2: PII GLiNER provider profile
+Agent 2: PII GLiNER provider profile - completed
 
 - Add profile label/map/threshold structures.
 - Normalize raw labels robustly.
 - Add provider audit metadata.
 - Add fake-model unit tests.
 
-Agent 3: Provider batching
+Agent 3: Provider batching - completed
 
 - Add optional `propose_many`.
 - Batch routed provider rows in auto mode.
 - Add fake batched provider tests.
 - Keep fallback behavior for non-batched providers.
 
-Agent 4: Benchmark runner or benchmark run
+Agent 4: Benchmark runner or benchmark run - remaining
 
 - Run smoke and full comparison commands.
 - Produce ignored reports under `data/outputs/`.
 - Update `docs/planning/current_status.md` only with durable aggregate
   conclusions, not raw examples.
 
-Agent 5: Privacy-filter adapter
+Agent 5: Privacy-filter adapter - remaining
 
 - Start only after GLiNER work is stable.
 - Verify current model loading and decoding.
@@ -1051,13 +1070,12 @@ Agent 5: Privacy-filter adapter
 
 ## Handoff Summary
 
-Best immediate implementation:
+Current handoff:
 
-1. Add `--gliner-model`.
-2. Add `--gliner-profile pii`.
-3. Implement `nvidia/gliner-PII` as an optional PII GLiNER profile.
-4. Add provider batching.
-5. Benchmark before changing defaults.
+1. Preserve implemented GLiNER CLI/profile/batching behavior.
+2. Benchmark before changing defaults.
+3. Start `openai/privacy-filter` only after benchmark results justify more
+   provider work.
 
 Do not:
 

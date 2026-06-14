@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: research, governance, pitch constraints
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: docs and presentation material
 
 This file records the stable governance position. Detailed challenge-specific
@@ -30,6 +30,8 @@ can weaken human-rights analysis and downstream HSD evaluation.
 - Do not claim token-policy or local LLM outputs are final moderation
   decisions.
 - Record provider/model status and fallback behavior in manifests.
+- Keep exact-format submissions separate from enriched local triage outputs
+  that append prediction or audit columns.
 
 ## Related Docs
 

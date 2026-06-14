@@ -2,12 +2,14 @@
 
 Status: active
 Owner area: coordination
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: repository-wide
 
 Use this file before starting a multi-agent pass. Each agent should choose one
 workstream, update only that workstream's primary code/docs unless coordination
 is needed, and leave a short handoff note in the relevant planning or run note.
+The current product shape is one pipeline with multiple entry points, not
+competing pipeline forks.
 
 ## Coordination Rules
 
@@ -27,7 +29,7 @@ is needed, and leave a short handoff note in the relevant planning or run note.
 | Workstream | Primary code | Primary docs | Verification |
 | --- | --- | --- | --- |
 | CSV contract and submission | `privhsd/csv_pipeline.py`, `privhsd/submission.py`, `contextsafe_hsd/` | `docs/reference/data_contract.md`, `docs/runbooks/official_submission.md` | `tests/test_csv_pipeline.py`, `tests/test_submission.py`, `tests/test_public_api.py` |
-| Auto orchestration | `privhsd/auto/`, `privhsd/span_providers/`, `privhsd/models/` | `docs/reference/pipeline.md`, `docs/reference/providers_and_models.md` | `tests/test_auto_pipeline.py`, `tests/test_span_providers.py` |
+| Auto orchestration | `privhsd/auto/`, `privhsd/span_providers/`, `privhsd/models/` | `docs/reference/pipeline.md`, `docs/reference/providers_and_models.md` | `tests/test_auto_pipeline.py`, `tests/test_span_providers.py`, `tests/test_simple_pipeline.py` |
 | Deterministic masking and style | `privhsd/detectors.py`, `privhsd/pipeline.py`, `privhsd/style.py`, `privhsd/resources/` | `docs/reference/pipeline.md`, `docs/reference/evaluation.md`, `docs/planning/pii_provider_edge_case_plan.md` | `tests/test_pipeline.py`, `tests/test_style_scrubber.py`, `tests/test_synthetic_pii_stress.py` |
 | Metrics and evaluation | `privhsd/metrics.py`, `privhsd/cue_checks.py`, `privhsd/source_report.py`, `privhsd/author_risk.py`, `privhsd/semantic_triage.py`, `privhsd/metadata_leakage.py` | `docs/reference/evaluation.md`, `docs/planning/current_status.md` | `tests/test_metrics.py`, `tests/test_cue_checks.py`, `tests/test_source_report.py`, `tests/test_author_risk.py` |
 | Author-aware group privacy | `privhsd/contribution_bounding.py`, `privhsd/author_risk.py`, `privhsd/rerank.py`, future authorship-obfuscation runtimes under `privhsd/models/` | `docs/planning/author_aware_group_privacy_plan.md`, `docs/reference/evaluation.md`, `docs/reference/data_contract.md` | `tests/test_contribution_bounding.py`, `tests/test_author_risk.py`, `tests/test_rerank.py` |
@@ -41,6 +43,9 @@ is needed, and leave a short handoff note in the relevant planning or run note.
 
 - Submission changes must preserve the exact CSV contract in
   `docs/reference/data_contract.md`.
+- `create-submission` is the exact-format upload path and requires
+  `--replace-text`; `sanitize-classify` is an enriched local triage path that
+  appends advisory HSD columns and is not exact-format.
 - Provider/model changes must keep optional components local-only by default
   and record missing dependencies/artifacts instead of failing exact output.
 - Evaluation changes must separate fast exact-submission metrics from sampled

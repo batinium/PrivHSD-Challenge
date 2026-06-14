@@ -54,15 +54,21 @@ python -m privhsd.cli sanitize-classify \
 The output keeps original rows and columns, replaces `text` with sanitized
 text, and appends HSD prediction columns. If the input already has
 `is_hate_speech`, the command preserves it and writes
-`predicted_is_hate_speech` unless `--overwrite-hate-columns` is set. Model
-downloads are off by default; add `--allow-model-download` only for an explicit
-OSS-model run. The manifest includes a `tradeoff` summary for identifier
-removal, cue retention, overmask warnings, and original-vs-sanitized HSD score
-drift.
+`predicted_is_hate_speech` unless `--overwrite-hate-columns` is set. The other
+default appended columns are `hate_speech_score` and
+`hate_speech_model_count`. Model downloads are off by default; add
+`--allow-model-download` only for an explicit OSS-model run. Without
+`--require-hate-classification`, unavailable advisory classifiers leave the
+classification fields blank or `0` and record a skipped status in the manifest.
+The manifest includes a `tradeoff` summary for identifier removal, cue
+retention, overmask warnings, and original-vs-sanitized HSD score drift.
 
-The trusted local configuration uses deterministic masking, Presidio,
-scrubadub, the local RoBERTa/HateBERT token-policy ensemble, and the two-model
-RoBERTa HSD advisory ensemble:
+The always-on layer is deterministic balanced masking. Auto mode reports status
+for optional Presidio, scrubadub, GLiNER, token-policy, semantic, local LLM, and
+HSD advisory components from installed local dependencies and artifacts.
+Providers and models that are actually available to the current engine are
+lazy-loaded only when routed rows need them. The default HSD advisory registry
+is:
 
 ```text
 facebook/roberta-hate-speech-dynabench-r4-target
@@ -93,6 +99,12 @@ python -m privhsd.cli validate-submission \
   --id-col id \
   --output data/outputs/recommended_merged.auto.validation.json
 ```
+
+`create-submission` requires `--replace-text`; it preserves row order, source
+columns, metadata values, and column order, then validates that shape after
+writing. In `auto` mode the manifest includes provider/model discovery status,
+load counts, input/output SHA-256 hashes, metrics, preserved columns, and the
+validation report. It does not append helper or prediction columns.
 
 For a package-installed command, replace `python -m privhsd.cli` with
 `contextsafe-hsd`.
