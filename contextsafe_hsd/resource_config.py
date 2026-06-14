@@ -51,7 +51,7 @@ def _parse_simple_toml(text: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=None)
 def load_toml_resource(filename: str) -> dict[str, Any]:
-    text = resources.files("privhsd.resources").joinpath(filename).read_text(
+    text = resources.files("contextsafe_hsd.resources").joinpath(filename).read_text(
         encoding="utf-8"
     )
     if tomllib is not None:

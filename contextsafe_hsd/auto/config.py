@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from privhsd.metrics import METRIC_DEPTHS
+from contextsafe_hsd.metrics import METRIC_DEPTHS
 
 
 AUTO_MODES = frozenset({"auto"})

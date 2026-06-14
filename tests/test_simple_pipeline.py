@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.simple_pipeline import SimplifiedPipelineError, run_sanitize_classify
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.simple_pipeline import SimplifiedPipelineError, run_sanitize_classify
 
 
 def read_rows(path):
@@ -147,7 +147,7 @@ def test_sanitize_classify_replaces_text_and_appends_predictions(tmp_path):
     assert verification["author_risk"]["author_or_user_column_exists"] is False
     assert manifest["sanitization"]["stages"]["verification"][
         "hsd_advisory_status"
-    ] == "skipped"
+    ] == "ok"
     assert manifest["tradeoff"]["identifier_count_after"] == 0
     assert manifest["tradeoff"]["classification_decision_changed_count"] == 0
     assert manifest["validation"]["valid"] is True

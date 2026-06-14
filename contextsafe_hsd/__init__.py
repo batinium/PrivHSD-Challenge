@@ -1,10 +1,21 @@
-"""ContextSafe-HSD public package alias.
+"""Privacy-preserving text privatization for hate speech detection datasets."""
 
-The implementation still lives in :mod:`privhsd` so existing experiment
-scripts remain valid. New package users should import :mod:`contextsafe_hsd`.
-"""
+from .contribution_bounding import bound_contributions
+from .csv_pipeline import evaluate_csv, process_csv
+from .pipeline import PrivatizationResult, PrivatizerConfig, privatize_text
+from .semantic_triage import run_semantic_triage_report
+from .simple_pipeline import run_sanitize_classify
+from .submission import create_submission, validate_submission
 
-from privhsd import *  # noqa: F401,F403
-from privhsd import __all__ as _privhsd_all
-
-__all__ = list(_privhsd_all)
+__all__ = [
+    "PrivatizationResult",
+    "PrivatizerConfig",
+    "bound_contributions",
+    "create_submission",
+    "evaluate_csv",
+    "privatize_text",
+    "process_csv",
+    "run_sanitize_classify",
+    "run_semantic_triage_report",
+    "validate_submission",
+]

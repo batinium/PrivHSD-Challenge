@@ -7,8 +7,8 @@ from dataclasses import dataclass
 import re
 from typing import Any
 
-from privhsd.detectors import Span, target_group_spans
-from privhsd.metrics import UTILITY_CUES
+from contextsafe_hsd.detectors import Span, target_group_spans
+from contextsafe_hsd.metrics import UTILITY_CUES
 
 from .base import (
     SpanCandidate,

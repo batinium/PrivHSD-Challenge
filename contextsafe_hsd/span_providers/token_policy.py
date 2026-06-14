@@ -6,8 +6,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from privhsd.models.token_policy_runtime import TokenPolicyRuntime
-from privhsd.token_policy import (
+from contextsafe_hsd.models.token_policy_runtime import TokenPolicyRuntime
+from contextsafe_hsd.token_policy import (
     ACTION_GENERALIZE,
     ACTION_MASK,
     ACTION_NORMALIZE,

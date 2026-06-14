@@ -3,11 +3,12 @@
 Status: active
 Owner area: CLI and public command contracts
 Last verified: 2026-06-14
-Primary code: `pyproject.toml`, `privhsd/cli.py`, `contextsafe_hsd/`
+Primary code: `pyproject.toml`, `contextsafe_hsd/cli.py`, `privhsd/`
 
 This file maps command ownership. Full recipes belong in `docs/runbooks/`.
 Installed console scripts are `contextsafe-hsd` and `privhsd`; both dispatch to
-`privhsd.cli:main`. Repository examples may also use `python -m privhsd.cli`.
+`contextsafe_hsd.cli:main`. New examples should use `contextsafe-hsd`;
+`python -m privhsd.cli` remains a compatibility path.
 
 ## Public Command
 
@@ -18,7 +19,7 @@ Input CSV -> Privacy Detection -> Meaning Protection -> Verification
 ```
 
 ```bash
-python -m privhsd.cli protect \
+contextsafe-hsd protect \
   --input INPUT.csv \
   --output OUTPUT.csv \
   --text-col text \

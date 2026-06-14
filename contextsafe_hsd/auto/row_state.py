@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from privhsd.pipeline import PrivatizationResult
-from privhsd.span_providers.base import SpanCandidate, SpanProviderOutput
+from contextsafe_hsd.pipeline import PrivatizationResult
+from contextsafe_hsd.span_providers.base import SpanCandidate, SpanProviderOutput
 
 
 @dataclass(frozen=True)

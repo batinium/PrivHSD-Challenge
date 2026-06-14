@@ -8,8 +8,8 @@ from functools import lru_cache
 import re
 from typing import Any, Iterable
 
-from privhsd.detectors import Span, merge_spans, span_priority, target_group_spans
-from privhsd.resource_config import load_utility_cue_terms
+from contextsafe_hsd.detectors import Span, merge_spans, span_priority, target_group_spans
+from contextsafe_hsd.resource_config import load_utility_cue_terms
 
 from .base import (
     HIGH_PRECISION_DIRECT_TYPES,

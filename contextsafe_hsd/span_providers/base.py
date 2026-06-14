@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from privhsd.detectors import Span
+from contextsafe_hsd.detectors import Span
 
 
 PRIVACY_CLASS_DIRECT = "direct_identifier"

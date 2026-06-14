@@ -26,7 +26,7 @@ The default human-facing command is `protect`. It uses the current exact
 back to the text column, and records an audit manifest when requested.
 
 ```bash
-python -m privhsd.cli protect \
+contextsafe-hsd protect \
   --input INPUT.csv \
   --output data/outputs/INPUT.protected.csv \
   --text-col text \
@@ -60,16 +60,17 @@ recommended public workflow is `protect`.
 ```bash
 python -m pip install .
 python -m pytest -q
-python -m privhsd.cli protect --help
+contextsafe-hsd protect --help
 ```
 
-For package-installed usage, `contextsafe-hsd` and `privhsd` dispatch to the
-same CLI as `python -m privhsd.cli`.
+For package-installed usage, `contextsafe-hsd` is the canonical CLI. The legacy
+`privhsd` command and `python -m privhsd.cli` path remain as compatibility
+aliases.
 
 ## Validate Exact Output
 
 ```bash
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission data/outputs/INPUT.protected.csv \
   --text-col text \
@@ -84,8 +85,8 @@ model weights, and run notes.
 ## Repository Map
 
 ```text
-contextsafe_hsd/     Public Python package alias
-privhsd/             CLI and implementation
+contextsafe_hsd/     Public Python package and implementation
+privhsd/             Legacy compatibility import/CLI shim
 tests/               Synthetic and regression tests
 docs/runbooks/       Operational workflows and commands
 docs/reference/      Stable contracts and architecture

@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from privhsd.metrics import row_metric_fast
-from privhsd.rerank import style_risk_count
+from contextsafe_hsd.metrics import row_metric_fast
+from contextsafe_hsd.rerank import style_risk_count
 
 from .row_state import RowRiskProfile, RowRoutingDecision
 

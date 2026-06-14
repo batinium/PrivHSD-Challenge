@@ -7,10 +7,10 @@ from dataclasses import dataclass, field
 import importlib.util
 from typing import Any, Callable, Mapping
 
-from privhsd.span_providers.base import SpanProvider
-from privhsd.span_providers.gliner import GlinerProviderError, load_gliner_provider
-from privhsd.span_providers.presidio import PresidioAugmentError, PresidioSpanProvider, load_presidio_analyzer
-from privhsd.span_providers.scrubadub_provider import (
+from contextsafe_hsd.span_providers.base import SpanProvider
+from contextsafe_hsd.span_providers.gliner import GlinerProviderError, load_gliner_provider
+from contextsafe_hsd.span_providers.presidio import PresidioAugmentError, PresidioSpanProvider, load_presidio_analyzer
+from contextsafe_hsd.span_providers.scrubadub_provider import (
     ScrubadubProviderError,
     load_scrubadub_provider,
 )
@@ -189,8 +189,8 @@ class AutoPipelineContext:
         if name in self.model_factories:
             return self.model_factories[name](self)
         if name == "token_policy_ensemble":
-            from privhsd.models.token_policy_runtime import TokenPolicyRuntime
-            from privhsd.span_providers.token_policy import TokenPolicySpanProvider
+            from contextsafe_hsd.models.token_policy_runtime import TokenPolicyRuntime
+            from contextsafe_hsd.span_providers.token_policy import TokenPolicySpanProvider
 
             runtime = TokenPolicyRuntime.from_model_dirs(
                 list(self.config.token_policy_model_dirs),
@@ -199,7 +199,7 @@ class AutoPipelineContext:
             )
             return TokenPolicySpanProvider(runtime=runtime)
         if name == "hsd_advisory":
-            from privhsd.models.hsd_advisory_runtime import HsdAdvisoryEnsembleRuntime
+            from contextsafe_hsd.models.hsd_advisory_runtime import HsdAdvisoryEnsembleRuntime
 
             return HsdAdvisoryEnsembleRuntime.from_model_ids(
                 self.config.hsd_advisory_models,

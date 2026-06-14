@@ -3,8 +3,9 @@
 Status: active
 Owner area: auto orchestration, deterministic masking, candidate selection
 Last verified: 2026-06-14
-Primary code: `privhsd/auto/`, `privhsd/detectors.py`,
-`privhsd/pipeline.py`, `privhsd/rerank.py`, `privhsd/span_providers/`
+Primary code: `contextsafe_hsd/auto/`, `contextsafe_hsd/detectors.py`,
+`contextsafe_hsd/pipeline.py`, `contextsafe_hsd/rerank.py`,
+`contextsafe_hsd/span_providers/`
 
 This is the authoritative architecture reference. Operational commands belong
 in runbooks; readiness and open risks belong in planning docs.
@@ -45,7 +46,7 @@ stages.
 `protect` is the documented default command:
 
 ```bash
-python -m privhsd.cli protect \
+contextsafe-hsd protect \
   --preset exact \
   --input INPUT.csv \
   --output OUTPUT.csv \

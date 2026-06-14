@@ -6,7 +6,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
-from privhsd.detectors import detect_spans
+from contextsafe_hsd.detectors import detect_spans
 
 from .base import SpanCandidate, SpanProviderOutput
 

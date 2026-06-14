@@ -3,7 +3,7 @@
 Status: active
 Owner area: common local workflow
 Last verified: 2026-06-14
-Primary code: `privhsd/cli.py`, package metadata, tests
+Primary code: `contextsafe_hsd/cli.py`, package metadata, tests
 
 Use this for first-run setup and the shortest local privacy-protection path.
 The public workflow is:
@@ -17,16 +17,16 @@ Input CSV -> Privacy Detection -> Meaning Protection -> Verification
 ```bash
 python -m pip install .
 python -m pytest -q
-python -m privhsd.cli protect --help
+contextsafe-hsd protect --help
 ```
 
-For package-installed usage, replace `python -m privhsd.cli` with
-`contextsafe-hsd` or `privhsd`.
+For package-installed usage, use `contextsafe-hsd`. The `privhsd` console
+script and `python -m privhsd.cli` remain compatibility aliases.
 
 ## Protect A CSV
 
 ```bash
-python -m privhsd.cli protect \
+contextsafe-hsd protect \
   --input INPUT.csv \
   --output data/outputs/INPUT.protected.csv \
   --text-col text \
@@ -53,7 +53,7 @@ not treated as a failure for exact output.
 ## Presets
 
 ```bash
-python -m privhsd.cli protect --preset exact \
+contextsafe-hsd protect --preset exact \
   --input INPUT.csv \
   --output data/outputs/INPUT.protected.csv \
   --text-col text \
@@ -64,7 +64,7 @@ python -m privhsd.cli protect --preset exact \
 Use `exact` for the default cleaned CSV plus manifest.
 
 ```bash
-python -m privhsd.cli protect --preset analysis \
+contextsafe-hsd protect --preset analysis \
   --input INPUT.csv \
   --output data/outputs/INPUT.analysis.csv \
   --text-col text \
@@ -77,7 +77,7 @@ columns after sanitization. These columns are not production classifier truth
 and are not part of exact-format output.
 
 ```bash
-python -m privhsd.cli protect --preset audit \
+contextsafe-hsd protect --preset audit \
   --input INPUT.csv \
   --output data/outputs/INPUT.audit.csv \
   --text-col text \
@@ -91,7 +91,7 @@ installed runtime supports it.
 ## Prepare Public Development Data
 
 ```bash
-python -m privhsd.cli prepare-recommended-datasets \
+contextsafe-hsd prepare-recommended-datasets \
   --output-dir data/public_dev \
   --raw-dir data/public_dev/raw \
   --merged-output data/public_dev/recommended_merged.csv
@@ -102,7 +102,7 @@ Downloaded raw files stay under ignored `data/public_dev/raw/`.
 ## Validate Exact Shape
 
 ```bash
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source data/public_dev/recommended_merged.csv \
   --submission data/outputs/recommended_merged.protected.csv \
   --text-col text \
@@ -116,7 +116,7 @@ alternate runs until the exact cleaned CSV exists and its manifest is readable.
 ## Minimal Evidence Pass
 
 ```bash
-python -m privhsd.cli source-regression-report \
+contextsafe-hsd source-regression-report \
   --original data/public_dev/recommended_merged.csv \
   --protected data/outputs/recommended_merged.protected.csv \
   --original-text-col text \

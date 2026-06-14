@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from statistics import mean
 from typing import Any
 
-from privhsd.hf_utility import (
+from contextsafe_hsd.hf_utility import (
     APPROVED_MODELS,
     normalize_pipeline_output,
     positive_score,
@@ -154,6 +154,14 @@ class HsdAdvisoryRuntime:
         result = self.compare(original_score, candidate_score)
         result["model_count"] = 1
         result["models"] = {self.model_id: result.copy()}
+        result["original_positive_model_count"] = (
+            1 if original_score >= self.decision_threshold else 0
+        )
+        result["candidate_positive_model_count"] = (
+            1 if candidate_score >= self.decision_threshold else 0
+        )
+        result["original_max_score"] = round(float(original_score), 4)
+        result["candidate_max_score"] = round(float(candidate_score), 4)
         return result
 
 
@@ -303,5 +311,21 @@ class HsdAdvisoryEnsembleRuntime:
         )
         result["member_decision_drift_count"] = sum(
             bool(item.get("decision_changed")) for item in member_results.values()
+        )
+        result["original_positive_model_count"] = sum(
+            float(original_scores[model_id]) >= self.decision_threshold
+            for model_id in common_models
+        )
+        result["candidate_positive_model_count"] = sum(
+            float(candidate_scores[model_id]) >= self.decision_threshold
+            for model_id in common_models
+        )
+        result["original_max_score"] = round(
+            max(float(original_scores[model_id]) for model_id in common_models),
+            4,
+        )
+        result["candidate_max_score"] = round(
+            max(float(candidate_scores[model_id]) for model_id in common_models),
+            4,
         )
         return result

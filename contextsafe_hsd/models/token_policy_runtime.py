@@ -6,7 +6,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from privhsd.token_policy import (
+from contextsafe_hsd.token_policy import (
     ACTION_KEEP,
     DEFAULT_MAX_LENGTH,
     TOKEN_POLICY_ACTIONS,

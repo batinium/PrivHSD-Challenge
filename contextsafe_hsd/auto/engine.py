@@ -6,16 +6,16 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
-from privhsd.detectors import (
+from contextsafe_hsd.detectors import (
     HIGH_CONFIDENCE_DIRECT_TYPES,
     Span,
     detect_spans,
     merge_spans,
 )
-from privhsd.metrics import aggregate_metrics, row_metric_fast, row_metric_for_depth
-from privhsd.pipeline import PrivatizerConfig, apply_replacements, privatize_text
-from privhsd.rerank import length_drift, style_risk_count
-from privhsd.span_providers.base import SpanCandidate
+from contextsafe_hsd.metrics import aggregate_metrics, row_metric_fast, row_metric_for_depth
+from contextsafe_hsd.pipeline import PrivatizerConfig, apply_replacements, privatize_text
+from contextsafe_hsd.rerank import length_drift, style_risk_count
+from contextsafe_hsd.span_providers.base import SpanCandidate
 
 from .audit import (
     MEANING_PROTECTION_REJECTION_REASONS,
@@ -580,7 +580,7 @@ class AutoPipelineEngine:
         advisory_groups = [
             (state, candidates)
             for state, candidates in candidate_groups
-            if len(candidates) > 1
+            if candidates
         ]
         if not advisory_groups:
             return
@@ -668,9 +668,73 @@ class AutoPipelineEngine:
         compare_by_model = getattr(advisory, "compare_scores_by_model", None)
         if callable(compare_by_model):
             return compare_by_model(original_scores, candidate_scores)
-        original_score = next(iter(original_scores.values()), 0.0)
-        candidate_score = next(iter(candidate_scores.values()), 0.0)
-        return advisory.compare(original_score, candidate_score)
+        common_models = [
+            model_id
+            for model_id in original_scores
+            if model_id in candidate_scores
+        ]
+        if not common_models:
+            common_models = ["hsd_advisory"]
+            original_scores = {"hsd_advisory": 0.0}
+            candidate_scores = {"hsd_advisory": 0.0}
+        original_score = sum(
+            float(original_scores[model_id]) for model_id in common_models
+        ) / len(common_models)
+        candidate_score = sum(
+            float(candidate_scores[model_id]) for model_id in common_models
+        ) / len(common_models)
+        compare = getattr(advisory, "compare", None)
+        if callable(compare):
+            return compare(original_score, candidate_score)
+        decision_threshold = float(getattr(advisory, "decision_threshold", 0.5))
+        large_drop_threshold = float(getattr(advisory, "large_drop_threshold", 0.20))
+        max_abs_drift = float(getattr(advisory, "max_abs_drift", 0.35))
+        delta = candidate_score - original_score
+        abs_drift = abs(delta)
+        score_drop = max(0.0, original_score - candidate_score)
+        original_decision = original_score >= decision_threshold
+        candidate_decision = candidate_score >= decision_threshold
+        return {
+            "model_id": "hsd_advisory",
+            "original_score": round(float(original_score), 4),
+            "candidate_score": round(float(candidate_score), 4),
+            "score_delta": round(float(delta), 4),
+            "score_drop": round(float(score_drop), 4),
+            "abs_drift": round(float(abs_drift), 4),
+            "original_decision": "positive" if original_decision else "negative",
+            "candidate_decision": "positive" if candidate_decision else "negative",
+            "decision_changed": original_decision != candidate_decision,
+            "large_drop": original_decision and score_drop >= large_drop_threshold,
+            "large_abs_drift": abs_drift >= max_abs_drift,
+            "decision_threshold": decision_threshold,
+            "large_drop_threshold": large_drop_threshold,
+            "max_abs_drift": max_abs_drift,
+            "model_count": len(common_models),
+            "models": {
+                model_id: {
+                    "model_id": model_id,
+                    "original_score": round(float(original_scores[model_id]), 4),
+                    "candidate_score": round(float(candidate_scores[model_id]), 4),
+                }
+                for model_id in common_models
+            },
+            "original_positive_model_count": sum(
+                float(original_scores[model_id]) >= decision_threshold
+                for model_id in common_models
+            ),
+            "candidate_positive_model_count": sum(
+                float(candidate_scores[model_id]) >= decision_threshold
+                for model_id in common_models
+            ),
+            "original_max_score": round(
+                max(float(original_scores[model_id]) for model_id in common_models),
+                4,
+            ),
+            "candidate_max_score": round(
+                max(float(candidate_scores[model_id]) for model_id in common_models),
+                4,
+            ),
+        }
 
     def _candidates_for_state(self, state: AutoRowState) -> list[AutoCandidate]:
         candidates = [

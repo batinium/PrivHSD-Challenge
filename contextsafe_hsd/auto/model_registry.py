@@ -6,7 +6,7 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
-from privhsd.hf_utility import approved_model_ids
+from contextsafe_hsd.hf_utility import approved_model_ids
 
 from .config import AutoPipelineConfig
 

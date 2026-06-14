@@ -2,6 +2,7 @@ import csv
 from pathlib import Path
 
 import contextsafe_hsd as hsd
+import contextsafe_hsd
 import privhsd
 
 
@@ -75,7 +76,13 @@ def test_top_level_create_and_validate_submission_api(tmp_path):
     assert "[USER]" in rows[0]["text"]
 
 
-def test_contextsafe_hsd_alias_exposes_public_api():
+def test_contextsafe_hsd_exposes_public_api():
+    assert hsd.process_csv is contextsafe_hsd.process_csv
+    assert hsd.create_submission is contextsafe_hsd.create_submission
+    assert hsd.privatize_text is contextsafe_hsd.privatize_text
+
+
+def test_legacy_privhsd_alias_exposes_public_api():
     assert hsd.process_csv is privhsd.process_csv
     assert hsd.create_submission is privhsd.create_submission
     assert hsd.privatize_text is privhsd.privatize_text

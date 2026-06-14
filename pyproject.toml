@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ContextSafe-HSD"
+name = "contextsafe-hsd"
 version = "0.1.0"
 description = "ContextSafe-HSD privacy-preserving text privatization pipeline for hate speech detection datasets."
 readme = "readme.md"
@@ -43,15 +43,15 @@ token-policy = [
 ]
 
 [project.scripts]
-contextsafe-hsd = "privhsd.cli:main"
-privhsd = "privhsd.cli:main"
+contextsafe-hsd = "contextsafe_hsd.cli:main"
+privhsd = "contextsafe_hsd.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["contextsafe_hsd*", "privhsd*"]
 exclude = ["tests*", "docs*", "agents*", "data*"]
 
 [tool.setuptools.package-data]
-privhsd = ["resources/*.toml"]
+contextsafe_hsd = ["resources/*.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
