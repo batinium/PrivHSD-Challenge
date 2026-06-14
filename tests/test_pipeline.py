@@ -189,6 +189,17 @@ def test_adjacent_social_handles_are_masked_individually():
     assert "immigrants should leave" in result.text
 
 
+def test_one_character_handle_and_obfuscated_url_are_masked():
+    text = "RT @t posted hxxps://bad.example/path and Muslims should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "@t" not in result.text
+    assert "hxxps://bad.example/path" not in result.text
+    assert "[USER]" in result.text
+    assert "[URL]" in result.text
+    assert "Muslims should leave" in result.text
+
+
 def test_context_person_masks_unicode_and_lowercase_self_identification():
     text = "My name is ayşe and Muslims should leave Lagos."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))

@@ -59,8 +59,8 @@ NAME_PHRASE_PATTERN = rf"{NAME_WORD_PATTERN}(?:\s+{NAME_WORD_PATTERN}){{0,3}}"
 
 REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
     ("EMAIL", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)),
-    ("URL", re.compile(r"\b(?:https?://|www\.)[^\s<>()]+", re.I)),
-    ("USER", re.compile(r"(?<!\w)@[A-Za-z0-9._-]{2,64}\b")),
+    ("URL", re.compile(r"\b(?:https?://|hxxps?://|www\.)[^\s<>()]+", re.I)),
+    ("USER", re.compile(r"(?<!\w)@[A-Za-z0-9._-]{1,64}\b")),
     ("IP_ADDRESS", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
     (
         "PHONE",
@@ -114,7 +114,7 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
         ),
     ),
 )
-ADJACENT_USER_PATTERN = re.compile(r"@[A-Za-z0-9._-]{2,64}\b")
+ADJACENT_USER_PATTERN = re.compile(r"@[A-Za-z0-9._-]{1,64}\b")
 
 OBFUSCATED_EMAIL_PATTERN = re.compile(
     r"(?<![\w@])"
@@ -609,7 +609,7 @@ def adjacent_user_spans(text: str) -> list[Span]:
         if previous_at < 0:
             continue
         previous_handle = text[previous_at + 1 : start]
-        if not re.fullmatch(r"[A-Za-z0-9._-]{2,64}", previous_handle):
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", previous_handle):
             continue
         spans.append(
             Span(

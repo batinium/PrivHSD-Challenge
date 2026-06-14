@@ -88,7 +88,8 @@ def test_high_confidence_residual_cleanup_masks_direct_identifiers_only():
     privatized = (
         "Email alex@example.test call +1 202 555 0100 visit "
         "https://example.test/post @alex 192.0.2.44 case#ABC123 "
-        "alex [at] example dot test near london library and Alex."
+        "alex [at] example dot test hxxps://bad.example/path @t "
+        "near london library and Alex."
     )
 
     cleanup = cleanup_high_confidence_residuals(privatized)
@@ -96,14 +97,14 @@ def test_high_confidence_residual_cleanup_masks_direct_identifiers_only():
     aggregate = aggregate_metrics([metrics])
 
     assert cleanup["changed"] is True
-    assert cleanup["cleanup_count"] == 7
+    assert cleanup["cleanup_count"] == 9
     assert cleanup["counts_by_entity_type"] == {
         "EMAIL": 2,
         "IDENTIFIER": 1,
         "IP_ADDRESS": 1,
         "PHONE": 1,
-        "URL": 1,
-        "USER": 1,
+        "URL": 2,
+        "USER": 2,
     }
     assert "alex@example.test" not in cleanup["text"]
     assert "+1 202 555 0100" not in cleanup["text"]
@@ -112,10 +113,12 @@ def test_high_confidence_residual_cleanup_masks_direct_identifiers_only():
     assert "192.0.2.44" not in cleanup["text"]
     assert "case#ABC123" not in cleanup["text"]
     assert "alex [at] example dot test" not in cleanup["text"]
+    assert "hxxps://bad.example/path" not in cleanup["text"]
+    assert "@t" not in cleanup["text"]
     assert "london library" in cleanup["text"]
     assert "Alex" in cleanup["text"]
-    assert metrics["residual_high_confidence_direct_identifier_count"] == 7
-    assert aggregate["residual_high_confidence_direct_identifier_count"] == 7
+    assert metrics["residual_high_confidence_direct_identifier_count"] == 9
+    assert aggregate["residual_high_confidence_direct_identifier_count"] == 9
 
 
 def test_aggregate_metrics_rolls_up_new_fields():
