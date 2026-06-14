@@ -1,8 +1,8 @@
 import csv
 import json
 
-from privhsd.cli import build_parser
-from privhsd.semantic_triage import run_semantic_triage_report
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.semantic_triage import run_semantic_triage_report
 
 
 def write_semantic_rows(path):
@@ -153,7 +153,7 @@ def test_semantic_triage_uses_optional_classifier_confidence(monkeypatch, tmp_pa
         writer.writerow(["1", "original marker", "protected marker", "hate"])
 
     monkeypatch.setattr(
-        "privhsd.semantic_triage.load_model",
+        "contextsafe_hsd.semantic_triage.load_model",
         lambda _path: (FakeClassifier(), {"model_type": "fake"}),
     )
 

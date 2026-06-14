@@ -1,6 +1,6 @@
 import pytest
 
-from privhsd.metrics import (
+from contextsafe_hsd.metrics import (
     aggregate_metrics,
     cleanup_high_confidence_residuals,
     row_metric,
@@ -152,7 +152,7 @@ def test_fast_metric_avoids_deep_target_scan(monkeypatch):
     def fail_deep_scan(_text):
         raise AssertionError("deep target scan should not run")
 
-    monkeypatch.setattr("privhsd.metrics.target_term_spans", fail_deep_scan)
+    monkeypatch.setattr("contextsafe_hsd.metrics.target_term_spans", fail_deep_scan)
 
     metrics = row_metric_fast("Muslims should leave.", "Muslims should leave.")
 

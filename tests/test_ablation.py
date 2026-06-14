@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-from privhsd.ablation import ABLATION_VARIANTS, run_ablation
-from privhsd.cli import main
-from privhsd.utility_benchmark import BenchmarkError, INSTALL_HINT
+from contextsafe_hsd.ablation import ABLATION_VARIANTS, run_ablation
+from contextsafe_hsd.cli import main
+from contextsafe_hsd.utility_benchmark import BenchmarkError, INSTALL_HINT
 
 
 HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None
@@ -170,7 +170,7 @@ def test_ablation_utility_benchmark_skip_path_when_sklearn_unavailable(
     def missing_sklearn():
         raise BenchmarkError(INSTALL_HINT)
 
-    monkeypatch.setattr("privhsd.ablation.load_sklearn", missing_sklearn)
+    monkeypatch.setattr("contextsafe_hsd.ablation.load_sklearn", missing_sklearn)
 
     result = run_ablation(
         source,

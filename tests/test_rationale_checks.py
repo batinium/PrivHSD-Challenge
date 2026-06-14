@@ -1,4 +1,4 @@
-from privhsd.rationale_checks import (
+from contextsafe_hsd.rationale_checks import (
     parse_rationale_spans,
     rationale_row_report,
 )

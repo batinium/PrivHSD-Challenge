@@ -1,8 +1,8 @@
 import csv
 import json
 
-from privhsd.cli import build_parser
-from privhsd.presidio_compare import PresidioCompareError, run_presidio_comparison
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.presidio_compare import PresidioCompareError, run_presidio_comparison
 
 
 class FakePresidioResult:
@@ -63,7 +63,7 @@ def test_compare_presidio_skips_when_dependency_missing(monkeypatch, tmp_path):
     def fake_load():
         raise PresidioCompareError("missing optional dependency")
 
-    monkeypatch.setattr("privhsd.presidio_compare.load_presidio", fake_load)
+    monkeypatch.setattr("contextsafe_hsd.presidio_compare.load_presidio", fake_load)
 
     result = run_presidio_comparison(
         source,
@@ -85,7 +85,7 @@ def test_compare_presidio_reports_overlap_and_false_positive_risk(
     source = tmp_path / "input.csv"
     write_rows(source)
     monkeypatch.setattr(
-        "privhsd.presidio_compare.load_presidio",
+        "contextsafe_hsd.presidio_compare.load_presidio",
         lambda: FakeAnalyzer(),
     )
 

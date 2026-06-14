@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.metadata_leakage import MetadataLeakageError, scan_metadata_leakage
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.metadata_leakage import MetadataLeakageError, scan_metadata_leakage
 
 
 def write_rows(path):

@@ -63,9 +63,8 @@ python -m pytest -q
 contextsafe-hsd protect --help
 ```
 
-For package-installed usage, `contextsafe-hsd` is the canonical CLI. The legacy
-`privhsd` command and `python -m privhsd.cli` path remain as compatibility
-aliases.
+For package-installed usage, `contextsafe-hsd` dispatches to the same CLI as
+`python -m contextsafe_hsd.cli`.
 
 ## Validate Exact Output
 
@@ -86,7 +85,6 @@ model weights, and run notes.
 
 ```text
 contextsafe_hsd/     Public Python package and implementation
-privhsd/             Legacy compatibility import/CLI shim
 tests/               Synthetic and regression tests
 docs/runbooks/       Operational workflows and commands
 docs/reference/      Stable contracts and architecture

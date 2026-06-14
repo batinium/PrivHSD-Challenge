@@ -15,14 +15,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from privhsd.context import analyze_context
-from privhsd.cue_checks import row_cue_report
-from privhsd.detectors import Span, target_group_spans
-from privhsd.metrics import aggregate_metrics, row_metric, row_metric_for_depth
-from privhsd.pipeline import MODES, PrivatizerConfig, privatize_text
-from privhsd.rerank import choose_candidate, generate_candidates_with_rejections
-from privhsd.span_providers.base import SpanProvider
-from privhsd.span_providers.registry import (
+from contextsafe_hsd.context import analyze_context
+from contextsafe_hsd.cue_checks import row_cue_report
+from contextsafe_hsd.detectors import Span, target_group_spans
+from contextsafe_hsd.metrics import aggregate_metrics, row_metric, row_metric_for_depth
+from contextsafe_hsd.pipeline import MODES, PrivatizerConfig, privatize_text
+from contextsafe_hsd.rerank import choose_candidate, generate_candidates_with_rejections
+from contextsafe_hsd.span_providers.base import SpanProvider
+from contextsafe_hsd.span_providers.registry import (
     SUPPORTED_PROVIDER_NAMES,
     SpanProviderRegistryError,
     load_span_provider,
@@ -337,7 +337,7 @@ def model_status() -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def load_ensemble() -> tuple[list[dict[str, Any]], list[float]]:
-    from privhsd.token_policy import (
+    from contextsafe_hsd.token_policy import (
         load_token_policy_ensemble,
         normalize_model_weights,
     )
@@ -357,7 +357,7 @@ def run_token_policy_ensemble(text: str) -> dict[str, Any]:
             "message": "Token-policy ensemble model directories are not present.",
         }
     try:
-        from privhsd.token_policy import (
+        from contextsafe_hsd.token_policy import (
             ensemble_member_report,
             ensemble_predictions_for_row,
             token_spans_for_text,
@@ -413,7 +413,7 @@ def run_token_policy_ensemble(text: str) -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def load_hsd_classifier() -> Any:
-    from privhsd.models.hsd_advisory_runtime import HsdAdvisoryRuntime
+    from contextsafe_hsd.models.hsd_advisory_runtime import HsdAdvisoryRuntime
 
     return HsdAdvisoryRuntime.from_model_id(
         HSD_ADVISORY_MODEL_ID,
@@ -688,7 +688,7 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
     rows, fieldnames = parse_csv_text(request.csv_text)
     validate_csv_request(request, fieldnames)
     if request.mode == "auto":
-        from privhsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
+        from contextsafe_hsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 
         context = AutoPipelineContext.create(
             AutoPipelineConfig(

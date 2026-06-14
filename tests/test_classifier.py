@@ -4,14 +4,14 @@ import importlib.util
 
 import pytest
 
-from privhsd.classifier import (
+from contextsafe_hsd.classifier import (
     ClassifierError,
     evaluate_classifier,
     load_sklearn,
     predict_classifier,
     train_classifier,
 )
-from privhsd.cli import build_parser
+from contextsafe_hsd.cli import build_parser
 
 
 HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None

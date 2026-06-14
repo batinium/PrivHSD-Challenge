@@ -3,7 +3,7 @@
 Status: active
 Owner area: CSV contract and submission
 Last verified: 2026-06-14
-Primary code: `privhsd/csv_pipeline.py`, `privhsd/submission.py`,
+Primary code: `contextsafe_hsd/csv_pipeline.py`, `contextsafe_hsd/submission.py`,
 `contextsafe_hsd/`
 
 This is the authoritative contract for exact-format outputs. Any agent changing
@@ -50,7 +50,7 @@ The official path must satisfy all of these rules before upload:
 Every exact candidate should be followed by:
 
 ```bash
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission OUTPUT.csv \
   --text-col text \

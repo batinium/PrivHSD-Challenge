@@ -7,7 +7,7 @@ pytest.importorskip("fastapi.testclient")
 
 from fastapi.testclient import TestClient
 
-from privhsd.span_providers.base import (
+from contextsafe_hsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
     SpanCandidate,

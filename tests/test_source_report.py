@@ -1,8 +1,8 @@
 import csv
 import json
 
-from privhsd.cli import build_parser
-from privhsd.source_report import run_source_regression_report
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.source_report import run_source_regression_report
 
 
 def write_csv(path, rows):

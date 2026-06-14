@@ -3,9 +3,9 @@
 Status: active
 Owner area: metrics, reports, regression gates
 Last verified: 2026-06-14
-Primary code: `privhsd/metrics.py`, `privhsd/cue_checks.py`,
-`privhsd/source_report.py`, `privhsd/author_risk.py`,
-`privhsd/semantic_triage.py`
+Primary code: `contextsafe_hsd/metrics.py`, `contextsafe_hsd/cue_checks.py`,
+`contextsafe_hsd/source_report.py`, `contextsafe_hsd/author_risk.py`,
+`contextsafe_hsd/semantic_triage.py`
 
 This is the authoritative evaluation reference. Keep current results in
 `docs/planning/current_status.md`.
@@ -28,7 +28,7 @@ Run these before upload or before declaring a pipeline change ready:
 
 ```bash
 python -m pytest tests/test_pipeline.py tests/test_csv_pipeline.py tests/test_submission.py tests/test_auto_pipeline.py tests/test_simple_pipeline.py -q
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission OUTPUT.csv \
   --text-col text \
@@ -39,7 +39,7 @@ python -m privhsd.cli validate-submission \
 When metadata columns exist, add source-aware regression:
 
 ```bash
-python -m privhsd.cli source-regression-report \
+contextsafe-hsd source-regression-report \
   --original INPUT.csv \
   --protected OUTPUT.csv \
   --original-text-col text \

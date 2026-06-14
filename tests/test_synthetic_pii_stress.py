@@ -2,8 +2,8 @@ import csv
 import json
 from pathlib import Path
 
-from privhsd.ablation import ABLATION_VARIANTS, run_ablation
-from privhsd.csv_pipeline import evaluate_csv, process_csv
+from contextsafe_hsd.ablation import ABLATION_VARIANTS, run_ablation
+from contextsafe_hsd.csv_pipeline import evaluate_csv, process_csv
 
 
 FIXTURE = Path("tests/fixtures/synthetic_pii_stress.csv")

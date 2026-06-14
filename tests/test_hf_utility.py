@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.hf_utility import (
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.hf_utility import (
     APPROVED_MODELS,
     HfUtilityError,
     load_hf_stack,
@@ -133,7 +133,7 @@ def test_hf_utility_skips_cleanly_without_transformers(monkeypatch, tmp_path):
     def fake_load():
         raise HfUtilityError("Install optional Hugging Face evaluator dependencies")
 
-    monkeypatch.setattr("privhsd.hf_utility.load_hf_stack", fake_load)
+    monkeypatch.setattr("contextsafe_hsd.hf_utility.load_hf_stack", fake_load)
 
     result = run_hf_utility_evaluation(
         source,
@@ -157,7 +157,7 @@ def test_hf_utility_reports_score_drift_with_fake_pipeline(monkeypatch, tmp_path
     source = tmp_path / "hf.csv"
     write_hf_rows(source)
     monkeypatch.setattr(
-        "privhsd.hf_utility.load_hf_stack",
+        "contextsafe_hsd.hf_utility.load_hf_stack",
         lambda: {"pipeline": fake_pipeline},
     )
 
@@ -190,7 +190,7 @@ def test_hf_utility_model_load_failure_is_per_model_skip(monkeypatch, tmp_path):
     source = tmp_path / "hf.csv"
     write_hf_rows(source)
     monkeypatch.setattr(
-        "privhsd.hf_utility.load_hf_stack",
+        "contextsafe_hsd.hf_utility.load_hf_stack",
         lambda: {"pipeline": failing_pipeline},
     )
 
@@ -215,7 +215,7 @@ def test_hf_utility_skips_custom_loader_models_before_pipeline(monkeypatch, tmp_
     def fail_if_called():
         raise AssertionError("generic HF stack should not load")
 
-    monkeypatch.setattr("privhsd.hf_utility.load_hf_stack", fail_if_called)
+    monkeypatch.setattr("contextsafe_hsd.hf_utility.load_hf_stack", fail_if_called)
 
     result = run_hf_utility_evaluation(
         source,

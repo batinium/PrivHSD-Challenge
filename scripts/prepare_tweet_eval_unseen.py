@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 import urllib.error
 
-from privhsd.datasets import prepare_tweet_eval_unseen
+from contextsafe_hsd.datasets import prepare_tweet_eval_unseen
 
 
 def main(argv: list[str] | None = None) -> int:

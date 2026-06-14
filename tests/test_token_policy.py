@@ -3,15 +3,15 @@ from collections import Counter
 
 import torch
 
-from privhsd.cli import build_parser
-from privhsd.token_actions import (
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.token_actions import (
     ACTION_GENERALIZE,
     ACTION_KEEP,
     ACTION_MASK,
     ACTION_PROTECT_HSD,
     ACTION_PROTECT_TARGET,
 )
-from privhsd.token_policy import (
+from contextsafe_hsd.token_policy import (
     ACTION_REVIEW,
     IGNORE_INDEX,
     TOKEN_POLICY_LABEL_TO_ID,

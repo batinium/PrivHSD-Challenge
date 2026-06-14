@@ -123,7 +123,7 @@ Priority: critical.
 
 Deliver:
 
-- clean repository entry points: `python -m privhsd.cli ...` and package API;
+- clean repository entry points: `contextsafe-hsd ...` and package API;
 - install instructions for base and optional extras;
 - smoke command that judges can run quickly on a small CSV;
 - `python -m pytest -q` path fixed or documented with optional-extra skips;

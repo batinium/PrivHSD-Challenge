@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.dpmlm_spike import DpmlmSpikeError, run_dpmlm_spike
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.dpmlm_spike import DpmlmSpikeError, run_dpmlm_spike
 
 
 def write_dpmlm_rows(path):
@@ -54,7 +54,7 @@ def test_dpmlm_spike_writes_structured_blocker_report(monkeypatch, tmp_path):
     output = tmp_path / "dpmlm.json"
     write_dpmlm_rows(source)
     monkeypatch.setattr(
-        "privhsd.dpmlm_spike.detect_backends",
+        "contextsafe_hsd.dpmlm_spike.detect_backends",
         lambda: {"dpmlm": False, "private_transformers": False, "opendp": False},
     )
 
@@ -86,7 +86,7 @@ def test_dpmlm_spike_reports_detected_backend_without_adapter(monkeypatch, tmp_p
     source = tmp_path / "dpmlm.csv"
     write_dpmlm_rows(source)
     monkeypatch.setattr(
-        "privhsd.dpmlm_spike.detect_backends",
+        "contextsafe_hsd.dpmlm_spike.detect_backends",
         lambda: {
             "dpmlm": {"installed": True, "importable": True, "error": None},
             "private_transformers": False,

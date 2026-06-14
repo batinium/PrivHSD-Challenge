@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.dpmlm_candidates import (
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.dpmlm_candidates import (
     DpmlmCandidateError,
     is_protected_token,
     protected_tokens,
@@ -98,8 +98,8 @@ def test_dpmlm_candidate_generation_freezes_hsd_cues(monkeypatch, tmp_path):
     report = tmp_path / "report.json"
     write_rows(source)
     model = FakeDpmlmModel({"#MyTag": "plainly"})
-    monkeypatch.setattr("privhsd.dpmlm_candidates.load_dpmlm_model", lambda model_name: model)
-    monkeypatch.setattr("privhsd.dpmlm_candidates.tokenize_text", fake_tokenize)
+    monkeypatch.setattr("contextsafe_hsd.dpmlm_candidates.load_dpmlm_model", lambda model_name: model)
+    monkeypatch.setattr("contextsafe_hsd.dpmlm_candidates.tokenize_text", fake_tokenize)
 
     result = run_dpmlm_candidates(
         source,
@@ -138,8 +138,8 @@ def test_dpmlm_candidate_generation_rejects_unchanged_predictions(
     output = tmp_path / "candidates.csv"
     write_rows(source)
     model = FakeDpmlmModel({"#MyTag": "should"})
-    monkeypatch.setattr("privhsd.dpmlm_candidates.load_dpmlm_model", lambda model_name: model)
-    monkeypatch.setattr("privhsd.dpmlm_candidates.tokenize_text", fake_tokenize)
+    monkeypatch.setattr("contextsafe_hsd.dpmlm_candidates.load_dpmlm_model", lambda model_name: model)
+    monkeypatch.setattr("contextsafe_hsd.dpmlm_candidates.tokenize_text", fake_tokenize)
 
     result = run_dpmlm_candidates(
         source,

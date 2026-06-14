@@ -4,7 +4,7 @@ Thin local demo app for ContextSafe-HSD. It is intentionally separate from the
 main pipeline package:
 
 ```text
-workbench/backend/    FastAPI wrapper around privhsd APIs
+workbench/backend/    FastAPI wrapper around contextsafe_hsd APIs
 workbench/frontend/   React/Vite UI
 ```
 

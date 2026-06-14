@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from privhsd.pipeline import PrivatizerConfig, privatize_text
-from privhsd.presidio_augment import filtered_presidio_spans
+from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
+from contextsafe_hsd.presidio_augment import filtered_presidio_spans
 
 
 @dataclass(frozen=True)

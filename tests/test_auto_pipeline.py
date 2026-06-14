@@ -2,20 +2,20 @@ import csv
 from dataclasses import dataclass
 from pathlib import Path
 
-from privhsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
-from privhsd.auto.engine import (
+from contextsafe_hsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
+from contextsafe_hsd.auto.engine import (
     AutoCandidate,
     choose_auto_candidate,
     cleanup_direct_residuals,
     cleanup_strict_residuals,
 )
-from privhsd.span_providers.base import (
+from contextsafe_hsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
     SpanCandidate,
     SpanProviderOutput,
 )
-from privhsd.submission import create_submission
+from contextsafe_hsd.submission import create_submission
 
 
 def read_rows(path):
@@ -126,8 +126,8 @@ def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(
     monkeypatch,
     tmp_path,
 ):
-    monkeypatch.setattr("privhsd.auto.context.has_module", lambda _name: False)
-    monkeypatch.setattr("privhsd.auto.model_registry.module_available", lambda _name: False)
+    monkeypatch.setattr("contextsafe_hsd.auto.context.has_module", lambda _name: False)
+    monkeypatch.setattr("contextsafe_hsd.auto.model_registry.module_available", lambda _name: False)
     source = tmp_path / "rows.csv"
     output = tmp_path / "out.csv"
     write_four_col(source)
@@ -659,7 +659,7 @@ def test_create_submission_auto_records_configured_gliner_model(
     tmp_path,
 ):
     monkeypatch.setattr(
-        "privhsd.auto.model_registry.module_available",
+        "contextsafe_hsd.auto.model_registry.module_available",
         lambda name: name == "gliner",
     )
     source = tmp_path / "four_col.csv"

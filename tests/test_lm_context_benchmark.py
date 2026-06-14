@@ -1,8 +1,8 @@
 import csv
 import json
 
-from privhsd.cli import build_parser
-from privhsd.lm_context_benchmark import (
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.lm_context_benchmark import (
     BenchmarkRequestError,
     parse_binary_tags_mode,
     parse_json_mode,
@@ -98,7 +98,7 @@ def test_lm_context_benchmark_writes_blocked_report(tmp_path, monkeypatch):
         raise BenchmarkRequestError("connection_error", "connection refused")
 
     monkeypatch.setattr(
-        "privhsd.lm_context_benchmark.post_chat_completion",
+        "contextsafe_hsd.lm_context_benchmark.post_chat_completion",
         fake_post,
     )
 

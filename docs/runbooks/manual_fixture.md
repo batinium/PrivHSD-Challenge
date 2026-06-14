@@ -4,7 +4,7 @@ Status: active
 Owner area: synthetic/manual fixtures
 Last verified: 2026-06-14
 Primary code: `tests/fixtures/manual_privacy_expectations.csv`,
-`privhsd/pipeline.py`, `privhsd/cue_checks.py`
+`contextsafe_hsd/pipeline.py`, `contextsafe_hsd/cue_checks.py`
 
 Use this when checking hand-authored examples and expected GUI behavior.
 
@@ -21,7 +21,7 @@ The manual fixture exercises examples that are easy to inspect by eye:
 ## Exact-Format Check
 
 ```bash
-python -m privhsd.cli create-submission \
+contextsafe-hsd create-submission \
   --input tests/fixtures/manual_privacy_expectations.csv \
   --output data/outputs/manual_privacy_expectations.auto.csv \
   --text-col text \
@@ -31,7 +31,7 @@ python -m privhsd.cli create-submission \
   --metric-depth fast \
   --manifest data/outputs/manual_privacy_expectations.auto.manifest.json
 
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source tests/fixtures/manual_privacy_expectations.csv \
   --submission data/outputs/manual_privacy_expectations.auto.csv \
   --text-col text \

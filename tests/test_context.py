@@ -1,4 +1,4 @@
-from privhsd.context import analyze_context
+from contextsafe_hsd.context import analyze_context
 
 
 def tags(text):

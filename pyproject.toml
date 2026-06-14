@@ -44,10 +44,9 @@ token-policy = [
 
 [project.scripts]
 contextsafe-hsd = "contextsafe_hsd.cli:main"
-privhsd = "contextsafe_hsd.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["contextsafe_hsd*", "privhsd*"]
+include = ["contextsafe_hsd*"]
 exclude = ["tests*", "docs*", "agents*", "data*"]
 
 [tool.setuptools.package-data]

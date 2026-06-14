@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.dataset_profile import DatasetProfileError, profile_dataset
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.dataset_profile import DatasetProfileError, profile_dataset
 
 
 def test_profile_dataset_reports_aggregate_schema_without_raw_text(tmp_path):

@@ -53,7 +53,7 @@ Historical/local evidence below should be replaced with the final exact
 ## Demo Script
 
 ```bash
-python -m privhsd.cli create-submission \
+contextsafe-hsd create-submission \
   --input INPUT.csv \
   --output data/outputs/SUBMISSION.auto.csv \
   --text-col text \
@@ -63,7 +63,7 @@ python -m privhsd.cli create-submission \
   --metric-depth fast \
   --manifest data/outputs/SUBMISSION.auto.manifest.json
 
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission data/outputs/SUBMISSION.auto.csv \
   --text-col text \

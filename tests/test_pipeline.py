@@ -1,5 +1,5 @@
-from privhsd.detectors import target_group_spans
-from privhsd.pipeline import PrivatizerConfig, privatize_text
+from contextsafe_hsd.detectors import target_group_spans
+from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
 
 
 def sensitive_word_from_codes(*codes: int) -> str:

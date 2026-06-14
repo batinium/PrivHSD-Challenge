@@ -29,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from privhsd.context import analyze_context
-from privhsd.detectors import detect_spans, target_group_spans
-from privhsd.pipeline import PrivatizerConfig, privatize_text
-from privhsd.token_policy import token_examples_for_row, weak_action_spans_for_row
+from contextsafe_hsd.context import analyze_context
+from contextsafe_hsd.detectors import detect_spans, target_group_spans
+from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
+from contextsafe_hsd.token_policy import token_examples_for_row, weak_action_spans_for_row
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions"

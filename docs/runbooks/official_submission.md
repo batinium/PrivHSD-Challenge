@@ -3,8 +3,8 @@
 Status: active
 Owner area: official CSV workflow
 Last verified: 2026-06-14
-Primary code: `privhsd/csv_pipeline.py`, `privhsd/submission.py`,
-`privhsd/auto/`
+Primary code: `contextsafe_hsd/csv_pipeline.py`, `contextsafe_hsd/submission.py`,
+`contextsafe_hsd/auto/`
 
 Use this when an official or challenge-style CSV arrives. The public workflow
 is:
@@ -24,7 +24,7 @@ Reports should identify rows by ID only.
 ## 2. Profile Columns
 
 ```bash
-python -m privhsd.cli profile-dataset \
+contextsafe-hsd profile-dataset \
   --input data/official/OFFICIAL.csv \
   --output data/outputs/official.profile.json
 ```
@@ -36,7 +36,7 @@ columns.
 If the profiler guesses wrong:
 
 ```bash
-python -m privhsd.cli profile-dataset \
+contextsafe-hsd profile-dataset \
   --input data/official/OFFICIAL.csv \
   --text-col TEXT_COLUMN \
   --id-col ID_COLUMN \
@@ -47,7 +47,7 @@ python -m privhsd.cli profile-dataset \
 ## 3. Create Exact Output
 
 ```bash
-python -m privhsd.cli protect \
+contextsafe-hsd protect \
   --preset exact \
   --input data/official/OFFICIAL.csv \
   --output data/outputs/official.protected.csv \
@@ -68,7 +68,7 @@ the manifest.
 ## 4. Validate Shape
 
 ```bash
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source data/official/OFFICIAL.csv \
   --submission data/outputs/official.protected.csv \
   --text-col TEXT_COLUMN \
@@ -99,7 +99,7 @@ analysis, record the skipped reason rather than inventing one.
 Run source-aware regression with only columns that exist:
 
 ```bash
-python -m privhsd.cli source-regression-report \
+contextsafe-hsd source-regression-report \
   --original data/official/OFFICIAL.csv \
   --protected data/outputs/official.protected.csv \
   --original-text-col TEXT_COLUMN \

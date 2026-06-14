@@ -3,8 +3,8 @@
 Status: active
 Owner area: auto orchestration, span providers, token-policy runtime
 Last verified: 2026-06-14
-Primary code: `privhsd/auto/context.py`, `privhsd/auto/model_registry.py`,
-`privhsd/span_providers/`, `privhsd/models/`
+Primary code: `contextsafe_hsd/auto/context.py`, `contextsafe_hsd/auto/model_registry.py`,
+`contextsafe_hsd/span_providers/`, `contextsafe_hsd/models/`
 
 This is the authoritative reference for optional local helpers and model
 behavior. Public runbooks should say `PII Assist`; this file records the

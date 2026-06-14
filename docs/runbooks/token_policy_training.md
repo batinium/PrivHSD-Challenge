@@ -3,8 +3,8 @@
 Status: active
 Owner area: token-policy training and runtime
 Last verified: 2026-06-14
-Primary code: `privhsd/token_policy.py`, `privhsd/token_actions.py`,
-`privhsd/models/token_policy_runtime.py`
+Primary code: `contextsafe_hsd/token_policy.py`, `contextsafe_hsd/token_actions.py`,
+`contextsafe_hsd/models/token_policy_runtime.py`
 
 The token-policy model learns weak token-action labels. It is optional advisory
 evidence for auto routing, fusion, and reranking; it is not a direct text
@@ -22,7 +22,7 @@ Verify CUDA with the local PyTorch build before using `--device cuda`.
 ## Train RoBERTa
 
 ```bash
-python -m privhsd.cli train-token-policy \
+contextsafe-hsd train-token-policy \
   --input data/public_dev/recommended_merged.csv \
   --text-col text \
   --id-col id \
@@ -42,7 +42,7 @@ python -m privhsd.cli train-token-policy \
 Repeat with `--fold-index 0..4`:
 
 ```bash
-python -m privhsd.cli train-token-policy \
+contextsafe-hsd train-token-policy \
   --input data/public_dev/recommended_merged.csv \
   --text-col text \
   --id-col id \
@@ -62,7 +62,7 @@ python -m privhsd.cli train-token-policy \
 ## Evaluate Ensemble
 
 ```bash
-python -m privhsd.cli evaluate-token-policy-ensemble \
+contextsafe-hsd evaluate-token-policy-ensemble \
   --input data/external_unseen/tweet_eval_hate_offensive_test.csv \
   --text-col text \
   --id-col id \
@@ -76,7 +76,7 @@ python -m privhsd.cli evaluate-token-policy-ensemble \
 Use standalone predictions only as candidate support:
 
 ```bash
-python -m privhsd.cli predict-token-policy-ensemble \
+contextsafe-hsd predict-token-policy-ensemble \
   --input INPUT.csv \
   --text-col text \
   --id-col id \
@@ -84,7 +84,7 @@ python -m privhsd.cli predict-token-policy-ensemble \
   --model-dir data/outputs/token_policy_hatebert.action_balanced_train30000.cuda \
   --output data/outputs/INPUT.token_policy_ensemble.predictions.json
 
-python -m privhsd.cli apply-token-policy-candidates \
+contextsafe-hsd apply-token-policy-candidates \
   --input INPUT.csv \
   --output data/outputs/INPUT.token_policy_candidates.csv \
   --text-col text \

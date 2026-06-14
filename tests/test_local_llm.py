@@ -3,8 +3,8 @@ import io
 import json
 from urllib import error
 
-from privhsd.cli import build_parser
-from privhsd.local_llm import (
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.local_llm import (
     LocalLlmError,
     post_chat_completion,
     response_text,
@@ -86,7 +86,7 @@ def test_local_llm_candidate_generation_accepts_schema_checked_candidate(
             ]
         }
 
-    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+    monkeypatch.setattr("contextsafe_hsd.local_llm.post_chat_completion", fake_post)
 
     result = run_local_llm_candidates(
         source,
@@ -140,7 +140,7 @@ def test_local_llm_candidate_generation_can_sample_source_label_round_robin(
             ]
         }
 
-    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+    monkeypatch.setattr("contextsafe_hsd.local_llm.post_chat_completion", fake_post)
 
     result = run_local_llm_candidates(
         source,
@@ -173,7 +173,7 @@ def test_local_llm_candidate_generation_skips_when_endpoint_fails(
     def fake_post(**_kwargs):
         raise LocalLlmError("endpoint unavailable")
 
-    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+    monkeypatch.setattr("contextsafe_hsd.local_llm.post_chat_completion", fake_post)
 
     result = run_local_llm_candidates(
         source,
@@ -215,7 +215,7 @@ def test_local_llm_candidate_generation_rejects_cue_loss(monkeypatch, tmp_path):
             ]
         }
 
-    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+    monkeypatch.setattr("contextsafe_hsd.local_llm.post_chat_completion", fake_post)
 
     result = run_local_llm_candidates(
         source,
@@ -258,7 +258,7 @@ def test_local_llm_candidate_generation_rejects_negation_loss(monkeypatch, tmp_p
             ]
         }
 
-    monkeypatch.setattr("privhsd.local_llm.post_chat_completion", fake_post)
+    monkeypatch.setattr("contextsafe_hsd.local_llm.post_chat_completion", fake_post)
 
     result = run_local_llm_candidates(
         source,
@@ -315,7 +315,7 @@ def test_post_chat_completion_falls_back_when_response_format_rejected(monkeypat
             )
         return FakeResponse({"choices": [{"message": {"content": "{}"}}]})
 
-    monkeypatch.setattr("privhsd.local_llm.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("contextsafe_hsd.local_llm.request.urlopen", fake_urlopen)
 
     result = post_chat_completion(
         endpoint="http://localhost/v1/chat/completions",

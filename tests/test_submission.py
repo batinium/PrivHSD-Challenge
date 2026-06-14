@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
-from privhsd.cli import build_parser, main
-from privhsd.submission import (
+from contextsafe_hsd.cli import build_parser, main
+from contextsafe_hsd.submission import (
     SubmissionError,
     create_submission,
     validate_submission,
@@ -131,7 +131,7 @@ def test_submission_commands_are_registered():
 
 def test_protect_help_is_short_public_surface():
     result = subprocess.run(
-        [sys.executable, "-m", "privhsd.cli", "protect", "--help"],
+        [sys.executable, "-m", "contextsafe_hsd.cli", "protect", "--help"],
         check=True,
         capture_output=True,
         text=True,
@@ -147,8 +147,8 @@ def test_protect_help_is_short_public_surface():
 
 
 def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr("privhsd.auto.context.has_module", lambda _name: False)
-    monkeypatch.setattr("privhsd.auto.model_registry.module_available", lambda _name: False)
+    monkeypatch.setattr("contextsafe_hsd.auto.context.has_module", lambda _name: False)
+    monkeypatch.setattr("contextsafe_hsd.auto.model_registry.module_available", lambda _name: False)
     source = tmp_path / "source.csv"
     output = tmp_path / "protected.csv"
     manifest_path = tmp_path / "manifest.json"
@@ -201,8 +201,8 @@ def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_pat
 
 
 def test_protect_analysis_appends_hsd_advisory_columns(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr("privhsd.auto.context.has_module", lambda _name: False)
-    monkeypatch.setattr("privhsd.auto.model_registry.module_available", lambda _name: False)
+    monkeypatch.setattr("contextsafe_hsd.auto.context.has_module", lambda _name: False)
+    monkeypatch.setattr("contextsafe_hsd.auto.model_registry.module_available", lambda _name: False)
     source = tmp_path / "source.csv"
     output = tmp_path / "analysis.csv"
     manifest_path = tmp_path / "manifest.json"
@@ -312,7 +312,7 @@ def test_create_submission_can_use_filtered_presidio_augmentation(
             }
         )
     monkeypatch.setattr(
-        "privhsd.submission.load_presidio_analyzer",
+        "contextsafe_hsd.submission.load_presidio_analyzer",
         lambda: FakePresidioAnalyzer(),
     )
 

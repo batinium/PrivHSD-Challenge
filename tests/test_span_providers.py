@@ -1,15 +1,15 @@
 from dataclasses import dataclass
 
-from privhsd.pipeline import PrivatizerConfig, privatize_text
-from privhsd.span_providers.base import (
+from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
+from contextsafe_hsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     SpanCandidate,
     SpanProviderOutput,
 )
-from privhsd.span_providers.deterministic import DeterministicSpanProvider
-from privhsd.span_providers.fusion import fuse_span_candidates
-from privhsd.span_providers.gliner import GlinerSpanProvider
-from privhsd.span_providers.presidio import PresidioSpanProvider
+from contextsafe_hsd.span_providers.deterministic import DeterministicSpanProvider
+from contextsafe_hsd.span_providers.fusion import fuse_span_candidates
+from contextsafe_hsd.span_providers.gliner import GlinerSpanProvider
+from contextsafe_hsd.span_providers.presidio import PresidioSpanProvider
 
 
 @dataclass(frozen=True)
@@ -200,7 +200,7 @@ class StaticProvider:
 
 
 def test_rerank_can_generate_provider_augmented_candidate():
-    from privhsd.rerank import generate_candidates
+    from contextsafe_hsd.rerank import generate_candidates
 
     candidates = generate_candidates(
         "i'm going to kill Amy",

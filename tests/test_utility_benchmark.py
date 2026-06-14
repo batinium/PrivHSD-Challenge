@@ -3,7 +3,7 @@ import importlib.util
 
 import pytest
 
-from privhsd.utility_benchmark import BenchmarkError, run_utility_benchmark
+from contextsafe_hsd.utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
 HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None

@@ -1,10 +1,10 @@
 import csv
 import json
 
-from privhsd.csv_pipeline import process_csv
-from privhsd.metrics import row_metric
-from privhsd.pipeline import PrivatizerConfig, privatize_text
-from privhsd.style import scrub_style
+from contextsafe_hsd.csv_pipeline import process_csv
+from contextsafe_hsd.metrics import row_metric
+from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
+from contextsafe_hsd.style import scrub_style
 
 
 def read_csv_rows(path):

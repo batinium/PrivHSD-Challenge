@@ -1,7 +1,7 @@
 import csv
 import json
 
-from privhsd.datasets import (
+from contextsafe_hsd.datasets import (
     COMMON_DATASET_FIELDNAMES,
     canonical_tweet_eval_label,
     merge_normalized_datasets,
@@ -245,7 +245,7 @@ def test_normalize_convabuse(tmp_path):
 
 
 def test_normalize_convabuse_splits(tmp_path):
-    from privhsd.datasets import normalize_convabuse_splits
+    from contextsafe_hsd.datasets import normalize_convabuse_splits
 
     train = tmp_path / "train.csv"
     out = tmp_path / "convabuse_splits.csv"

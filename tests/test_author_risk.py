@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from privhsd.author_risk import run_author_risk_evaluation
-from privhsd.cli import build_parser
+from contextsafe_hsd.author_risk import run_author_risk_evaluation
+from contextsafe_hsd.cli import build_parser
 
 
 HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None

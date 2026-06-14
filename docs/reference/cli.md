@@ -3,12 +3,12 @@
 Status: active
 Owner area: CLI and public command contracts
 Last verified: 2026-06-14
-Primary code: `pyproject.toml`, `contextsafe_hsd/cli.py`, `privhsd/`
+Primary code: `pyproject.toml`, `contextsafe_hsd/cli.py`
 
 This file maps command ownership. Full recipes belong in `docs/runbooks/`.
-Installed console scripts are `contextsafe-hsd` and `privhsd`; both dispatch to
-`contextsafe_hsd.cli:main`. New examples should use `contextsafe-hsd`;
-`python -m privhsd.cli` remains a compatibility path.
+The installed console script is `contextsafe-hsd`, which dispatches to
+`contextsafe_hsd.cli:main`. Repository examples may also use
+`python -m contextsafe_hsd.cli`.
 
 ## Public Command
 

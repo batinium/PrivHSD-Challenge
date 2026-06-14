@@ -2,7 +2,7 @@ import csv
 from dataclasses import dataclass
 import json
 
-from privhsd.csv_pipeline import evaluate_csv, process_csv
+from contextsafe_hsd.csv_pipeline import evaluate_csv, process_csv
 
 
 def write_rows(path, rows):
@@ -77,7 +77,7 @@ def test_process_csv_can_use_filtered_presidio_augmentation(monkeypatch, tmp_pat
         [{"id": "1", "text": "i'm going to kill Amy", "label": "nothate"}],
     )
     monkeypatch.setattr(
-        "privhsd.csv_pipeline.load_presidio_analyzer",
+        "contextsafe_hsd.csv_pipeline.load_presidio_analyzer",
         lambda: FakePresidioAnalyzer(),
     )
 

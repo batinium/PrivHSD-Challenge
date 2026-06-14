@@ -1,8 +1,8 @@
 import csv
 import json
 
-from privhsd.cli import build_parser
-from privhsd.contribution_bounding import bound_contributions
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.contribution_bounding import bound_contributions
 
 
 def write_rows(path, rows):

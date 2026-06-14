@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.cue_checks import CueCheckError, run_cue_checks
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.cue_checks import CueCheckError, run_cue_checks
 
 
 def write_rows(path):

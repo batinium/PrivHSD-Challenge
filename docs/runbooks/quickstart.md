@@ -20,8 +20,8 @@ python -m pytest -q
 contextsafe-hsd protect --help
 ```
 
-For package-installed usage, use `contextsafe-hsd`. The `privhsd` console
-script and `python -m privhsd.cli` remain compatibility aliases.
+For package-installed usage, use `contextsafe-hsd`. Repository examples may
+also use `python -m contextsafe_hsd.cli`.
 
 ## Protect A CSV
 

@@ -4,8 +4,8 @@ import importlib.util
 
 import pytest
 
-from privhsd.cli import build_parser
-from privhsd.token_actions import (
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.token_actions import (
     ACTION_GENERALIZE,
     ACTION_MASK,
     ACTION_NORMALIZE,

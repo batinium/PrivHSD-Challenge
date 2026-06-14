@@ -2,8 +2,8 @@ import csv
 from dataclasses import dataclass
 import json
 
-from privhsd.cli import build_parser
-from privhsd.rerank import generate_candidates, run_candidate_reranking
+from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.rerank import generate_candidates, run_candidate_reranking
 
 
 def read_rows(path):
@@ -230,7 +230,7 @@ def test_candidate_reranking_can_choose_presidio_augmented_candidate(
         writer.writeheader()
         writer.writerow({"id": "1", "text": "i'm going to kill Amy", "label": "nothate"})
     monkeypatch.setattr(
-        "privhsd.rerank.load_presidio_analyzer",
+        "contextsafe_hsd.rerank.load_presidio_analyzer",
         lambda: FakePresidioAnalyzer(),
     )
 

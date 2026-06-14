@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compatibility wrapper for the packaged Dynahate preparation command."""
 
-from privhsd.datasets import main
+from contextsafe_hsd.datasets import main
 
 
 if __name__ == "__main__":

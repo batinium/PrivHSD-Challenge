@@ -59,11 +59,11 @@ a baseline upload and raw outputs must not be submitted directly.
 ## Recommended Commands
 
 ```bash
-python -m privhsd.cli profile-dataset \
+contextsafe-hsd profile-dataset \
   --input INPUT.csv \
   --output data/outputs/INPUT.profile.json
 
-python -m privhsd.cli create-submission \
+contextsafe-hsd create-submission \
   --input INPUT.csv \
   --output data/outputs/SUBMISSION.auto.csv \
   --text-col text \
@@ -73,14 +73,14 @@ python -m privhsd.cli create-submission \
   --metric-depth fast \
   --manifest data/outputs/SUBMISSION.auto.manifest.json
 
-python -m privhsd.cli validate-submission \
+contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission data/outputs/SUBMISSION.auto.csv \
   --text-col text \
   --id-col id \
   --output data/outputs/SUBMISSION.auto.validation.json
 
-python -m privhsd.cli source-regression-report \
+contextsafe-hsd source-regression-report \
   --original INPUT.csv \
   --protected data/outputs/SUBMISSION.auto.csv \
   --original-text-col text \
