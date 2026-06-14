@@ -60,6 +60,10 @@ using a hash of the uploaded CSV and the active processing options. The cache is
 local-only and intended for repeat demos; delete `workbench/.cache/` to clear it.
 Use synthetic or consented text for public demos.
 
+Run CSV starts a local background job and the UI polls row/phase progress from
+the backend. Matching cached uploads return immediately without rerunning the
+pipeline.
+
 CSV uploads are processed through the auto pipeline with fast metrics and
 local-only optional model behavior. When "Replace text column" is enabled, the
 downloaded CSV preserves the original schema and writes the privatized text back

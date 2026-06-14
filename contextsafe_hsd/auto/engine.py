@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from contextsafe_hsd.detectors import (
     HIGH_CONFIDENCE_DIRECT_TYPES,
@@ -43,6 +43,9 @@ class AutoPipelineResult:
     fieldnames: list[str]
     summary: dict[str, Any]
     audit_rows: list[dict[str, Any]]
+
+
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 STRICT_RESIDUAL_QUASI_SOURCES = frozenset({"context_location", "regex"})
@@ -270,6 +273,28 @@ class AutoPipelineEngine:
     def __init__(self, context: AutoPipelineContext) -> None:
         self.context = context
 
+    def _emit_progress(
+        self,
+        progress_callback: ProgressCallback | None,
+        *,
+        stage: str,
+        processed: int = 0,
+        total: int = 0,
+        detail: str = "",
+        **metadata: Any,
+    ) -> None:
+        if progress_callback is None:
+            return
+        progress_callback(
+            {
+                "stage": stage,
+                "processed": processed,
+                "total": total,
+                "detail": detail,
+                **metadata,
+            }
+        )
+
     def process_rows(
         self,
         rows: list[dict[str, str]],
@@ -281,6 +306,7 @@ class AutoPipelineEngine:
         replace_text: bool = False,
         source_col: str | None = None,
         label_col: str | None = None,
+        progress_callback: ProgressCallback | None = None,
     ) -> AutoPipelineResult:
         config = self.context.config
         output_fieldnames = list(fieldnames)
@@ -294,6 +320,14 @@ class AutoPipelineEngine:
             style_scrub=False,
         )
         states: list[AutoRowState] = []
+        total_rows = len(rows)
+        self._emit_progress(
+            progress_callback,
+            stage="baseline",
+            processed=0,
+            total=total_rows,
+            detail="Building deterministic privacy baseline.",
+        )
         for row_index, row in enumerate(rows, start=1):
             original = str(row.get(text_col, "") or "")
             baseline = privatize_text(original, baseline_config)
@@ -318,14 +352,43 @@ class AutoPipelineEngine:
                     decision=route_row(profile),
                 )
             )
+            self._emit_progress(
+                progress_callback,
+                stage="baseline",
+                processed=row_index,
+                total=total_rows,
+                detail="Built deterministic privacy baseline.",
+                row_id=profile.row_id,
+            )
 
-        self._run_provider_batches(states)
-        self._run_token_policy_batch(states, text_col=text_col)
-        candidate_groups = [
-            (state, self._candidates_for_state(state))
-            for state in states
-        ]
-        self._run_hsd_advisory_batch(candidate_groups)
+        self._run_provider_batches(states, progress_callback=progress_callback)
+        self._run_token_policy_batch(
+            states,
+            text_col=text_col,
+            progress_callback=progress_callback,
+        )
+        candidate_groups = []
+        self._emit_progress(
+            progress_callback,
+            stage="candidates",
+            processed=0,
+            total=total_rows,
+            detail="Generating candidate masked outputs.",
+        )
+        for index, state in enumerate(states, start=1):
+            candidate_groups.append((state, self._candidates_for_state(state)))
+            self._emit_progress(
+                progress_callback,
+                stage="candidates",
+                processed=index,
+                total=total_rows,
+                detail="Generated candidate masked outputs.",
+                row_id=state.row_id,
+            )
+        self._run_hsd_advisory_batch(
+            candidate_groups,
+            progress_callback=progress_callback,
+        )
 
         output_rows: list[dict[str, Any]] = []
         audit_rows: list[dict[str, Any]] = []
@@ -340,7 +403,14 @@ class AutoPipelineEngine:
         hsd_advisory_comparison_count = 0
         residual_review_required_count = 0
         residual_direct_cleanup_count = 0
-        for state, candidates in candidate_groups:
+        self._emit_progress(
+            progress_callback,
+            stage="selection",
+            processed=0,
+            total=total_rows,
+            detail="Selecting final masked output and computing row metrics.",
+        )
+        for row_number, (state, candidates) in enumerate(candidate_groups, start=1):
             chosen, scored, reason = choose_auto_candidate(
                 state.original,
                 candidates,
@@ -389,7 +459,22 @@ class AutoPipelineEngine:
                     residual_cleanup=residual_cleanup,
                 )
             )
+            self._emit_progress(
+                progress_callback,
+                stage="selection",
+                processed=row_number,
+                total=total_rows,
+                detail="Selected final masked output and computed row metrics.",
+                row_id=state.row_id,
+            )
 
+        self._emit_progress(
+            progress_callback,
+            stage="summary",
+            processed=0,
+            total=0,
+            detail="Aggregating audit metrics.",
+        )
         metrics = aggregate_metrics(metric_rows)
         provider_rows_considered = sum(1 for state in states if state.decision.use_providers)
         if config.max_provider_rows is not None:
@@ -459,12 +544,31 @@ class AutoPipelineEngine:
             ),
         )
 
-    def _run_provider_batches(self, states: list[AutoRowState]) -> None:
+    def _run_provider_batches(
+        self,
+        states: list[AutoRowState],
+        *,
+        progress_callback: ProgressCallback | None = None,
+    ) -> None:
         provider_rows = [state for state in states if state.decision.use_providers]
         max_rows = self.context.config.max_provider_rows
         if max_rows is not None:
             provider_rows = provider_rows[:max_rows]
+        self._emit_progress(
+            progress_callback,
+            stage="providers",
+            processed=0,
+            total=len(provider_rows),
+            detail="Checking optional PII providers.",
+        )
         if not provider_rows:
+            self._emit_progress(
+                progress_callback,
+                stage="providers",
+                processed=0,
+                total=0,
+                detail="No rows needed optional PII providers.",
+            )
             return
         providers = self.context.optional_span_providers()
         if not providers:
@@ -472,9 +576,56 @@ class AutoPipelineEngine:
                 state.provider_errors.append(
                     {"provider": "auto", "error_class": "NoAvailableProvider"}
                 )
+            self._emit_progress(
+                progress_callback,
+                stage="providers",
+                processed=len(provider_rows),
+                total=len(provider_rows),
+                detail="Optional PII providers were unavailable.",
+            )
             return
-        for provider in providers:
+        provider_total = len(providers)
+        for provider_number, provider in enumerate(providers, start=1):
             provider_name = getattr(provider, "name", "unknown")
+            if progress_callback is not None:
+                self._emit_progress(
+                    progress_callback,
+                    stage="providers",
+                    processed=0,
+                    total=len(provider_rows),
+                    detail=f"Running {provider_name} PII provider.",
+                    provider=provider_name,
+                    provider_index=provider_number,
+                    provider_total=provider_total,
+                )
+                for row_number, state in enumerate(provider_rows, start=1):
+                    try:
+                        output = provider.propose(state.original)
+                    except Exception as exc:
+                        state.provider_errors.append(
+                            {
+                                "provider": provider_name,
+                                "error_class": type(exc).__name__,
+                            }
+                        )
+                        self.context.audit_counters[
+                            f"provider_runtime_error:{provider_name}:{type(exc).__name__}"
+                        ] += 1
+                    else:
+                        state.provider_outputs.append(output)
+                        state.provider_candidates.extend(output.spans)
+                    self._emit_progress(
+                        progress_callback,
+                        stage="providers",
+                        processed=row_number,
+                        total=len(provider_rows),
+                        detail=f"Ran {provider_name} PII provider.",
+                        row_id=state.row_id,
+                        provider=provider_name,
+                        provider_index=provider_number,
+                        provider_total=provider_total,
+                    )
+                continue
             propose_many = getattr(provider, "propose_many", None)
             if callable(propose_many):
                 texts = [state.original for state in provider_rows]
@@ -533,9 +684,24 @@ class AutoPipelineEngine:
         states: list[AutoRowState],
         *,
         text_col: str,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         model_rows = [state for state in states if state.decision.use_token_policy]
+        self._emit_progress(
+            progress_callback,
+            stage="token_policy",
+            processed=0,
+            total=len(model_rows),
+            detail="Checking token-policy model candidates.",
+        )
         if not model_rows:
+            self._emit_progress(
+                progress_callback,
+                stage="token_policy",
+                processed=0,
+                total=0,
+                detail="No rows needed token-policy model candidates.",
+            )
             return
         token_provider = self.context.ensure_token_policy_provider()
         if token_provider is None:
@@ -546,48 +712,125 @@ class AutoPipelineEngine:
                         "error_class": "UnavailableModel",
                     }
                 )
-            return
-        rows = [
-            {**state.row, text_col: state.original}
-            for state in model_rows
-        ]
-        try:
-            outputs = token_provider.propose_many(
-                rows,
-                text_col=text_col,
-                batch_size=self.context.config.max_model_batch_size,
+            self._emit_progress(
+                progress_callback,
+                stage="token_policy",
+                processed=len(model_rows),
+                total=len(model_rows),
+                detail="Token-policy model was unavailable.",
             )
-        except Exception as exc:
-            self.context.audit_counters[
-                f"model_runtime_error:token_policy_ensemble:{type(exc).__name__}"
-            ] += 1
-            for state in model_rows:
-                state.model_errors.append(
-                    {
-                        "model": "token_policy_ensemble",
-                        "error_class": type(exc).__name__,
-                    }
-                )
             return
-        for state, output in zip(model_rows, outputs):
-            state.model_outputs.append(output)
-            state.model_candidates.extend(output.spans)
+        chunk_size = (
+            self.context.config.max_model_batch_size
+            if progress_callback is not None
+            else len(model_rows)
+        )
+        processed_rows = 0
+        for start in range(0, len(model_rows), max(1, chunk_size)):
+            chunk = model_rows[start : start + max(1, chunk_size)]
+            rows = [
+                {**state.row, text_col: state.original}
+                for state in chunk
+            ]
+            try:
+                outputs = token_provider.propose_many(
+                    rows,
+                    text_col=text_col,
+                    batch_size=self.context.config.max_model_batch_size,
+                )
+            except Exception as exc:
+                self.context.audit_counters[
+                    f"model_runtime_error:token_policy_ensemble:{type(exc).__name__}"
+                ] += 1
+                for state in chunk:
+                    state.model_errors.append(
+                        {
+                            "model": "token_policy_ensemble",
+                            "error_class": type(exc).__name__,
+                        }
+                    )
+                processed_rows += len(chunk)
+                self._emit_progress(
+                    progress_callback,
+                    stage="token_policy",
+                    processed=processed_rows,
+                    total=len(model_rows),
+                    detail="Token-policy model candidate check encountered an error.",
+                )
+                continue
+            for state, output in zip(chunk, outputs):
+                state.model_outputs.append(output)
+                state.model_candidates.extend(output.spans)
+            processed_rows += len(chunk)
+            self._emit_progress(
+                progress_callback,
+                stage="token_policy",
+                processed=processed_rows,
+                total=len(model_rows),
+                detail="Checked token-policy model candidates.",
+            )
 
     def _run_hsd_advisory_batch(
         self,
         candidate_groups: list[tuple[AutoRowState, list[AutoCandidate]]],
+        *,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         advisory_groups = [
             (state, candidates)
             for state, candidates in candidate_groups
             if candidates
         ]
+        self._emit_progress(
+            progress_callback,
+            stage="hsd_advisory",
+            processed=0,
+            total=len(advisory_groups),
+            detail="Checking HSD preservation across masked candidates.",
+        )
         if not advisory_groups:
+            self._emit_progress(
+                progress_callback,
+                stage="hsd_advisory",
+                processed=0,
+                total=0,
+                detail="No HSD advisory comparisons were needed.",
+            )
             return
         advisory = self.context.ensure_hsd_advisory()
         if advisory is None:
+            self._emit_progress(
+                progress_callback,
+                stage="hsd_advisory",
+                processed=len(advisory_groups),
+                total=len(advisory_groups),
+                detail="HSD advisory model was unavailable.",
+            )
             return
 
+        if progress_callback is not None:
+            chunk_size = min(self.context.config.max_model_batch_size, 8)
+            processed_rows = 0
+            for start in range(0, len(advisory_groups), max(1, chunk_size)):
+                chunk = advisory_groups[start : start + max(1, chunk_size)]
+                self._score_hsd_advisory_groups(advisory, chunk)
+                processed_rows += len(chunk)
+                self._emit_progress(
+                    progress_callback,
+                    stage="hsd_advisory",
+                    processed=processed_rows,
+                    total=len(advisory_groups),
+                    detail="Checked HSD preservation across masked candidates.",
+                )
+            return
+
+        self._score_hsd_advisory_groups(advisory, advisory_groups)
+
+    def _score_hsd_advisory_groups(
+        self,
+        advisory: Any,
+        advisory_groups: list[tuple[AutoRowState, list[AutoCandidate]]],
+    ) -> None:
         texts: list[str] = []
         for state, candidates in advisory_groups:
             texts.append(state.original)

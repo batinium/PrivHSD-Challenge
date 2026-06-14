@@ -1,5 +1,6 @@
 import csv
 import io
+import time
 
 import pytest
 
@@ -146,6 +147,33 @@ def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
     assert report["safeguards"]["human_review_required_rows"] == 1
 
 
+def test_platform_insight_keeps_full_review_queue_and_capped_preview():
+    rows = [
+        {
+            "id": f"case-{index}",
+            "text": "A report says Muslims should leave town.",
+            "hsd_answer": "1",
+        }
+        for index in range(workbench_app.MAX_PREVIEW_ROWS + 5)
+    ]
+
+    report = platform_insight_report(
+        original_rows=rows,
+        output_rows=rows,
+        text_col="text",
+        output_col="text",
+        aggregate={"residual_identifier_count": 0},
+        id_col="id",
+    )
+
+    assert report["ngo_review"]["queue_rows"] == workbench_app.MAX_PREVIEW_ROWS + 5
+    assert len(report["ngo_review"]["queue_items"]) == workbench_app.MAX_PREVIEW_ROWS + 5
+    assert len(report["ngo_review"]["queue_preview"]) == workbench_app.MAX_PREVIEW_ROWS
+    assert report["ngo_review"]["queue_items"][-1]["row_id"] == (
+        f"case-{workbench_app.MAX_PREVIEW_ROWS + 4}"
+    )
+
+
 def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing():
     client = TestClient(app)
     response = client.post(
@@ -210,6 +238,49 @@ def test_workbench_csv_endpoint_persists_and_reuses_cached_result(tmp_path, monk
     second_body = second.json()
     assert second_body["cache"]["hit"] is True
     assert second_body["output_csv"] == first_body["output_csv"]
+
+
+def test_workbench_csv_job_reports_progress_and_result(tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+    client = TestClient(workbench_app.app)
+    payload = {
+        "csv_text": (
+            "id,text,predicted_is_hate_speech\n"
+            "1,Email alex@example.test because Muslims should leave.,1\n"
+            "2,Case note from Dana in Boston.,0\n"
+        ),
+        "text_col": "text",
+        "id_col": "id",
+        "mode": "auto",
+        "replace_text": True,
+        "disabled_providers": ["presidio", "scrubadub", "gliner"],
+        "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+    }
+
+    start = client.post("/api/csv/jobs", json=payload)
+    assert start.status_code == 200
+    start_body = start.json()
+    assert start_body["job_id"]
+    assert start_body["progress"]["value"] >= 0
+
+    job = start_body
+    for _attempt in range(50):
+        if job["status"] == "complete":
+            break
+        time.sleep(0.05)
+        poll = client.get(f"/api/csv/jobs/{start_body['job_id']}")
+        assert poll.status_code == 200
+        job = poll.json()
+        assert "progress" in job
+        assert 0 <= job["progress"]["value"] <= 100
+    else:
+        pytest.fail("CSV job did not complete")
+
+    assert job["status"] == "complete"
+    assert job["progress"]["value"] == 100
+    assert job["progress"]["processed_rows"] == 2
+    assert job["result"]["cache"]["hit"] is False
+    assert job["result"]["manifest"]["row_count"] == 2
 
 
 def test_workbench_text_endpoint_uses_selected_span_provider(monkeypatch):

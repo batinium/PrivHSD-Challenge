@@ -67,38 +67,24 @@ const CATEGORY_LABELS = {
 const AUTO_DASHBOARD_DISABLED_MODELS = ["semantic", "local_llm"];
 const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub", "gliner"];
 const AUTO_MODEL_ORDER = ["token_policy_ensemble", "hsd_advisory"];
-const PROCESSING_STAGES = [
-  {
-    after: 0,
-    value: 12,
-    label: "Checking saved result",
-    detail: "Matching this CSV and option set against the local demo cache."
-  },
-  {
-    after: 1.4,
-    value: 30,
-    label: "Privacy detection",
-    detail: "Scanning protected output for identifiers and residual PII."
-  },
-  {
-    after: 4,
-    value: 52,
-    label: "Candidate selection",
-    detail: "Selecting the least destructive masked candidate for each row."
-  },
-  {
-    after: 7,
-    value: 74,
-    label: "Context checks",
-    detail: "Checking HSD cues, target references, and safeguard metrics."
-  },
-  {
-    after: 10,
-    value: 90,
-    label: "Preparing dashboard",
-    detail: "Building review queue, target statistics, and export artifacts."
-  }
+const RISK_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "high", label: "High" },
+  { id: "medium", label: "Moderate" },
+  { id: "low", label: "Low" }
 ];
+const REVIEW_ACTIONS = [
+  { id: "open", label: "Open", icon: FileCheck2 },
+  { id: "reviewing", label: "In review", icon: ShieldAlert },
+  { id: "escalated", label: "Escalate", icon: AlertTriangle },
+  { id: "cleared", label: "Clear", icon: CheckCircle2 }
+];
+const REVIEW_STATUS_LABELS = {
+  open: "Open",
+  reviewing: "In review",
+  escalated: "Escalated",
+  cleared: "Cleared"
+};
 const NAV_ITEMS = [
   {
     id: "dashboard",
@@ -239,6 +225,14 @@ function percentFromCounts(part, total) {
 
 function statusText(value) {
   return String(value || "unknown").replaceAll("_", " ");
+}
+
+function itemRiskLevel(item) {
+  return item?.safeguard?.harm_risk?.level || "low";
+}
+
+function reviewStatusFor(decisions, rowId) {
+  return decisions?.[rowId]?.status || "open";
 }
 
 function SafeguardOverviewPanel({ result }) {
@@ -412,36 +406,115 @@ function SafeguardCard({ item }) {
   );
 }
 
-function ReviewQueueDetailPanel({ ngoReview }) {
-  const queue = ngoReview?.queue_preview || [];
+function ReviewQueueDetailPanel({ ngoReview, onReviewDecision, reviewDecisions }) {
+  const [riskFilter, setRiskFilter] = useState("all");
+  const queue = ngoReview?.queue_items || ngoReview?.queue_preview || [];
+  const riskCounts = queue.reduce(
+    (counts, item) => {
+      const level = itemRiskLevel(item);
+      counts.all += 1;
+      counts[level] = (counts[level] || 0) + 1;
+      return counts;
+    },
+    { all: 0, high: 0, medium: 0, low: 0 }
+  );
+  const filteredQueue = riskFilter === "all"
+    ? queue
+    : queue.filter((item) => itemRiskLevel(item) === riskFilter);
+  const reviewCounts = queue.reduce(
+    (counts, item) => {
+      const status = reviewStatusFor(reviewDecisions, item.row_id);
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    },
+    { open: 0, reviewing: 0, escalated: 0, cleared: 0 }
+  );
   return (
-    <section className="review-detail-list">
-      {queue.length ? queue.map((item) => (
-        <article className="review-case" key={item.row_id}>
-          <div className="review-case-main">
-            <div className="queue-topline">
-              <strong>{item.row_id}</strong>
-              <span>{formatScoreValue(item.score)}</span>
-            </div>
-            <p>{item.protected_preview}</p>
-            <Tags values={[
-              ...(item.target_categories || []).map(categoryLabel),
-              ...(item.context_tags || []).map(statusText)
-            ]} />
-            <div className="context-retention-strip">
-              <span><strong>{formatPercentRate(item.context_preservation?.retention?.target_cue ?? null)}</strong> target refs</span>
-              <span><strong>{formatPercentRate(item.context_preservation?.retention?.utility_cue ?? null)}</strong> HSD signals</span>
-              <span><strong>{formatPercentRate(item.context_preservation?.retention?.character ?? null)}</strong> similarity</span>
-            </div>
+    <div className="review-detail-column">
+      <section className="portal-panel review-controls">
+        <div className="review-control-topline">
+          <div>
+            <h2>Human Review</h2>
+            <p>{formatCount(filteredQueue.length)} of {formatCount(queue.length)} routed cases shown.</p>
           </div>
-          <SafeguardCard item={item} />
-        </article>
-      )) : (
-        <section className="portal-panel">
-          <div className="empty-state">No protected cases are currently queued for NGO review.</div>
-        </section>
-      )}
-    </section>
+          <div className="review-summary-strip">
+            <span><strong>{formatCount(reviewCounts.open || 0)}</strong> open</span>
+            <span><strong>{formatCount(reviewCounts.reviewing || 0)}</strong> in review</span>
+            <span><strong>{formatCount(reviewCounts.escalated || 0)}</strong> escalated</span>
+            <span><strong>{formatCount(reviewCounts.cleared || 0)}</strong> cleared</span>
+          </div>
+        </div>
+        <div className="segmented-control risk-filter" aria-label="Harm risk filter">
+          {RISK_FILTERS.map((filter) => (
+            <button
+              className={riskFilter === filter.id ? "active" : ""}
+              key={filter.id}
+              onClick={() => setRiskFilter(filter.id)}
+              type="button"
+            >
+              {filter.label}
+              <span>{formatCount(riskCounts[filter.id] || 0)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className="review-detail-list">
+        {queue.length && filteredQueue.length ? filteredQueue.map((item) => {
+          const decision = reviewStatusFor(reviewDecisions, item.row_id);
+          return (
+            <article className="review-case" key={item.row_id}>
+              <div className="review-case-main">
+                <div className="queue-topline">
+                  <strong>{item.row_id}</strong>
+                  <span>{formatScoreValue(item.score)}</span>
+                </div>
+                <div className="review-meta">
+                  <span className={`review-decision ${decision}`}>
+                    {REVIEW_STATUS_LABELS[decision] || statusText(decision)}
+                  </span>
+                  <span>{item.safeguard?.harm_risk?.label || "Low harm signal"}</span>
+                </div>
+                <p>{item.protected_preview}</p>
+                <Tags values={[
+                  ...(item.target_categories || []).map(categoryLabel),
+                  ...(item.context_tags || []).map(statusText)
+                ]} />
+                <div className="context-retention-strip">
+                  <span><strong>{formatPercentRate(item.context_preservation?.retention?.target_cue ?? null)}</strong> target refs</span>
+                  <span><strong>{formatPercentRate(item.context_preservation?.retention?.utility_cue ?? null)}</strong> HSD signals</span>
+                  <span><strong>{formatPercentRate(item.context_preservation?.retention?.character ?? null)}</strong> similarity</span>
+                </div>
+                <div className="review-actions" aria-label={`Review actions for ${item.row_id}`}>
+                  {REVIEW_ACTIONS.map((action) => {
+                    const Icon = action.icon;
+                    return (
+                      <button
+                        className={decision === action.id ? "active" : ""}
+                        key={action.id}
+                        onClick={() => onReviewDecision(item.row_id, action.id)}
+                        type="button"
+                      >
+                        <Icon size={15} />
+                        {action.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <SafeguardCard item={item} />
+            </article>
+          );
+        }) : queue.length ? (
+          <section className="portal-panel">
+            <div className="empty-state">No routed cases match this risk filter.</div>
+          </section>
+        ) : (
+          <section className="portal-panel">
+            <div className="empty-state">No protected cases are currently queued for NGO review.</div>
+          </section>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -605,16 +678,27 @@ function NgoDashboard({ result }) {
 
 function ProcessingProgress({ progress }) {
   if (!progress) return null;
+  const value = Math.max(0, Math.min(100, Number(progress.value) || 0));
+  const processedRows = Math.max(0, Number(progress.processed_rows) || 0);
+  const totalRows = Math.max(0, Number(progress.total_rows) || 0);
   return (
     <div className="processing-progress" aria-live="polite">
       <div className="progress-topline">
         <strong>{progress.label}</strong>
-        <span>{progress.value}%</span>
+        <span>{value}%</span>
       </div>
       <div className="progress-track" aria-hidden="true">
-        <div style={{ width: `${progress.value}%` }} />
+        <div style={{ width: `${value}%` }} />
       </div>
-      <p>{progress.detail}</p>
+      <div className="progress-detail">
+        <p>{progress.detail}</p>
+        {totalRows > 0 ? (
+          <span>{processedRows} / {totalRows} rows</span>
+        ) : null}
+      </div>
+      {progress.row_id ? (
+        <div className="progress-row">Current case: {progress.row_id}</div>
+      ) : null}
     </div>
   );
 }
@@ -859,6 +943,10 @@ function downloadTextFile(name, text, type) {
   URL.revokeObjectURL(url);
 }
 
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function csvRequestPayload({ csvText, idCol, replaceText, textCol }) {
   return {
     csv_text: csvText,
@@ -887,26 +975,23 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [cacheNotice, setCacheNotice] = useState("");
   const [processingProgress, setProcessingProgress] = useState(null);
   const [error, setError] = useState("");
+  const [reviewDecisions, setReviewDecisions] = useState({});
+  const reviewStorageKey = result?.cache?.key
+    ? `contextsafe-hsd-review:${result.cache.key}`
+    : "";
 
   useEffect(() => {
-    if (!busy) {
-      return undefined;
+    if (!reviewStorageKey) {
+      setReviewDecisions({});
+      return;
     }
-    const startedAt = Date.now();
-    setProcessingProgress(PROCESSING_STAGES[0]);
-    const timer = window.setInterval(() => {
-      const elapsed = (Date.now() - startedAt) / 1000;
-      const stage = [...PROCESSING_STAGES]
-        .reverse()
-        .find((item) => elapsed >= item.after) || PROCESSING_STAGES[0];
-      const drift = Math.min(8, Math.floor(Math.max(0, elapsed - stage.after) * 2));
-      setProcessingProgress({
-        ...stage,
-        value: Math.min(96, stage.value + drift)
-      });
-    }, 400);
-    return () => window.clearInterval(timer);
-  }, [busy]);
+    try {
+      const stored = window.localStorage.getItem(reviewStorageKey);
+      setReviewDecisions(stored ? JSON.parse(stored) : {});
+    } catch (_err) {
+      setReviewDecisions({});
+    }
+  }, [reviewStorageKey]);
 
   const metrics = result?.audit?.summary?.metrics || {};
   const csvGauges = {
@@ -951,6 +1036,25 @@ function CsvWorkbench({ activeView, modelStatus }) {
     if (!result) return;
     downloadTextFile("contextsafe-hsd-manifest.json", JSON.stringify(result.manifest, null, 2), "application/json");
   };
+  const updateReviewDecision = (rowId, status) => {
+    setReviewDecisions((previous) => {
+      const next = {
+        ...previous,
+        [rowId]: {
+          status,
+          updated_at: new Date().toISOString()
+        }
+      };
+      if (reviewStorageKey) {
+        try {
+          window.localStorage.setItem(reviewStorageKey, JSON.stringify(next));
+        } catch (_err) {
+          // Review decisions remain available in memory when browser storage is unavailable.
+        }
+      }
+      return next;
+    });
+  };
 
   async function handleFile(event) {
     const file = event.target.files?.[0];
@@ -966,6 +1070,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
     setTextCol(nextTextCol);
     setIdCol(nextIdCol);
     setResult(null);
+    setProcessingProgress(null);
     setError("");
     if (nextTextCol) {
       await lookupCachedCsv({
@@ -982,6 +1087,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   function handleTextColChange(value) {
     setTextCol(value);
     setResult(null);
+    setProcessingProgress(null);
     if (csvText && value) {
       void lookupCachedCsv({
         csvTextValue: csvText,
@@ -997,6 +1103,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   function handleIdColChange(value) {
     setIdCol(value);
     setResult(null);
+    setProcessingProgress(null);
     if (csvText && textCol) {
       void lookupCachedCsv({
         csvTextValue: csvText,
@@ -1012,6 +1119,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   function handleReplaceTextChange(value) {
     setReplaceText(value);
     setResult(null);
+    setProcessingProgress(null);
     if (csvText && textCol) {
       void lookupCachedCsv({
         csvTextValue: csvText,
@@ -1060,8 +1168,15 @@ function CsvWorkbench({ activeView, modelStatus }) {
     setBusy(true);
     setError("");
     setCacheNotice("");
+    setProcessingProgress({
+      value: 0,
+      label: "Queued",
+      detail: "Submitting CSV job to the local pipeline.",
+      processed_rows: 0,
+      total_rows: 0
+    });
     try {
-      const response = await fetch("/api/csv/privatize", {
+      const startResponse = await fetch("/api/csv/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(csvRequestPayload({
@@ -1071,18 +1186,33 @@ function CsvWorkbench({ activeView, modelStatus }) {
           textCol
         }))
       });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.detail || `Request failed with ${response.status}`);
+      if (!startResponse.ok) {
+        const body = await startResponse.json().catch(() => ({}));
+        throw new Error(body.detail || `Request failed with ${startResponse.status}`);
       }
-      const body = await response.json();
-      setProcessingProgress({
-        value: 100,
-        label: body.cache?.hit ? "Loaded saved result" : "Processing complete",
-        detail: body.cache?.hit
-          ? "A matching local result was restored without rerunning the pipeline."
-          : "The processed result was saved to the local demo cache."
-      });
+      let job = await startResponse.json();
+      if (job.progress) {
+        setProcessingProgress(job.progress);
+      }
+      while (job.status !== "complete") {
+        if (job.status === "failed") {
+          throw new Error(job.error?.message || "CSV processing failed");
+        }
+        await delay(500);
+        const statusResponse = await fetch(`/api/csv/jobs/${job.job_id}`);
+        if (!statusResponse.ok) {
+          const body = await statusResponse.json().catch(() => ({}));
+          throw new Error(body.detail || `Progress lookup failed with ${statusResponse.status}`);
+        }
+        job = await statusResponse.json();
+        if (job.progress) {
+          setProcessingProgress(job.progress);
+        }
+      }
+      const body = job.result;
+      if (!body) {
+        throw new Error("CSV job completed without returning a result.");
+      }
       setResult(body);
       setCacheNotice(
         body.cache?.hit
@@ -1125,7 +1255,11 @@ function CsvWorkbench({ activeView, modelStatus }) {
             title="Review Queue"
           />
           <section className="portal-focus-grid review-layout">
-            <ReviewQueueDetailPanel ngoReview={ngoReview} />
+            <ReviewQueueDetailPanel
+              ngoReview={ngoReview}
+              onReviewDecision={updateReviewDecision}
+              reviewDecisions={reviewDecisions}
+            />
             <div className="side-stack">
               <SafeguardOverviewPanel result={result} />
               <PrivacyLeakagePanel result={result} />

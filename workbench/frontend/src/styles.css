@@ -656,6 +656,101 @@ button:disabled {
   font-size: 13px;
 }
 
+.review-detail-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.review-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-control-topline {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.review-control-topline h2 {
+  color: #253142;
+  font-size: 17px;
+  margin: 0;
+}
+
+.review-control-topline p {
+  color: #667282;
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.review-summary-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
+.review-summary-strip span {
+  background: #f8fafc;
+  border: 1px solid #dbe1e8;
+  border-radius: 999px;
+  color: #667282;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+.review-summary-strip strong {
+  color: #253142;
+}
+
+.segmented-control {
+  background: #f8fafc;
+  border: 1px solid #dbe1e8;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+}
+
+.risk-filter {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.segmented-control button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 6px;
+  justify-content: center;
+  min-height: 34px;
+  min-width: 0;
+  padding: 6px 8px;
+}
+
+.segmented-control button.active {
+  background: #ffffff;
+  border-color: #a9d4ca;
+  color: #0f625b;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.segmented-control button span {
+  color: inherit;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
 .review-case {
   background: #ffffff;
   border: 1px solid #dbe1e8;
@@ -676,6 +771,75 @@ button:disabled {
   line-height: 1.45;
   margin: 10px 0 0;
   overflow-wrap: anywhere;
+}
+
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.review-meta span {
+  background: #f8fafc;
+  border: 1px solid #dbe1e8;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 8px;
+}
+
+.review-decision.open {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.review-decision.reviewing {
+  background: #eef7f4;
+  border-color: #a9d4ca;
+  color: #0f625b;
+}
+
+.review-decision.escalated {
+  background: #fff7ed;
+  border-color: #fed7aa;
+  color: #c2410c;
+}
+
+.review-decision.cleared {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: #15803d;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.review-actions button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe1e8;
+  border-radius: 7px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 9px;
+}
+
+.review-actions button.active {
+  background: #e8f4f1;
+  border-color: #8ac2b7;
+  color: #0f625b;
 }
 
 .safeguard-card {
@@ -1122,11 +1286,35 @@ button:disabled {
   transition: width 260ms ease;
 }
 
-.processing-progress p {
+.progress-detail {
+  align-items: flex-start;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.progress-detail p {
   color: #667282;
+  flex: 1 1 auto;
   font-size: 12px;
   line-height: 1.35;
-  margin: 8px 0 0;
+  margin: 0;
+}
+
+.progress-detail span,
+.progress-row {
+  color: #0f625b;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.progress-row {
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .form-grid {
@@ -1672,6 +1860,14 @@ th {
     justify-content: flex-start;
   }
 
+  .review-control-topline {
+    flex-direction: column;
+  }
+
+  .review-summary-strip {
+    justify-content: flex-start;
+  }
+
   .primary {
     margin-left: 0;
   }
@@ -1707,6 +1903,10 @@ th {
 
   .mobile-nav {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .risk-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .brand {

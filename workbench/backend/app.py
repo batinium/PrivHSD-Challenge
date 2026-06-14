@@ -10,8 +10,10 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import threading
 import time
 from typing import Any, Literal
+import uuid
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +37,7 @@ MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
 CSV_CACHE_VERSION = "workbench_csv_result_v2"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
+CSV_JOB_TTL_SECONDS = 60 * 60
 HSD_ADVISORY_MODEL_ID = "facebook/roberta-hate-speech-dynabench-r4-target"
 CARDIFF_HATE_MODEL_ID = "cardiffnlp/twitter-roberta-base-hate-latest"
 LOCAL_CLASSIFIER_PATH = ROOT / "data/outputs/privhsd_classifier.pkl"
@@ -45,6 +48,21 @@ ENSEMBLE_MODEL_DIRS = [
 ENSEMBLE_REPORT = (
     ROOT / "data/outputs/token_policy_ensemble.roberta_hatebert.tweet_eval_external.evaluate.json"
 )
+CSV_JOBS: dict[str, dict[str, Any]] = {}
+CSV_JOBS_LOCK = threading.Lock()
+CSV_PROGRESS_PHASES = {
+    "queued": (0, 1, "Queued"),
+    "cache": (1, 4, "Checking saved result"),
+    "setup": (4, 7, "Preparing pipeline"),
+    "baseline": (7, 22, "Privacy baseline"),
+    "providers": (22, 40, "PII provider scan"),
+    "token_policy": (40, 52, "Token-policy candidates"),
+    "candidates": (52, 64, "Candidate generation"),
+    "hsd_advisory": (64, 82, "HSD preservation"),
+    "selection": (82, 96, "Final row audit"),
+    "summary": (96, 98, "Aggregating report"),
+    "packaging": (98, 100, "Preparing dashboard"),
+}
 
 
 class PrivatizeRequest(BaseModel):
@@ -330,6 +348,93 @@ def cached_csv_response(
         created_at=record.get("created_at"),
     )
     return response
+
+
+def csv_progress_payload(
+    stage: str,
+    *,
+    processed: int = 0,
+    total: int = 0,
+    detail: str = "",
+    **metadata: Any,
+) -> dict[str, Any]:
+    start, end, label = CSV_PROGRESS_PHASES.get(
+        stage,
+        (0, 100, stage.replace("_", " ").title()),
+    )
+    processed = max(0, int(processed or 0))
+    total = max(0, int(total or 0))
+    fraction = 1.0 if total == 0 else min(1.0, processed / total)
+    if stage == "providers" and metadata.get("provider_total"):
+        provider_total = max(1, int(metadata.get("provider_total") or 1))
+        provider_index = max(1, int(metadata.get("provider_index") or 1))
+        fraction = min(
+            1.0,
+            ((provider_index - 1) + fraction) / provider_total,
+        )
+    value = max(0, min(100, int(round(start + (end - start) * fraction))))
+    provider = metadata.get("provider")
+    if provider:
+        label = f"{label}: {provider}"
+    return {
+        "stage": stage,
+        "value": value,
+        "label": label,
+        "detail": detail,
+        "processed_rows": processed,
+        "total_rows": total,
+        "row_id": metadata.get("row_id"),
+    }
+
+
+def prune_csv_jobs() -> None:
+    cutoff = time.time() - CSV_JOB_TTL_SECONDS
+    with CSV_JOBS_LOCK:
+        stale = [
+            job_id
+            for job_id, job in CSV_JOBS.items()
+            if job.get("updated_at", 0) < cutoff
+            and job.get("status") in {"complete", "failed"}
+        ]
+        for job_id in stale:
+            del CSV_JOBS[job_id]
+
+
+def update_csv_job(job_id: str, **updates: Any) -> None:
+    with CSV_JOBS_LOCK:
+        job = CSV_JOBS.get(job_id)
+        if job is None:
+            return
+        job.update(updates)
+        job["updated_at"] = time.time()
+
+
+def csv_job_snapshot(job_id: str) -> dict[str, Any]:
+    with CSV_JOBS_LOCK:
+        job = CSV_JOBS.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="CSV job not found.")
+        return dict(job)
+
+
+def csv_job_progress_callback(job_id: str):
+    def callback(event: dict[str, Any]) -> None:
+        update_csv_job(
+            job_id,
+            status="running",
+            progress=csv_progress_payload(
+                str(event.get("stage", "setup")),
+                processed=int(event.get("processed", 0) or 0),
+                total=int(event.get("total", 0) or 0),
+                detail=str(event.get("detail", "") or ""),
+                row_id=event.get("row_id"),
+                provider=event.get("provider"),
+                provider_index=event.get("provider_index"),
+                provider_total=event.get("provider_total"),
+            ),
+        )
+
+    return callback
 
 
 def csv_preview_row(
@@ -831,6 +936,7 @@ def platform_insight_report(
     category_stats: dict[str, dict[str, Any]] = {}
     category_cue_counts_before: Counter[str] = Counter()
     category_cue_counts_after: Counter[str] = Counter()
+    queue_items: list[dict[str, Any]] = []
     queue_preview: list[dict[str, Any]] = []
     leakage_status_counts: Counter[str] = Counter()
     context_status_counts: Counter[str] = Counter()
@@ -899,38 +1005,37 @@ def platform_insight_report(
             classified_rows += 1
             if classification["is_hatred"]:
                 hatred_rows += 1
-                if len(queue_preview) < MAX_PREVIEW_ROWS:
-                    row_id = (
-                        output_row.get(id_col)
-                        if id_col
-                        else output_row.get("id") or output_row.get("case_id")
-                    )
-                    queue_preview.append(
-                        {
-                            "row_id": row_id or str(row_index + 1),
-                            "status": "needs_review",
-                            "target_categories": categories,
-                            "protected_preview": preview_text(protected_text),
-                            "score": classification.get("score"),
-                            "positive_model_count": classification.get(
-                                "positive_model_count"
-                            ),
-                            "model_count": classification.get("model_count"),
-                            "privacy_leakage": leakage,
-                            "context_preservation": context_status,
-                            "safeguard": safeguard,
-                            "context_tags": original_context.get("context_tags", []),
-                            "protected_context_tags": protected_context.get(
-                                "context_tags",
-                                [],
-                            ),
-                            "review_reasons": (
-                                (audit_row or {})
-                                .get("risk_profile", {})
-                                .get("review_reasons", [])
-                            ),
-                        }
-                    )
+                row_id = (
+                    output_row.get(id_col)
+                    if id_col
+                    else output_row.get("id") or output_row.get("case_id")
+                )
+                queue_items.append(
+                    {
+                        "row_id": row_id or str(row_index + 1),
+                        "status": "needs_review",
+                        "target_categories": categories,
+                        "protected_preview": preview_text(protected_text),
+                        "score": classification.get("score"),
+                        "positive_model_count": classification.get(
+                            "positive_model_count"
+                        ),
+                        "model_count": classification.get("model_count"),
+                        "privacy_leakage": leakage,
+                        "context_preservation": context_status,
+                        "safeguard": safeguard,
+                        "context_tags": original_context.get("context_tags", []),
+                        "protected_context_tags": protected_context.get(
+                            "context_tags",
+                            [],
+                        ),
+                        "review_reasons": (
+                            (audit_row or {})
+                            .get("risk_profile", {})
+                            .get("review_reasons", [])
+                        ),
+                    }
+                )
         for category in categories:
             stats = category_stats.setdefault(
                 category,
@@ -1046,7 +1151,8 @@ def platform_insight_report(
         "ngo_review": {
             "queue_rows": hatred_rows,
             "queue_rate": round_rate(hatred_rows, len(original_rows)),
-            "queue_preview": queue_preview,
+            "queue_items": queue_items,
+            "queue_preview": queue_items[:MAX_PREVIEW_ROWS],
             "routing_rule": (
                 "post_classification_hatred_positive"
                 if uses_explicit_classification
@@ -1577,10 +1683,22 @@ def lookup_csv_cache(request: CsvPrivatizeRequest) -> dict[str, Any]:
     }
 
 
-@app.post("/api/csv/privatize", response_model=CsvPrivatizeResponse)
-def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
+def build_csv_privatize_response(
+    request: CsvPrivatizeRequest,
+    *,
+    progress_callback: Any | None = None,
+) -> dict[str, Any]:
     rows, fieldnames = parse_csv_text(request.csv_text)
     validate_csv_request(request, fieldnames)
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "stage": "cache",
+                "processed": 0,
+                "total": 0,
+                "detail": "Checking for a saved result with the same CSV and options.",
+            }
+        )
     cache_key, cache_options = csv_result_cache_key(request)
     cached_record = read_csv_result_cache(cache_key)
     if cached_record is not None:
@@ -1600,6 +1718,15 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
         else CSV_INSIGHT_DEFAULT_DISABLED_MODELS
     )
 
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "stage": "setup",
+                "processed": 0,
+                "total": 0,
+                "detail": "Preparing auto pipeline providers and model status.",
+            }
+        )
     context = AutoPipelineContext.create(
         AutoPipelineConfig(
             metric_depth=request.metric_depth,
@@ -1623,7 +1750,17 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
         id_col=request.id_col,
         output_col=request.output_col,
         replace_text=request.replace_text,
+        progress_callback=progress_callback,
     )
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "stage": "packaging",
+                "processed": 0,
+                "total": 1,
+                "detail": "Building protected CSV, review queue, and aggregate reports.",
+            }
+        )
     output_csv = write_csv_text(engine_result.rows, engine_result.fieldnames)
     helper_columns = [
         column for column in engine_result.fieldnames if column not in fieldnames
@@ -1703,3 +1840,100 @@ def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
         result=response,
     )
     return response
+
+
+def run_csv_job(job_id: str, request: CsvPrivatizeRequest) -> None:
+    update_csv_job(
+        job_id,
+        status="running",
+        progress=csv_progress_payload(
+            "cache",
+            detail="Checking for a saved result with the same CSV and options.",
+        ),
+    )
+    try:
+        response = build_csv_privatize_response(
+            request,
+            progress_callback=csv_job_progress_callback(job_id),
+        )
+    except HTTPException as exc:
+        update_csv_job(
+            job_id,
+            status="failed",
+            error={"message": exc.detail, "status_code": exc.status_code},
+            progress=csv_progress_payload(
+                "packaging",
+                detail=str(exc.detail),
+            ),
+        )
+        return
+    except Exception as exc:  # pragma: no cover - defensive background path
+        update_csv_job(
+            job_id,
+            status="failed",
+            error={"message": str(exc), "error_class": type(exc).__name__},
+            progress=csv_progress_payload(
+                "packaging",
+                detail=f"CSV processing failed: {exc}",
+            ),
+        )
+        return
+
+    cache_hit = bool(response.get("cache", {}).get("hit"))
+    update_csv_job(
+        job_id,
+        status="complete",
+        result=response,
+        progress={
+            "stage": "complete",
+            "value": 100,
+            "label": "Loaded saved result" if cache_hit else "Processing complete",
+            "detail": (
+                "A matching local result was restored without rerunning the pipeline."
+                if cache_hit
+                else "All rows were processed and saved to the local demo cache."
+            ),
+            "processed_rows": response.get("manifest", {}).get("row_count", 0),
+            "total_rows": response.get("manifest", {}).get("row_count", 0),
+            "row_id": None,
+        },
+    )
+
+
+@app.post("/api/csv/jobs")
+def start_csv_job(request: CsvPrivatizeRequest) -> dict[str, Any]:
+    rows, fieldnames = parse_csv_text(request.csv_text)
+    validate_csv_request(request, fieldnames)
+    prune_csv_jobs()
+    job_id = uuid.uuid4().hex
+    now = time.time()
+    with CSV_JOBS_LOCK:
+        CSV_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "created_at": now,
+            "updated_at": now,
+            "progress": csv_progress_payload(
+                "queued",
+                detail="CSV job has been queued for local processing.",
+            ),
+            "result": None,
+            "error": None,
+        }
+    thread = threading.Thread(
+        target=run_csv_job,
+        args=(job_id, request),
+        daemon=True,
+    )
+    thread.start()
+    return csv_job_snapshot(job_id)
+
+
+@app.get("/api/csv/jobs/{job_id}")
+def get_csv_job(job_id: str) -> dict[str, Any]:
+    return csv_job_snapshot(job_id)
+
+
+@app.post("/api/csv/privatize", response_model=CsvPrivatizeResponse)
+def privatize_csv(request: CsvPrivatizeRequest) -> dict[str, Any]:
+    return build_csv_privatize_response(request)
