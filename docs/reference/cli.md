@@ -137,6 +137,11 @@ exact parser contract. These are intentionally not part of `protect`:
 --generalize-targets | --preserve-targets
 ```
 
+GLiNER flags are research/debug-only. The default public `protect` and `auto`
+path do not use GLiNER unless a command explicitly configures a model; model
+downloads remain opt-in and should not be used during sensitive-data
+processing.
+
 Important `sanitize-classify` prediction flags:
 
 ```text

@@ -149,7 +149,7 @@ street or place in context should still be maskable.
 | Target/HSD cue lexicons | Protect target groups, threat/action, negation, modality, counterspeech, and utility cues. | Keep. Present as Meaning Protection, not as a separate user-facing mode. |
 | Presidio | Optional PII span provider. | Merge into `PII Assist` concept. Keep internal provider status. |
 | scrubadub | Optional PII span provider. | Merge into `PII Assist` concept. Keep internal provider status. |
-| GLiNER | Optional local/download-allowed PII span provider with profiles. | Merge into `PII Assist`; hide profile knobs from normal workflow. |
+| GLiNER | Optional explicit local/debug PII span provider with profiles. | Remove from default public `PII Assist`; keep debug provider code and profile knobs outside normal workflow. |
 | Token-policy ensemble | Weakly supervised token-action model trained from local rules. | Demote from default public story. Keep as research/advisory until proven. Consider disabled-by-default for demo preset. |
 | HSD advisory ensemble | Scores original/candidate text to detect HSD signal drift. | Keep as Verification. Use one fixed default ensemble or one fixed model for demo; hide model override flags. |
 | `sanitize-classify` | Enriched local output with HSD columns. | Keep but rename/present as `analysis` preset, not main path. |
@@ -213,8 +213,7 @@ The manifest should be readable without knowing every internal provider:
         "enabled": true,
         "components": {
           "presidio": "ready",
-          "scrubadub": "ready",
-          "gliner": "missing_artifact"
+          "scrubadub": "ready"
         }
       }
     },
@@ -364,19 +363,21 @@ Acceptance:
 
 ### Phase 4: Merge PII Assist
 
-Goal: stop exposing Presidio/scrubadub/GLiNER as separate user decisions.
+Goal: stop exposing Presidio/scrubadub/GLiNER as separate public decisions.
 
 Tasks:
 
 1. Add internal grouping in docs and manifest:
    - `pii_assist.components.presidio`;
    - `pii_assist.components.scrubadub`;
-   - `pii_assist.components.gliner`.
+   - `pii_assist.components.gliner` only for explicit research/debug GLiNER
+     runs.
 2. Keep provider-specific errors and load counts for developer audit.
 3. Pick one demo default:
    - deterministic baseline always;
    - Presidio/scrubadub when installed;
-   - GLiNER only if local artifact is configured by environment/run profile.
+   - GLiNER excluded from the default path unless an explicit local/debug model
+     is configured.
 4. Do not ask the public user to choose GLiNER profiles.
 
 Acceptance:
@@ -533,8 +534,11 @@ Implemented in the current worktree:
   compatibility and research/debug workflows.
 - Reworked exact and analysis manifests to lead with:
   `privacy_detection`, `meaning_protection`, and `verification`.
-- Grouped Presidio, scrubadub, and GLiNER under internal `PII Assist` while
+- Grouped Presidio and scrubadub under internal default `PII Assist` while
   preserving detailed provider/model status and load counts for debugging.
+  A follow-up GLiNER ablation found no default-path benefit without an explicit
+  local artifact, so GLiNER is no longer surfaced in default PII Assist and
+  remains explicit research/debug-only.
 - Added row-level audit fields for chosen candidate, why chosen, privacy gain,
   meaning-protection rejections, residual review requirement, and residual
   direct cleanup.

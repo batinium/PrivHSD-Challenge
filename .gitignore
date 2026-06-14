@@ -9,6 +9,7 @@ dist/
 data/public_dev/
 data/outputs/
 data/external_unseen/
+data/evaluation/
 data/temp/
 node_modules/
 workbench/frontend/dist/

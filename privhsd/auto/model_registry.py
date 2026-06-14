@@ -83,6 +83,16 @@ def discover_token_policy(config: AutoPipelineConfig) -> dict[str, Any]:
 def discover_gliner(config: AutoPipelineConfig) -> dict[str, Any]:
     if "gliner" in config.disabled_providers:
         return disabled_status("provider")
+    if not config.gliner_model:
+        return {
+            "status": "disabled",
+            "kind": "provider",
+            "profile": config.gliner_profile,
+            "detail": (
+                "GLiNER is not part of the default auto pipeline; pass an "
+                "explicit local --gliner-model for research/debug ablations."
+            ),
+        }
     dependency = dependency_status(("gliner",), kind="provider")
     if dependency:
         return {
@@ -90,44 +100,28 @@ def discover_gliner(config: AutoPipelineConfig) -> dict[str, Any]:
             "model": config.gliner_model,
             "profile": config.gliner_profile,
         }
-    if config.gliner_model:
-        model_path = Path(config.gliner_model)
-        if model_path.exists():
-            return {
-                "status": "available",
-                "kind": "provider",
-                "model": str(model_path),
-                "profile": config.gliner_profile,
-                "local_only": True,
-            }
-        if config.allow_model_download:
-            return {
-                "status": "download_allowed",
-                "kind": "provider",
-                "model": config.gliner_model,
-                "profile": config.gliner_profile,
-                "local_only": False,
-            }
+    model_path = Path(config.gliner_model)
+    if model_path.exists():
         return {
-            "status": "missing_artifact",
+            "status": "available",
             "kind": "provider",
-            "model": config.gliner_model,
+            "model": str(model_path),
             "profile": config.gliner_profile,
+            "local_only": True,
         }
     if config.allow_model_download:
         return {
             "status": "download_allowed",
             "kind": "provider",
-            "model": None,
+            "model": config.gliner_model,
             "profile": config.gliner_profile,
             "local_only": False,
         }
     return {
         "status": "missing_artifact",
         "kind": "provider",
-        "model": None,
+        "model": config.gliner_model,
         "profile": config.gliner_profile,
-        "detail": "GLiNER default model is remote; pass --allow-model-download or a local model path.",
     }
 
 

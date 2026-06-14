@@ -92,10 +92,11 @@ CSV
 ```
 
 The deterministic baseline always runs. PII Assist is an internal grouping for
-optional local helpers such as Presidio, scrubadub, and GLiNER. Presidio and
-scrubadub may run when installed. GLiNER must only run when a local artifact or
-explicit local configuration is present; it should not download models during
-sensitive-data processing.
+optional local helpers such as Presidio and scrubadub. Presidio and scrubadub
+may run when installed. GLiNER is no longer part of the default public auto
+path; it remains available only for explicit research/debug runs with a
+configured model, and it must not download models during sensitive-data
+processing.
 
 Routing decides when optional helpers are useful. Missing dependencies,
 missing artifacts, model errors, or cue-loss failures must fall back to the
@@ -167,8 +168,7 @@ Manifests should be readable without knowing provider internals:
       "pii_assist": {
         "components": {
           "presidio": "ready",
-          "scrubadub": "ready",
-          "gliner": "missing_artifact"
+          "scrubadub": "ready"
         }
       }
     },

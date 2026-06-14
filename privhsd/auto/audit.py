@@ -6,7 +6,8 @@ from collections import Counter
 from typing import Any, Iterable
 
 
-PII_ASSIST_COMPONENTS = ("presidio", "scrubadub", "gliner")
+PII_ASSIST_COMPONENTS = ("presidio", "scrubadub")
+EXPLICIT_PII_ASSIST_COMPONENTS = ("gliner",)
 AUTHOR_COLUMN_NAMES = frozenset(
     {
         "author",
@@ -53,7 +54,12 @@ def pii_assist_summary(
 ) -> dict[str, Any]:
     components: dict[str, str] = {}
     component_details: dict[str, dict[str, Any]] = {}
-    for name in PII_ASSIST_COMPONENTS:
+    component_names = list(PII_ASSIST_COMPONENTS)
+    for name in EXPLICIT_PII_ASSIST_COMPONENTS:
+        status_name = status_value(provider_statuses, name)
+        if status_name != "disabled":
+            component_names.append(name)
+    for name in component_names:
         status = provider_statuses.get(name, {})
         status_name = str(status.get("status", "unknown"))
         components[name] = status_name

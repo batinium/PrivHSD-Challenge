@@ -106,7 +106,6 @@ def test_create_submission_auto_preserves_exact_four_column_shape(tmp_path):
     assert privacy_detection["baseline"] == "deterministic_balanced"
     assert privacy_detection["pii_assist"]["label"] == "PII Assist"
     assert privacy_detection["pii_assist"]["components"] == {
-        "gliner": "disabled",
         "presidio": "disabled",
         "scrubadub": "disabled",
     }
@@ -144,7 +143,7 @@ def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(
     assert manifest["validation"]["valid"] is True
     assert manifest["providers"]["presidio"]["status"] == "missing_dependency"
     assert manifest["providers"]["scrubadub"]["status"] == "missing_dependency"
-    assert manifest["providers"]["gliner"]["status"] == "missing_dependency"
+    assert manifest["providers"]["gliner"]["status"] == "disabled"
     assert manifest["models"]["token_policy_ensemble"]["status"] == "missing_dependency"
     assert "[EMAIL]" in read_rows(output)[0]["text"]
 
@@ -684,4 +683,7 @@ def test_create_submission_auto_records_configured_gliner_model(
     assert manifest["providers"]["gliner"]["status"] == "available"
     assert manifest["providers"]["gliner"]["model"] == str(model_dir)
     assert manifest["providers"]["gliner"]["profile"] == "pii"
+    assert manifest["stages"]["privacy_detection"]["pii_assist"]["components"][
+        "gliner"
+    ] == "available"
     assert manifest["load_counts"]["providers"].get("gliner") is None

@@ -39,11 +39,13 @@ not a public menu of pipeline branches.
 | Deterministic baseline | Always ready | Required direct/quasi identifier spans and fallback candidate. |
 | Presidio | Ready if dependency and spaCy model initialize | Supplemental names, locations, and durable dates after filtering. |
 | scrubadub | Ready if dependency initializes | Supplemental direct identifier spans. |
-| GLiNER | Ready only if dependency and local artifact/config are present | Supplemental NER spans. It must not download models during sensitive-data processing. |
+| GLiNER | Disabled by default; available only when an explicit local/debug model is configured | Research-only supplemental NER spans. It must not download models during sensitive-data processing. |
 
 Public manifests should group these under
-`stages.privacy_detection.pii_assist.components`. Provider-specific errors and
-load counts may also remain in debug sections for reproducibility.
+`stages.privacy_detection.pii_assist.components`. The default public PII Assist
+surface lists Presidio and scrubadub. GLiNER appears there only for explicit
+research/debug runs that configure a model; provider-specific status and load
+counts may also remain in debug sections for reproducibility.
 
 Example grouped status:
 
@@ -55,8 +57,7 @@ Example grouped status:
       "pii_assist": {
         "components": {
           "presidio": "ready",
-          "scrubadub": "ready",
-          "gliner": "missing_artifact"
+          "scrubadub": "ready"
         }
       }
     }
@@ -65,7 +66,7 @@ Example grouped status:
     "deterministic": {"status": "ready"},
     "presidio": {"status": "ready"},
     "scrubadub": {"status": "ready"},
-    "gliner": {"status": "missing_artifact"}
+    "gliner": {"status": "disabled"}
   }
 }
 ```
@@ -140,7 +141,8 @@ columns, it is not exact-format and should not be treated as the upload path.
 - Deterministic baseline always runs.
 - Missing optional dependency/artifact statuses do not fail exact submission.
 - PII Assist components load at most once per run, not once per row.
-- GLiNER does not download models during sensitive-data processing.
+- GLiNER is not part of the default auto path and does not download models
+  during sensitive-data processing.
 - Exact mode writes no HSD prediction columns.
 - Advisory HSD predictions are documented as local diagnostics, not production
   classifier truth.

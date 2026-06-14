@@ -46,10 +46,10 @@ exact-format upload path.
   text column, and appends advisory HSD columns. If a gold
   `is_hate_speech` column exists, predictions are written to
   `predicted_is_hate_speech` unless `--overwrite-hate-columns` is passed.
-- Optional Presidio, scrubadub, and GLiNER are presented publicly as internal
-  PII Assist. Deterministic rules always run. GLiNER only runs with local
-  artifacts/configuration; downloads are not part of sensitive-data
-  processing.
+- Optional Presidio and scrubadub are presented publicly as internal PII
+  Assist. Deterministic rules always run. GLiNER is no longer part of the
+  default public auto path after a no-gain ablation; it remains available only
+  for explicit local research/debug runs with configured artifacts.
 - Token-policy and HSD advisory outputs remain internal advisory evidence
   behind routing, fusion, candidate scoring, verification, and fallback.
 - Exact and auto CSV paths default to `metric-depth=fast`; sampled/deep metrics
