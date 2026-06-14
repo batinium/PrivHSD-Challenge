@@ -433,9 +433,9 @@ class AutoPipelineEngine:
             texts.append(state.original)
             texts.extend(candidate.text for candidate in candidates)
         try:
-            scores = advisory.score_texts(
+            score_by_model = self._score_hsd_advisory(
+                advisory,
                 texts,
-                batch_size=self.context.config.max_model_batch_size,
             )
         except Exception as exc:
             self.context.audit_counters[
@@ -449,7 +449,7 @@ class AutoPipelineEngine:
                     }
                 )
             return
-        if len(scores) != len(texts):
+        if any(len(scores) != len(texts) for scores in score_by_model.values()):
             self.context.audit_counters[
                 "model_runtime_error:hsd_advisory:UnexpectedScoreCount"
             ] += 1
@@ -464,15 +464,53 @@ class AutoPipelineEngine:
 
         cursor = 0
         for _state, candidates in advisory_groups:
-            original_score = scores[cursor]
+            original_scores = {
+                model_id: scores[cursor]
+                for model_id, scores in score_by_model.items()
+            }
             cursor += 1
             for candidate in candidates:
-                candidate_score = scores[cursor]
+                candidate_scores = {
+                    model_id: scores[cursor]
+                    for model_id, scores in score_by_model.items()
+                }
                 cursor += 1
-                candidate.metadata["hsd_advisory"] = advisory.compare(
-                    original_score,
-                    candidate_score,
+                candidate.metadata["hsd_advisory"] = self._compare_hsd_advisory(
+                    advisory,
+                    original_scores,
+                    candidate_scores,
                 )
+
+    def _score_hsd_advisory(
+        self,
+        advisory: Any,
+        texts: list[str],
+    ) -> dict[str, list[float]]:
+        score_by_model = getattr(advisory, "score_texts_by_model", None)
+        if callable(score_by_model):
+            return score_by_model(
+                texts,
+                batch_size=self.context.config.max_model_batch_size,
+            )
+        return {
+            "hsd_advisory": advisory.score_texts(
+                texts,
+                batch_size=self.context.config.max_model_batch_size,
+            )
+        }
+
+    def _compare_hsd_advisory(
+        self,
+        advisory: Any,
+        original_scores: dict[str, float],
+        candidate_scores: dict[str, float],
+    ) -> dict[str, Any]:
+        compare_by_model = getattr(advisory, "compare_scores_by_model", None)
+        if callable(compare_by_model):
+            return compare_by_model(original_scores, candidate_scores)
+        original_score = next(iter(original_scores.values()), 0.0)
+        candidate_score = next(iter(candidate_scores.values()), 0.0)
+        return advisory.compare(original_score, candidate_score)
 
     def _candidates_for_state(self, state: AutoRowState) -> list[AutoCandidate]:
         candidates = [

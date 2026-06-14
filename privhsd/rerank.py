@@ -539,6 +539,7 @@ def run_candidate_reranking(
     audit_level: str = "summary",
     gliner_model: str | None = None,
     gliner_profile: str = "general",
+    hsd_advisory_models: list[str] | None = None,
 ) -> dict[str, Any]:
     candidate_cols = candidate_cols or []
     rows, fieldnames = read_csv(input_path)
@@ -553,19 +554,22 @@ def run_candidate_reranking(
     if mode == "auto":
         from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 
-        auto_config = AutoPipelineConfig(
-            metric_depth=metric_depth,
-            allow_model_download=allow_model_download,
-            device=device,
-            max_model_batch_size=max_model_batch_size,
-            max_provider_rows=max_provider_rows,
-            disabled_providers=frozenset(disabled_providers or []),
-            disabled_models=frozenset(disabled_models or []),
-            audit_level=audit_level,
-            provider_language=presidio_language,
-            gliner_model=gliner_model,
-            gliner_profile=gliner_profile,
-        )
+        config_kwargs: dict[str, Any] = {
+            "metric_depth": metric_depth,
+            "allow_model_download": allow_model_download,
+            "device": device,
+            "max_model_batch_size": max_model_batch_size,
+            "max_provider_rows": max_provider_rows,
+            "disabled_providers": frozenset(disabled_providers or []),
+            "disabled_models": frozenset(disabled_models or []),
+            "audit_level": audit_level,
+            "provider_language": presidio_language,
+            "gliner_model": gliner_model,
+            "gliner_profile": gliner_profile,
+        }
+        if hsd_advisory_models is not None:
+            config_kwargs["hsd_advisory_models"] = tuple(hsd_advisory_models)
+        auto_config = AutoPipelineConfig(**config_kwargs)
         context = AutoPipelineContext.create(auto_config)
         engine_result = AutoPipelineEngine(context).process_rows(
             rows,

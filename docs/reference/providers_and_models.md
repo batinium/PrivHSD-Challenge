@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: auto orchestration, span providers, token-policy runtime
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/auto/context.py`, `privhsd/auto/model_registry.py`,
 `privhsd/span_providers/`, `privhsd/models/`
 
@@ -35,8 +35,28 @@ Detailed implementation handoffs live in planning docs. For GLiNER PII,
 | scrubadub | Ready if dependency initializes | Supplemental identifier spans |
 | GLiNER | Ready if dependency and local/download-allowed model exist | Supplemental NER spans; supports `general` and `pii` profiles |
 | Token-policy ensemble | Ready if local model dirs and torch/transformers initialize | Advisory token-action evidence |
-| Semantic/HSD advisory | Ready only if artifacts and dependencies exist | Candidate drift/audit support |
+| HSD advisory ensemble | Ready if torch/transformers initialize and approved local/download-allowed models load | Candidate drift support and enriched hate prediction columns |
+| Semantic models | Ready only if artifacts and dependencies exist | Candidate drift/audit support |
 | Local LLM reviewer | Disabled by default in official mode | Structured local review only |
+
+## Trusted Enriched Pipeline
+
+The selected `sanitize-classify` configuration for large local CSV triage is:
+
+```text
+deterministic balanced baseline
+  -> routed Presidio spans
+  -> routed scrubadub spans
+  -> routed token-policy ensemble spans
+  -> candidate generation and fusion
+  -> two-model RoBERTa HSD advisory candidate scoring
+  -> selected sanitized text
+  -> appended HSD label, score, and model-count columns
+```
+
+Provider/model loads are per run, not per row. The final 3,830-row unseen test
+loaded Presidio once, scrubadub once, the token-policy ensemble once, and the
+HSD advisory ensemble once.
 
 Example manifest status:
 
@@ -77,6 +97,22 @@ Runtime mapping:
 Token-policy output never directly overwrites final text. It must pass fusion,
 candidate scoring, cue checks, and exact-format validation before influencing
 an output candidate.
+
+## HSD Advisory Role
+
+The default advisory ensemble uses these approved OSS Hugging Face classifiers
+when they are available locally or `--allow-model-download` is set:
+
+```text
+facebook/roberta-hate-speech-dynabench-r4-target
+cardiffnlp/twitter-roberta-base-hate-latest
+```
+
+`sanitize-classify` uses the same runtime to append prediction columns after
+sanitization. The command also compares original-vs-sanitized scores in the
+manifest without storing row text. The Cardiff multiclass hate model is in the
+approved registry as an opt-in diagnostic probe, but it is not part of the
+default binary label ensemble.
 
 ## Acceptance Tests
 

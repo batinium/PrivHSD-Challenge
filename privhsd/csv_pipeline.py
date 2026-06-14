@@ -64,6 +64,7 @@ def process_csv(
     audit_level: str = "summary",
     gliner_model: str | None = None,
     gliner_profile: str = "general",
+    hsd_advisory_models: list[str] | None = None,
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
     if text_col not in fieldnames:
@@ -74,21 +75,24 @@ def process_csv(
     if mode == "auto":
         from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 
-        auto_config = AutoPipelineConfig(
-            metric_depth=metric_depth,
-            allow_model_download=allow_model_download,
-            device=device,
-            max_model_batch_size=max_model_batch_size,
-            max_provider_rows=max_provider_rows,
-            disabled_providers=frozenset(disabled_providers or []),
-            disabled_models=frozenset(disabled_models or []),
-            audit_level=audit_level,
-            provider_language=presidio_language,
-            gliner_model=gliner_model,
-            gliner_profile=gliner_profile,
-            generalize_targets=generalize_targets if generalize_targets is not None else False,
-            style_scrub=style_scrub,
-        )
+        config_kwargs: dict[str, Any] = {
+            "metric_depth": metric_depth,
+            "allow_model_download": allow_model_download,
+            "device": device,
+            "max_model_batch_size": max_model_batch_size,
+            "max_provider_rows": max_provider_rows,
+            "disabled_providers": frozenset(disabled_providers or []),
+            "disabled_models": frozenset(disabled_models or []),
+            "audit_level": audit_level,
+            "provider_language": presidio_language,
+            "gliner_model": gliner_model,
+            "gliner_profile": gliner_profile,
+            "generalize_targets": generalize_targets if generalize_targets is not None else False,
+            "style_scrub": style_scrub,
+        }
+        if hsd_advisory_models is not None:
+            config_kwargs["hsd_advisory_models"] = tuple(hsd_advisory_models)
+        auto_config = AutoPipelineConfig(**config_kwargs)
         context = AutoPipelineContext.create(auto_config)
         result = AutoPipelineEngine(context).process_rows(
             rows,

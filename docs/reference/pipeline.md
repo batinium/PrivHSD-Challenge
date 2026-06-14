@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: auto orchestration, deterministic masking, candidate selection
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/auto/`, `privhsd/detectors.py`,
 `privhsd/pipeline.py`, `privhsd/rerank.py`, `privhsd/span_providers/`
 
@@ -32,6 +32,7 @@ legal decision system, or a production hate-speech classifier.
 | Slice regression | Check privacy and utility by source/label/split/platform/type. | `source_report.py` | Required when columns exist |
 | Author risk | Measure stylometric author predictability when repeated author IDs exist. | `author_risk.py` | Required when columns exist |
 | Token policy | Fine-tune weak token-action models and ensembles. | `token_policy.py` | Advisory/reranking support |
+| Enriched classification | Append local HSD advisory predictions after sanitization. | `simple_pipeline.py`, `models/hsd_advisory_runtime.py` | Local analysis only |
 
 ## Auto Flow
 
@@ -55,6 +56,30 @@ CSV
 mean every heavy component runs on every row. Routing decides when optional
 providers/models are useful, and deterministic balanced output is the fallback
 on uncertainty, missing artifacts, model errors, or cue loss.
+
+`sanitize-classify` wraps the same auto flow for local analysis: it replaces the
+selected text column in place, appends HSD prediction columns, and writes a
+manifest with aggregate original-vs-sanitized advisory score drift. Because it
+adds columns, it is not an exact-format submission path.
+
+The trusted enriched path keeps the default routed auto behavior and requires
+HSD classification when the output hate columns are part of the deliverable:
+
+```bash
+python -m privhsd.cli sanitize-classify \
+  --input INPUT.csv \
+  --output OUTPUT.csv \
+  --text-col text \
+  --id-col id \
+  --manifest OUTPUT.manifest.json \
+  --require-hate-classification \
+  --max-model-batch-size 32
+```
+
+This path uses every ready local OSS component: deterministic masking,
+Presidio, scrubadub, token-policy ensemble spans, and the two-model RoBERTa HSD
+advisory ensemble. Optional GLiNER and semantic providers remain structured
+manifest statuses when their local artifacts or dependencies are missing.
 
 ## Row Routing Inputs
 
@@ -110,3 +135,4 @@ Hard rejects:
 - Do not mask protected target terms by default.
 - Do not submit raw provider, DPMLM, SanText, or LLM output directly.
 - Do not keep raw text in durable audits or committed docs.
+- Do not treat advisory HSD predictions as legal or moderation truth.

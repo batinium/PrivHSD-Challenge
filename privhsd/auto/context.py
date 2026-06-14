@@ -199,10 +199,10 @@ class AutoPipelineContext:
             )
             return TokenPolicySpanProvider(runtime=runtime)
         if name == "hsd_advisory":
-            from privhsd.models.hsd_advisory_runtime import HsdAdvisoryRuntime
+            from privhsd.models.hsd_advisory_runtime import HsdAdvisoryEnsembleRuntime
 
-            return HsdAdvisoryRuntime.from_model_id(
-                self.config.hsd_advisory_model,
+            return HsdAdvisoryEnsembleRuntime.from_model_ids(
+                self.config.hsd_advisory_models,
                 allow_model_download=self.config.allow_model_download,
                 device=self.config.device,
                 decision_threshold=self.config.hsd_advisory_decision_threshold,

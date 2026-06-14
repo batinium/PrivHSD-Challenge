@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: common local workflow
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/cli.py`, package metadata, tests
 
 Use this for first-run setup and the shortest local validation path.
@@ -21,6 +21,7 @@ Optional extras are installed only for workflows that need them:
 python -m pip install '.[benchmark]'
 python -m pip install '.[presidio]'
 python -m pip install '.[token-policy]'
+python -m pip install '.[hsd-advisory]'
 ```
 
 ## Prepare Public Data
@@ -33,6 +34,44 @@ python -m privhsd.cli prepare-recommended-datasets \
 ```
 
 Downloaded raw files stay under ignored `data/public_dev/raw/`.
+
+## Sanitize And Classify A CSV
+
+Use this when you want one enriched CSV for local analysis or unseen-data
+triage:
+
+```bash
+python -m privhsd.cli sanitize-classify \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.sanitized_classified.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.sanitized_classified.manifest.json \
+  --require-hate-classification \
+  --max-model-batch-size 32
+```
+
+The output keeps original rows and columns, replaces `text` with sanitized
+text, and appends HSD prediction columns. If the input already has
+`is_hate_speech`, the command preserves it and writes
+`predicted_is_hate_speech` unless `--overwrite-hate-columns` is set. Model
+downloads are off by default; add `--allow-model-download` only for an explicit
+OSS-model run. The manifest includes a `tradeoff` summary for identifier
+removal, cue retention, overmask warnings, and original-vs-sanitized HSD score
+drift.
+
+The trusted local configuration uses deterministic masking, Presidio,
+scrubadub, the local RoBERTa/HateBERT token-policy ensemble, and the two-model
+RoBERTa HSD advisory ensemble:
+
+```text
+facebook/roberta-hate-speech-dynabench-r4-target
+cardiffnlp/twitter-roberta-base-hate-latest
+```
+
+If those HSD models are not available locally and downloads are not explicitly
+allowed, remove `--require-hate-classification` for a fallback run and treat the
+missing model status in the manifest as a blocker for trusted hate columns.
 
 ## Create And Validate An Exact Auto Candidate
 

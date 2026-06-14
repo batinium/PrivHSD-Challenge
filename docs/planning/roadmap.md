@@ -109,11 +109,12 @@ Tasks:
   interference, HateCheck functionality drift, Jigsaw identity slices, and
   GLiNER provider replacement benchmarks.
 - Add semantic drift scorers where dependencies exist.
-- Implement the external utility-probe plan in
-  `docs/planning/utility_probe_integration_plan.md`: registry metadata,
-  Cardiff multiclass target drift, binary advisory ensemble, Detoxify
-  toxicity-bias audit, continuous Measuring Hate Speech scores, MUDES toxic
-  spans, and HateXplain rationale runtime.
+- Continue the external utility-probe plan in
+  `docs/planning/utility_probe_integration_plan.md`: richer registry metadata,
+  calibrated advisory-ensemble gates, Detoxify toxicity-bias audit, continuous
+  Measuring Hate Speech scores, MUDES toxic spans, and HateXplain rationale
+  runtime. Cardiff multiclass registry support and the binary advisory
+  ensemble are implemented.
 - Add weak supervision and metadata privacy reports.
 - Keep DPMLM, SanText, and LLM candidates behind reranking.
 

@@ -37,6 +37,7 @@ The official path must satisfy all of these rules before upload:
 | Mode | Shape | Intended use |
 | --- | --- | --- |
 | `create-submission --replace-text` | Exact input schema with selected text replaced | Official upload candidate |
+| `sanitize-classify` | Original columns preserved, selected text replaced, HSD prediction columns appended | Local enriched analysis/unseen-data triage |
 | `anonymize --replace-text` | Exact input schema with selected text replaced | Local compatibility path |
 | `anonymize` without replace | Adds helper output column | Local audit only |
 | Workbench replace-text CSV | Exact input schema with selected text replaced | Demo/download candidate |
@@ -65,3 +66,5 @@ good.
   do not silently relax this contract.
 - `bound-contributions` can preserve schema among retained rows, but it drops
   rows and is therefore not an exact-format submission path by default.
+- `sanitize-classify` is intentionally not exact-format because it adds
+  prediction columns. Use `create-submission --replace-text` for uploads.

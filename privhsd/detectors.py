@@ -105,6 +105,7 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
         ),
     ),
 )
+ADJACENT_USER_PATTERN = re.compile(r"@[A-Za-z0-9._-]{2,64}\b")
 
 OBFUSCATED_EMAIL_PATTERN = re.compile(
     r"(?<![\w@])"
@@ -250,6 +251,35 @@ CONTEXT_NAME_STOP_WORDS = {
     "wrote",
 }
 
+CONTEXT_PERSON_REJECT_WORDS = {
+    "a",
+    "an",
+    "any",
+    "as",
+    "everyone",
+    "he",
+    "her",
+    "him",
+    "i",
+    "it",
+    "me",
+    "my",
+    "our",
+    "she",
+    "someone",
+    "that",
+    "the",
+    "their",
+    "them",
+    "these",
+    "they",
+    "this",
+    "those",
+    "us",
+    "we",
+    "you",
+}
+
 
 @lru_cache(maxsize=1)
 def action_context_terms() -> frozenset[str]:
@@ -300,6 +330,7 @@ TARGET_GROUP_CATEGORIES = frozenset(TARGET_GROUP_TERMS) | EXTERNAL_TARGET_CATEGO
 _EXTERNAL_PROFANITY_LOADED = False
 
 
+@lru_cache(maxsize=8192)
 def contains_external_profanity(value: str) -> bool:
     """Query the external profanity/slur lexicon without exposing its word list."""
     global _EXTERNAL_PROFANITY_LOADED
@@ -389,6 +420,48 @@ def trim_leading_action_word(
     return new_start, new_end, new_value
 
 
+@lru_cache(maxsize=8192)
+def rejected_context_person_candidate(value: str) -> bool:
+    """Reject words that look grammatical, hostile, or abusive rather than name-like."""
+    words = [match.group(0) for match in re.finditer(NAME_WORD_PATTERN, value)]
+    if not words:
+        return True
+    lowered = [word.lower() for word in words]
+    if any(word in CONTEXT_PERSON_REJECT_WORDS for word in lowered):
+        return True
+    if len(words) == 1 and lowered[0] in action_context_terms():
+        return True
+    return any(contains_external_profanity(word) for word in words)
+
+
+def adjacent_user_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for match in ADJACENT_USER_PATTERN.finditer(text):
+        start = match.start()
+        if start == 0:
+            continue
+        previous = text[start - 1]
+        if previous not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-":
+            continue
+        previous_at = text.rfind("@", 0, start)
+        if previous_at < 0:
+            continue
+        previous_handle = text[previous_at + 1 : start]
+        if not re.fullmatch(r"[A-Za-z0-9._-]{2,64}", previous_handle):
+            continue
+        spans.append(
+            Span(
+                start=start,
+                end=match.end(),
+                entity_type="USER",
+                text=match.group(0),
+                score=0.85,
+                source="regex",
+            )
+        )
+    return spans
+
+
 def has_obfuscated_email_context(text: str, start: int, end: int) -> bool:
     window = text[max(0, start - 40) : min(len(text), end + 40)]
     return bool(OBFUSCATED_EMAIL_CONTEXT_PATTERN.search(window))
@@ -441,6 +514,7 @@ def regex_spans(text: str) -> list[Span]:
                 )
             )
     spans.extend(obfuscated_email_spans(text))
+    spans.extend(adjacent_user_spans(text))
     return spans
 
 
@@ -482,6 +556,8 @@ def context_spans(text: str) -> list[Span]:
             if not value:
                 continue
             if contains_target_group_term(value):
+                continue
+            if rejected_context_person_candidate(value):
                 continue
             spans.append(
                 Span(start, end, "PERSON", value, 0.72, "context_person")

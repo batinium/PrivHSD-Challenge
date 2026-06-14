@@ -207,6 +207,7 @@ def create_submission(
     audit_level: str = "summary",
     gliner_model: str | None = None,
     gliner_profile: str = "general",
+    hsd_advisory_models: list[str] | None = None,
 ) -> dict[str, Any]:
     if not replace_text:
         raise SubmissionError("create-submission requires --replace-text")
@@ -218,22 +219,25 @@ def create_submission(
     if mode == "auto":
         from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 
-        auto_config = AutoPipelineConfig(
-            metric_depth=metric_depth,
-            allow_model_download=allow_model_download,
-            device=device,
-            max_model_batch_size=max_model_batch_size,
-            max_provider_rows=max_provider_rows,
-            disabled_providers=frozenset(disabled_providers or []),
-            disabled_models=frozenset(disabled_models or []),
-            audit_level=audit_level,
-            provider_language=presidio_language,
-            gliner_model=gliner_model,
-            gliner_profile=gliner_profile,
-            generalize_targets=generalize_targets if generalize_targets is not None else False,
-            style_scrub=style_scrub,
-            official_mode=True,
-        )
+        config_kwargs: dict[str, Any] = {
+            "metric_depth": metric_depth,
+            "allow_model_download": allow_model_download,
+            "device": device,
+            "max_model_batch_size": max_model_batch_size,
+            "max_provider_rows": max_provider_rows,
+            "disabled_providers": frozenset(disabled_providers or []),
+            "disabled_models": frozenset(disabled_models or []),
+            "audit_level": audit_level,
+            "provider_language": presidio_language,
+            "gliner_model": gliner_model,
+            "gliner_profile": gliner_profile,
+            "generalize_targets": generalize_targets if generalize_targets is not None else False,
+            "style_scrub": style_scrub,
+            "official_mode": True,
+        }
+        if hsd_advisory_models is not None:
+            config_kwargs["hsd_advisory_models"] = tuple(hsd_advisory_models)
+        auto_config = AutoPipelineConfig(**config_kwargs)
         context = AutoPipelineContext.create(auto_config)
         output_rows = [dict(row) for row in rows]
         text_column_summaries: dict[str, Any] = {}

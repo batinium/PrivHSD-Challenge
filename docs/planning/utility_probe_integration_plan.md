@@ -47,11 +47,16 @@ Already present:
 
 - `privhsd/hf_utility.py` has an approved model registry and a pipeline-based
   evaluator for original-vs-privatized score drift.
-- `privhsd/auto/config.py` defaults the auto HSD advisory model to
-  `facebook/roberta-hate-speech-dynabench-r4-target`.
-- `privhsd/models/hsd_advisory_runtime.py` loads one
-  `transformers.pipeline("text-classification")` model and compares original
-  and candidate scores.
+- The approved registry includes the default binary HSD probes and the opt-in
+  Cardiff multiclass diagnostic probe.
+- `privhsd/auto/config.py` defaults the auto HSD advisory path to a small
+  binary ensemble: Dynabench RoBERTa plus Cardiff Twitter RoBERTa.
+- `privhsd/models/hsd_advisory_runtime.py` supports both a single
+  `transformers.pipeline("text-classification")` wrapper and an ensemble
+  wrapper with per-model audit comparisons.
+- `privhsd/simple_pipeline.py` exposes `sanitize-classify`: sanitized text in
+  place, appended HSD prediction columns, and raw-text-free aggregate
+  original-vs-sanitized score drift.
 - `privhsd/rationale_checks.py` parses HateXplain token ranges, Toxic Spans
   character offsets, and synthetic character spans.
 - `privhsd/datasets.py` already prepares Dynahate, HateCheck, Hatemoji,
@@ -61,8 +66,9 @@ Already present:
 Main gaps:
 
 - `hf_utility.py` treats every compatible classifier as one positive scalar.
-- The auto advisory runtime supports one model, not a calibrated ensemble.
-- Cardiff multiclass target drift is not in the registry.
+- Registry entries still lack full `probe_kind`, source URL, and bias-note
+  metadata.
+- The auto advisory ensemble is mean-score based, not calibrated.
 - Unbiased toxicity, Measuring Hate Speech continuous scores, MUDES spans, and
   HateXplain generated rationales need custom runtime support.
 - Reports do not yet distinguish binary hate drift, target-class drift,
@@ -104,6 +110,9 @@ defaults.
 | Davidson/offensive-language fine-tunes | Avoid as utility gates | Can confuse dialect/style normalization with semantic utility loss. Use only for research comparison with clear bias warnings. |
 
 ## Phase 1: Registry Metadata
+
+Status on 2026-06-13: the Cardiff multiclass diagnostic model is in the
+approved registry. The richer metadata fields below are still pending.
 
 Modify `privhsd/hf_utility.py`.
 
@@ -258,7 +267,12 @@ Acceptance:
 
 ## Phase 3: Auto HSD Advisory Ensemble
 
-Current behavior uses one model in `HsdAdvisoryRuntime`. Upgrade this without
+Status on 2026-06-13: implemented the backward-compatible single wrapper,
+`HsdAdvisoryEnsembleRuntime`, repeatable `--hsd-advisory-model`, approved-model
+discovery, mean-score aggregate, per-model audit comparisons, and local-only
+default loading. Remaining work is calibration and richer consensus gates.
+
+Earlier behavior used one model in `HsdAdvisoryRuntime`. Upgrade this without
 breaking callers.
 
 Preferred approach:

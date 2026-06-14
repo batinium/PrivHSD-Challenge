@@ -18,6 +18,10 @@ DEFAULT_TOKEN_POLICY_MODEL_DIRS = (
     Path("data/outputs/token_policy_hatebert.action_balanced_train30000.cuda"),
 )
 DEFAULT_HSD_ADVISORY_MODEL = "facebook/roberta-hate-speech-dynabench-r4-target"
+DEFAULT_HSD_ADVISORY_MODELS = (
+    DEFAULT_HSD_ADVISORY_MODEL,
+    "cardiffnlp/twitter-roberta-base-hate-latest",
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +47,7 @@ class AutoPipelineConfig:
     token_policy_model_dirs: tuple[Path, ...] = DEFAULT_TOKEN_POLICY_MODEL_DIRS
     token_policy_mode: str = "mean_prob"
     hsd_advisory_model: str = DEFAULT_HSD_ADVISORY_MODEL
+    hsd_advisory_models: tuple[str, ...] = DEFAULT_HSD_ADVISORY_MODELS
     hsd_advisory_decision_threshold: float = 0.5
     hsd_advisory_large_drop_threshold: float = 0.25
     hsd_advisory_max_abs_drift: float = 0.35
@@ -57,6 +62,16 @@ class AutoPipelineConfig:
             "gliner_profile",
             self.gliner_profile.strip().lower(),
         )
+        normalized_hsd_models = tuple(
+            dict.fromkeys(
+                model.strip()
+                for model in self.hsd_advisory_models
+                if model and model.strip()
+            )
+        )
+        if not normalized_hsd_models and self.hsd_advisory_model:
+            normalized_hsd_models = (self.hsd_advisory_model.strip(),)
+        object.__setattr__(self, "hsd_advisory_models", normalized_hsd_models)
         if self.baseline_mode not in {"utility", "balanced", "privacy"}:
             raise ValueError("baseline_mode must be utility, balanced, or privacy")
         if self.metric_depth not in METRIC_DEPTHS:

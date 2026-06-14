@@ -15,6 +15,7 @@ This file maps command ownership. Full recipes belong in `docs/runbooks/`.
 | `create-submission` | CSV contract and auto orchestration | Primary exact-format output. Use `--replace-text --mode auto --metric-depth fast`. |
 | `validate-submission` | CSV contract and submission | Required upload gate. |
 | `anonymize` | CSV contract and deterministic masking | Local output path; may add helper columns unless replace-text is used. |
+| `sanitize-classify` | Auto orchestration and HSD advisory | Enriched local output: text replaced in place plus appended HSD prediction columns. Not exact-format. |
 
 ## Evidence And Audit Commands
 
@@ -51,6 +52,7 @@ Important exact-output flags:
 --allow-model-download
 --gliner-model MODEL_ID_OR_LOCAL_PATH
 --gliner-profile general|pii
+--hsd-advisory-model APPROVED_MODEL_ID
 --device auto|cpu|cuda
 --disable-provider NAME
 --disable-model NAME

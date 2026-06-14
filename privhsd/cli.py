@@ -94,6 +94,7 @@ from .semantic_triage import (
     SemanticTriageError,
     run_semantic_triage_report,
 )
+from .simple_pipeline import SimplifiedPipelineError, run_sanitize_classify
 from .source_report import SourceReportError, run_source_regression_report
 from .submission import SubmissionError, create_submission, validate_submission
 from .token_actions import (
@@ -166,6 +167,15 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
         choices=["general", "pii"],
         default="general",
         help="GLiNER label/threshold profile for optional privacy span detection.",
+    )
+    parser.add_argument(
+        "--hsd-advisory-model",
+        dest="hsd_advisory_models",
+        action="append",
+        help=(
+            "Approved OSS HSD classifier model for advisory scoring. Repeat to "
+            "override the default ensemble."
+        ),
     )
     parser.add_argument(
         "--device",
@@ -247,6 +257,44 @@ def build_parser() -> argparse.ArgumentParser:
     target_group = anonymize.add_mutually_exclusive_group()
     target_group.add_argument("--generalize-targets", action="store_true")
     target_group.add_argument("--preserve-targets", action="store_true")
+
+    sanitize_classify = subparsers.add_parser(
+        "sanitize-classify",
+        help=(
+            "Replace a CSV text column with sanitized text and append HSD "
+            "classification columns."
+        ),
+    )
+    sanitize_classify.add_argument("--input", type=Path, required=True)
+    sanitize_classify.add_argument("--output", type=Path, required=True)
+    sanitize_classify.add_argument("--text-col", default="text")
+    sanitize_classify.add_argument("--id-col")
+    sanitize_classify.add_argument("--manifest", type=Path)
+    sanitize_classify.add_argument("--audit", type=Path)
+    sanitize_classify.add_argument("--style-scrub", action="store_true")
+    sanitize_classify.add_argument("--hate-label-col", default="is_hate_speech")
+    sanitize_classify.add_argument("--hate-score-col", default="hate_speech_score")
+    sanitize_classify.add_argument(
+        "--hate-model-count-col",
+        default="hate_speech_model_count",
+    )
+    sanitize_classify.add_argument(
+        "--overwrite-hate-columns",
+        action="store_true",
+        help=(
+            "Overwrite existing hate-classification columns instead of "
+            "appending predicted_* columns."
+        ),
+    )
+    sanitize_classify.add_argument(
+        "--require-hate-classification",
+        action="store_true",
+        help="Fail if the OSS HSD advisory classifier ensemble cannot run.",
+    )
+    add_auto_runtime_arguments(sanitize_classify)
+    sanitize_targets = sanitize_classify.add_mutually_exclusive_group()
+    sanitize_targets.add_argument("--generalize-targets", action="store_true")
+    sanitize_targets.add_argument("--preserve-targets", action="store_true")
 
     bound = subparsers.add_parser(
         "bound-contributions",
@@ -1093,6 +1141,40 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                hsd_advisory_models=args.hsd_advisory_models,
+            )
+        elif args.command == "sanitize-classify":
+            generalize_targets = None
+            if args.generalize_targets:
+                generalize_targets = True
+            elif args.preserve_targets:
+                generalize_targets = False
+            result = run_sanitize_classify(
+                args.input,
+                args.output,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                manifest_path=args.manifest,
+                audit_path=args.audit,
+                command=["contextsafe-hsd", *raw_argv],
+                metric_depth=args.metric_depth,
+                allow_model_download=args.allow_model_download,
+                device=args.device,
+                max_model_batch_size=args.max_model_batch_size,
+                max_provider_rows=args.max_provider_rows,
+                disabled_providers=args.disabled_providers,
+                disabled_models=args.disabled_models,
+                audit_level=args.audit_level,
+                gliner_model=args.gliner_model,
+                gliner_profile=args.gliner_profile,
+                hsd_advisory_models=args.hsd_advisory_models,
+                generalize_targets=generalize_targets,
+                style_scrub=args.style_scrub,
+                hate_label_col=args.hate_label_col,
+                hate_score_col=args.hate_score_col,
+                hate_model_count_col=args.hate_model_count_col,
+                overwrite_existing_hate_cols=args.overwrite_hate_columns,
+                require_hate_classification=args.require_hate_classification,
             )
         elif args.command == "bound-contributions":
             result = bound_contributions(
@@ -1190,6 +1272,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "dpmlm-spike":
             result = run_dpmlm_spike(
@@ -1252,6 +1335,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "validate-submission":
             result = validate_submission(
@@ -1580,6 +1664,7 @@ def main(argv: list[str] | None = None) -> int:
         PresidioCompareError,
         RerankError,
         SemanticTriageError,
+        SimplifiedPipelineError,
         SourceReportError,
         SubmissionError,
         TokenActionError,

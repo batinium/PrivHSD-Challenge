@@ -4,6 +4,7 @@ from .contribution_bounding import bound_contributions
 from .csv_pipeline import evaluate_csv, process_csv
 from .pipeline import PrivatizationResult, PrivatizerConfig, privatize_text
 from .semantic_triage import run_semantic_triage_report
+from .simple_pipeline import run_sanitize_classify
 from .submission import create_submission, validate_submission
 
 __all__ = [
@@ -14,6 +15,7 @@ __all__ = [
     "evaluate_csv",
     "privatize_text",
     "process_csv",
+    "run_sanitize_classify",
     "run_semantic_triage_report",
     "validate_submission",
 ]

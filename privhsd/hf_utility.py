@@ -94,6 +94,25 @@ APPROVED_MODELS: tuple[HfUtilityModel, ...] = (
         runtime_note="Social-media hate/offensive utility probe.",
     ),
     HfUtilityModel(
+        model_id="cardiffnlp/twitter-roberta-base-hate-multiclass-latest",
+        task="text-classification",
+        default=False,
+        positive_label_hints=(
+            "sexism",
+            "racism",
+            "disability",
+            "sexual_orientation",
+            "religion",
+            "other",
+            "hate",
+        ),
+        runtime_note=(
+            "Target-category drift probe for anonymization utility audits; "
+            "opt-in for classification because it is multiclass."
+        ),
+        license_note="CC-BY 4.0. Review the live Hugging Face model card before full runs.",
+    ),
+    HfUtilityModel(
         model_id="Hate-speech-CNERG/bert-base-uncased-hatexplain",
         task="text-classification",
         default=False,

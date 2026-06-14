@@ -6,6 +6,8 @@ import importlib.util
 from pathlib import Path
 from typing import Any
 
+from privhsd.hf_utility import approved_model_ids
+
 from .config import AutoPipelineConfig
 
 
@@ -146,32 +148,52 @@ def discover_semantic_models(config: AutoPipelineConfig) -> dict[str, Any]:
 def discover_hsd_advisory(config: AutoPipelineConfig) -> dict[str, Any]:
     if "hsd_advisory" in config.disabled_models or "hsd-advisory" in config.disabled_models:
         return disabled_status("model")
+    model_ids = list(config.hsd_advisory_models)
+    unsupported = [
+        model_id
+        for model_id in model_ids
+        if model_id not in approved_model_ids(defaults_only=False)
+    ]
+    if unsupported:
+        return {
+            "status": "unsupported_model",
+            "kind": "model",
+            "model_ids": model_ids,
+            "unsupported_model_ids": unsupported,
+            "detail": "HSD advisory models must be listed in the approved HF utility registry.",
+        }
     dependency = dependency_status(("torch", "transformers"), kind="model")
     if dependency:
-        return dependency
-    model_path = Path(config.hsd_advisory_model)
-    if model_path.exists():
-        return {
-            "status": "available",
-            "kind": "model",
-            "load": "lazy",
-            "model": str(model_path),
-            "local_only": True,
-        }
-    if config.allow_model_download:
-        return {
-            "status": "available",
-            "kind": "model",
-            "load": "lazy",
-            "model": config.hsd_advisory_model,
-            "local_only": False,
-        }
+        return {**dependency, "model_ids": model_ids}
+    members = []
+    local_only = not config.allow_model_download
+    for model_id in model_ids:
+        model_path = Path(model_id)
+        if model_path.exists():
+            members.append(
+                {
+                    "model_id": str(model_path),
+                    "local_path": True,
+                    "local_only": True,
+                }
+            )
+        else:
+            members.append(
+                {
+                    "model_id": model_id,
+                    "local_path": False,
+                    "local_only": local_only,
+                }
+            )
     return {
         "status": "available",
         "kind": "model",
         "load": "lazy",
-        "model": config.hsd_advisory_model,
-        "local_only": True,
+        "model": model_ids[0] if len(model_ids) == 1 else None,
+        "model_ids": model_ids,
+        "member_count": len(model_ids),
+        "members": members,
+        "local_only": local_only,
         "detail": "Loads from the local Hugging Face cache only unless --allow-model-download is passed.",
     }
 

@@ -41,10 +41,39 @@ Optional extras are installed only for the workflows that need them:
 python -m pip install '.[benchmark]'
 python -m pip install '.[presidio]'
 python -m pip install '.[token-policy]'
+python -m pip install '.[hsd-advisory]'
 ```
 
 `.[token-policy]` uses PyTorch/Transformers and will use CUDA when the local
 PyTorch build sees a CUDA GPU.
+
+## One-Command Sanitize And Classify CSV
+
+For a practical enriched output, replace the input text column in place and add
+HSD prediction columns:
+
+```bash
+python -m privhsd.cli sanitize-classify \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.sanitized_classified.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.sanitized_classified.manifest.json \
+  --require-hate-classification \
+  --max-model-batch-size 32
+```
+
+This command runs `auto` sanitization, appends hate-speech prediction columns,
+and writes a raw-text-free manifest with a `tradeoff` summary for identifier
+removal, cue retention, overmask warnings, and original-vs-sanitized HSD score
+drift. It is local-only by default; pass `--allow-model-download` only when you
+explicitly want the approved OSS Hugging Face classifiers downloaded or
+refreshed. Because prediction columns are added, this is an enriched analysis
+output, not an exact-format upload.
+
+The trusted local configuration uses deterministic masking, Presidio,
+scrubadub, the token-policy ensemble, and a two-model RoBERTa HSD advisory
+ensemble.
 
 ## Create An Exact-Format Candidate
 

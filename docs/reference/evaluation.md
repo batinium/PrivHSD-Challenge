@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: metrics, reports, regression gates
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: `privhsd/metrics.py`, `privhsd/cue_checks.py`,
 `privhsd/source_report.py`, `privhsd/author_risk.py`,
 `privhsd/semantic_triage.py`
@@ -80,6 +80,36 @@ For meaningful pipeline changes, check:
 - runtime and provider/model load counts;
 - author-risk metrics when repeated author IDs exist;
 - external/unseen token-policy results when token-policy behavior changes.
+
+## Configuration Search Protocol
+
+Use this sequence when choosing the trusted single CSV pipeline:
+
+1. Establish the deterministic `balanced` baseline.
+2. Compare routed auto variants with providers disabled, providers only,
+   token-policy only, full auto without HSD selection, and full auto with HSD
+   selection.
+3. Score every saved output with the same HSD advisory ensemble.
+4. Choose on privacy first, then HSD decision stability, then overmasking and
+   character utility. Do not choose a lower-residual config if it destroys HSD
+   decisions.
+5. Run the selected command end to end through `sanitize-classify` and verify
+   row count, column contract, manifest validity, provider/model load counts,
+   identifier residuals, cue retention, and classification drift.
+
+Latest local 3,830-row TweetEval unseen run selected the default
+`sanitize-classify` path: deterministic baseline, Presidio, scrubadub,
+token-policy ensemble, and two-model RoBERTa HSD advisory selection. Final
+manifest summary:
+
+- validation: passed, 3,830 input rows -> 3,830 output rows;
+- residual direct identifiers: 1 detector hit after 4,205 before;
+- residual quasi identifiers: 0;
+- target cue retention mean: 1.0062;
+- utility cue retention mean: 1.0048;
+- character utility retention mean: 0.8512;
+- HSD decision agreement: 0.9802, with 76 decision changes;
+- HSD positive/negative counts: 1,971 / 1,859.
 
 ## External Utility Probes
 

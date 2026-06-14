@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: planning and evidence snapshot
-Last verified: 2026-06-13
+Last verified: 2026-06-14
 Primary code: all workstreams
 
 This file records durable conclusions. Raw outputs, model weights, and row-level
@@ -17,9 +17,74 @@ TweetEval unseen CSV. It preserves schema, records provider/model status, and
 loads optional heavy components once per run. It is not a guarantee that every
 identifier is removed; residual-risk review remains required.
 
+The enriched `sanitize-classify` workflow is available for local unseen-data
+triage. It preserves original rows and metadata, replaces the selected text
+column with sanitized text, appends HSD prediction columns, and records
+original-vs-sanitized advisory score drift without row text. It is not an
+exact-format upload path.
+
 ## Latest Verification Snapshot
 
-Most recent local verification after the unified auto/provider update:
+Most recent local configuration search and final enriched CSV run:
+
+- Matrix input: `data/external_unseen/tweet_eval_hate_offensive_test.csv`
+  with 3,830 rows.
+- Matrix output: `data/outputs/config_search_tweet_eval_20260614_patch1/`.
+- Selected command:
+
+```bash
+python -m privhsd.cli sanitize-classify \
+  --input data/external_unseen/tweet_eval_hate_offensive_test.csv \
+  --output data/outputs/tweet_eval_hate_offensive_test.trusted_sanitize_classify_final.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/tweet_eval_hate_offensive_test.trusted_sanitize_classify_final.manifest.json \
+  --require-hate-classification \
+  --max-model-batch-size 32
+```
+
+Final aggregate result:
+
+- validation passed, 3,830 rows in and 3,830 rows out;
+- `text` replaced in place and `is_hate_speech`, `hate_speech_score`,
+  `hate_speech_model_count` appended;
+- chosen candidates: balanced 1,662, provider fusion 124, style scrubbed
+  1,099, token policy 945;
+- direct identifiers 4,205 -> 1, quasi identifiers -> 0;
+- target cue retention mean 1.0062, utility cue retention mean 1.0048,
+  character utility retention mean 0.8512;
+- HSD advisory status ok, two models, 1,971 positive and 1,859 negative
+  predictions, 0.9802 original-vs-sanitized decision agreement.
+
+Focused regression after detector tuning:
+
+- `python -m pytest tests/test_pipeline.py -q`: 26 passed.
+
+Most recent local verification after the simplified pipeline and HSD advisory
+ensemble update:
+
+- `python -m compileall privhsd contextsafe_hsd workbench/backend`: passed.
+- `python -m pytest tests/test_simple_pipeline.py tests/test_auto_pipeline.py tests/test_hf_utility.py tests/test_submission.py tests/test_csv_pipeline.py -q`: 29 passed.
+- `python -m pytest -q`: 184 passed, 1 skipped.
+- `cd workbench/frontend && npm run build`: passed.
+- CLI smoke passed on cached local advisory models:
+
+```bash
+python -m privhsd.cli sanitize-classify \
+  --input tests/fixtures/synthetic_pii_stress.csv \
+  --output data/outputs/smoke.sanitize_classify.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/smoke.sanitize_classify.manifest.json \
+  --disable-provider presidio \
+  --disable-provider scrubadub \
+  --disable-provider gliner \
+  --disable-model token_policy_ensemble \
+  --disable-model semantic \
+  --max-model-batch-size 4
+```
+
+Previous local verification after the unified auto/provider update:
 
 - `python -m compileall privhsd workbench/backend`: passed.
 - `python -m pytest -q`: 180 passed, 1 skipped.
@@ -41,6 +106,7 @@ Re-run these commands before treating this status as current.
 | Path | Latest durable evidence | Verdict |
 | --- | --- | --- |
 | `auto` exact-format | Preserves exact schema, records provider/model status, falls back safely when optional components are missing. | Primary path for new exact-format candidates. |
+| `sanitize-classify` enriched CSV | Replaces text in place, preserves original metadata, appends advisory HSD prediction columns, and logs aggregate score drift only. | Practical local path for large unseen CSV triage; not an upload candidate. |
 | `balanced` exact-format | Merged public bundle: 159,668 rows, validation passed, identifier detections 40,304 -> 5, target and utility cue retention 0.9999. | Deterministic compatibility fallback. |
 | Source-aware regression | Reports by source/label/split/platform/type and row ID without raw text. | Required before tuning or pitching. |
 | Filtered Presidio reranking | Full Dynahate run selected filtered Presidio candidate for 6,085 rows with utility-cue retention 1.0 and target retention 0.9974. | Strong alternate after baseline validation. |

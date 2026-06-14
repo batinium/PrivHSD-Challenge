@@ -82,6 +82,39 @@ def test_reported_person_context_masks_name_without_flattening_counterspeech():
     assert "do not attack Muslims" in result.text
 
 
+def test_sentence_start_abuse_words_are_not_context_person_names():
+    abuse = sensitive_word_from_codes(98, 105, 116, 99, 104)
+    text = f"{abuse.capitalize()} said her shoes are ugly."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert abuse.capitalize() in result.text
+    assert "ugly" in result.text
+    assert "[PERSON]" not in result.text
+
+
+def test_pronoun_call_context_is_not_context_person_name():
+    abuse = sensitive_word_from_codes(98, 105, 116, 99, 104)
+    text = f"She called me a {abuse}."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == text
+
+
+def test_call_me_context_does_not_mask_hostility_cue_as_name():
+    text = "They call me ugly and I do not care."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == text
+
+
+def test_context_person_still_masks_real_name_before_speech_verb():
+    text = "Dana Cole said immigrants should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "Dana Cole" not in result.text
+    assert "[PERSON] said immigrants should leave" in result.text
+
+
 def test_short_name_threat_context_preserves_action_cue():
     text = "Kill Alex was posted by a throwaway account near Paris."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))
@@ -89,6 +122,16 @@ def test_short_name_threat_context_preserves_action_cue():
     assert result.text.startswith("Kill [PERSON] was posted")
     assert "Alex" not in result.text
     assert "[LOCATION]" in result.text
+
+
+def test_adjacent_social_handles_are_masked_individually():
+    text = "@foo@bar said immigrants should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "@foo" not in result.text
+    assert "@bar" not in result.text
+    assert result.text.startswith("[USER][USER] said")
+    assert "immigrants should leave" in result.text
 
 
 def test_context_person_masks_unicode_and_lowercase_self_identification():
