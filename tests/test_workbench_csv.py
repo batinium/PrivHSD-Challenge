@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import re
 import time
 
 import pytest
@@ -209,6 +210,47 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
     assert insights["ngo_review"]["auto_moderation"] is False
 
 
+def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+    client = TestClient(workbench_app.app)
+    response = client.post(
+        "/api/csv/privatize",
+        json={
+            "csv_text": (
+                "author_id,text,predicted_is_hate_speech\n"
+                "author-secret-1,Email alex@example.test because Muslims should leave.,1\n"
+            ),
+            "text_col": "text",
+            "id_col": "author_id",
+            "mode": "auto",
+            "replace_text": True,
+            "disabled_providers": ["presidio", "scrubadub", "gliner"],
+            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    rows = list(csv.DictReader(io.StringIO(body["output_csv"])))
+    assert rows[0]["author_id"] == "author-secret-1"
+    assert body["manifest"]["columns"]["id_col"] == "author_id"
+    assert body["manifest"]["columns"]["review_id_col"] is None
+    assert body["manifest"]["columns"]["review_id_synthetic"] is True
+    assert (
+        body["manifest"]["columns"]["review_id_strategy"]
+        == "hmac_sha256_id_text_row"
+    )
+    assert re.fullmatch(r"case-[0-9a-f]{24}", body["preview_rows"][0]["row_id"])
+    review_item = body["platform_insights"]["ngo_review"]["queue_items"][0]
+    assert review_item["row_id"] == body["preview_rows"][0]["row_id"]
+    review_rows = list(csv.DictReader(io.StringIO(body["review_csv"])))
+    assert list(review_rows[0]) == ["case_id", "protected_text"]
+    assert review_rows[0]["case_id"] == body["preview_rows"][0]["row_id"]
+    assert "author-secret-1" not in json.dumps(body["platform_insights"])
+    assert "author-secret-1" not in json.dumps(body["audit"])
+    assert "author-secret-1" not in body["review_csv"]
+
+
 def test_workbench_csv_endpoint_persists_and_reuses_cached_result(tmp_path, monkeypatch):
     monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
     client = TestClient(workbench_app.app)
@@ -302,10 +344,15 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
     }
     processed = client.post("/api/csv/privatize", json=payload)
     assert processed.status_code == 200
-    cache_key = processed.json()["cache"]["key"]
+    processed_body = processed.json()
+    cache_key = processed_body["cache"]["key"]
+    review_row_id = processed_body["platform_insights"]["ngo_review"]["queue_items"][0][
+        "row_id"
+    ]
+    assert re.fullmatch(r"case-[0-9a-f]{24}", review_row_id)
 
     update = client.put(
-        f"/api/reviews/{cache_key}/cases/case-1",
+        f"/api/reviews/{cache_key}/cases/{review_row_id}",
         json={
             "status": "escalated",
             "reviewer_id": "ngo-demo",
@@ -321,7 +368,7 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
     )
     assert update.status_code == 200
     body = update.json()
-    case = body["cases"]["case-1"]
+    case = body["cases"][review_row_id]
     assert case["status"] == "escalated"
     assert case["labels"]["pii_feedback"] == ["missed_location"]
     assert case["labels"]["target_categories"] == ["religion"]
@@ -329,12 +376,12 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
 
     lookup = client.get(f"/api/reviews/{cache_key}")
     assert lookup.status_code == 200
-    assert lookup.json()["cases"]["case-1"]["labels"]["harm_risk"] == "high"
+    assert lookup.json()["cases"][review_row_id]["labels"]["harm_risk"] == "high"
     saved = json.loads((tmp_path / "reviews" / f"{cache_key}.json").read_text())
     saved_text = json.dumps(saved)
     assert "alex@example.test" not in saved_text
     assert "Muslims should leave" not in saved_text
-    assert saved["cases"]["case-1"]["privacy"]["raw_text_retained"] is False
+    assert saved["cases"][review_row_id]["privacy"]["raw_text_retained"] is False
 
 
 def test_workbench_text_endpoint_uses_selected_span_provider(monkeypatch):

@@ -744,7 +744,7 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
       <div className="report-actions">
         <button className="ghost" disabled={!result} onClick={onDownloadCsv} type="button">
           <Download size={17} />
-          Protected CSV
+          Review CSV
         </button>
         <button className="ghost" disabled={!result} onClick={onDownloadAudit} type="button">
           <Archive size={17} />
@@ -1070,7 +1070,7 @@ function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownlo
       <div className="audit-actions">
         <button className="ghost" disabled={!result} onClick={onDownloadCsv} type="button">
           <Download size={17} />
-          CSV
+          Review CSV
         </button>
         <button className="ghost" disabled={!result} onClick={onDownloadAudit} type="button">
           <Archive size={17} />
@@ -1210,7 +1210,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const previewPanel = <ProtectedCasePreviewPanel csvGauges={csvGauges} result={result} />;
   const downloadCsv = () => {
     if (!result) return;
-    downloadTextFile(`masked-${csvName}`, result.output_csv, "text/csv");
+    downloadTextFile(`review-${csvName}`, result.review_csv || result.output_csv, "text/csv");
   };
   const downloadAudit = () => {
     if (!result) return;
@@ -1302,7 +1302,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
     event.target.value = "";
     const detected = detectCsvHeaders(text);
     const nextTextCol = preferredColumn(detected, ["text", "tweet", "content", "comment"]);
-    const nextIdCol = preferredColumn(detected, ["id", "case_id", "source_id", "author_id", "user_id"], "");
+    const nextIdCol = preferredColumn(detected, ["id", "case_id", "row_id", "source_id"], "");
     setCsvText(text);
     setCsvName(file.name || "contextsafe-hsd.csv");
     setHeaders(detected);

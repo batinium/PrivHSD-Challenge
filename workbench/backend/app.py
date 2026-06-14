@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 from collections import Counter
 import csv
 from functools import lru_cache
@@ -10,6 +11,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import secrets
 import threading
 import time
 from typing import Any, Literal
@@ -35,7 +37,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v2"
+CSV_CACHE_VERSION = "workbench_csv_result_v3"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -65,6 +67,17 @@ CSV_PROGRESS_PHASES = {
     "summary": (96, 98, "Aggregating report"),
     "packaging": (98, 100, "Preparing dashboard"),
 }
+SENSITIVE_REVIEW_ID_TOKENS = frozenset(
+    {
+        "account",
+        "author",
+        "handle",
+        "screen_name",
+        "user",
+        "username",
+    }
+)
+REVIEW_CASE_ID_COLUMN = "__contextsafe_review_case_id"
 
 
 class PrivatizeRequest(BaseModel):
@@ -118,6 +131,7 @@ class CsvPrivatizeRequest(BaseModel):
 
 class CsvPrivatizeResponse(BaseModel):
     output_csv: str
+    review_csv: str = ""
     audit: dict[str, Any]
     manifest: dict[str, Any]
     platform_insights: dict[str, Any]
@@ -247,6 +261,113 @@ def validate_csv_request(
             status_code=400,
             detail="CSV privatization is exposed through auto mode only.",
         )
+
+
+def is_sensitive_review_id_col(id_col: str | None) -> bool:
+    normalized = str(id_col or "").strip().lower()
+    if not normalized:
+        return False
+    parts = {part for part in normalized.replace("-", "_").split("_") if part}
+    return bool(parts & SENSITIVE_REVIEW_ID_TOKENS)
+
+
+def review_safe_id_col(id_col: str | None) -> str | None:
+    if is_sensitive_review_id_col(id_col):
+        return None
+    return id_col
+
+
+def review_row_id(
+    row: dict[str, Any],
+    *,
+    row_index: int,
+    id_col: str | None,
+) -> str:
+    safe_id_col = review_safe_id_col(id_col)
+    if safe_id_col:
+        value = str(row.get(safe_id_col, "") or "").strip()
+        if value:
+            return value
+    return f"case-{row_index}"
+
+
+def hashed_review_case_id(
+    row: dict[str, Any],
+    *,
+    row_index: int,
+    id_col: str | None,
+    text_col: str,
+    secret: bytes,
+) -> str:
+    text_sha256 = hashlib.sha256(
+        str(row.get(text_col, "") or "").encode("utf-8")
+    ).hexdigest()
+    payload = json.dumps(
+        {
+            "row_index": row_index,
+            "id_col": id_col or "",
+            "id_value": str(row.get(id_col, "") or "") if id_col else "",
+            "text_sha256": text_sha256,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    digest = hmac.new(secret, payload, hashlib.sha256).hexdigest()[:24]
+    return f"case-{digest}"
+
+
+def review_id_processing_rows(
+    rows: list[dict[str, str]],
+    *,
+    id_col: str | None,
+    text_col: str,
+) -> tuple[list[dict[str, str]], str | None, bool, str]:
+    secret = secrets.token_bytes(32)
+    processed_rows = []
+    for index, row in enumerate(rows, start=1):
+        next_row = dict(row)
+        next_row[REVIEW_CASE_ID_COLUMN] = hashed_review_case_id(
+            row,
+            row_index=index,
+            id_col=id_col,
+            text_col=text_col,
+            secret=secret,
+        )
+        processed_rows.append(next_row)
+    return (
+        processed_rows,
+        REVIEW_CASE_ID_COLUMN,
+        True,
+        "hmac_sha256_id_text_row",
+    )
+
+
+def strip_internal_workbench_columns(
+    rows: list[dict[str, Any]],
+    fieldnames: list[str],
+) -> list[dict[str, Any]]:
+    allowed = set(fieldnames)
+    return [
+        {key: value for key, value in row.items() if key in allowed}
+        for row in rows
+    ]
+
+
+def build_review_csv(
+    rows: list[dict[str, Any]],
+    *,
+    output_col: str,
+    id_col: str | None,
+) -> str:
+    review_rows = [
+        {
+            "case_id": review_row_id(row, row_index=index, id_col=id_col),
+            "protected_text": str(row.get(output_col, "") or ""),
+        }
+        for index, row in enumerate(rows, start=1)
+    ]
+    return write_csv_text(review_rows, ["case_id", "protected_text"])
 
 
 def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]:
@@ -1216,14 +1337,13 @@ def platform_insight_report(
             classified_rows += 1
             if classification["is_hatred"]:
                 hatred_rows += 1
-                row_id = (
-                    output_row.get(id_col)
-                    if id_col
-                    else output_row.get("id") or output_row.get("case_id")
-                )
                 queue_items.append(
                     {
-                        "row_id": row_id or str(row_index + 1),
+                        "row_id": review_row_id(
+                            output_row,
+                            row_index=row_index + 1,
+                            id_col=id_col,
+                        ),
                         "status": "needs_review",
                         "target_categories": categories,
                         "protected_preview": preview_text(protected_text),
@@ -1990,11 +2110,18 @@ def build_csv_privatize_response(
             gliner_profile=request.gliner_profile,
         )
     )
+    processing_rows, processing_id_col, review_id_synthetic, review_id_strategy = (
+        review_id_processing_rows(
+            rows,
+            id_col=request.id_col,
+            text_col=request.text_col,
+        )
+    )
     engine_result = AutoPipelineEngine(context).process_rows(
-        rows,
+        processing_rows,
         fieldnames,
         text_col=request.text_col,
-        id_col=request.id_col,
+        id_col=processing_id_col,
         output_col=request.output_col,
         replace_text=request.replace_text,
         progress_callback=progress_callback,
@@ -2008,7 +2135,11 @@ def build_csv_privatize_response(
                 "detail": "Building protected CSV, review queue, and aggregate reports.",
             }
         )
-    output_csv = write_csv_text(engine_result.rows, engine_result.fieldnames)
+    csv_rows = strip_internal_workbench_columns(
+        engine_result.rows,
+        engine_result.fieldnames,
+    )
+    output_csv = write_csv_text(csv_rows, engine_result.fieldnames)
     helper_columns = [
         column for column in engine_result.fieldnames if column not in fieldnames
     ]
@@ -2032,6 +2163,12 @@ def build_csv_privatize_response(
         "artifact_type": "workbench_csv_audit",
         "validation": validation,
     }
+    summary["id_col"] = request.id_col
+    summary["review_id_col"] = (
+        None if processing_id_col == REVIEW_CASE_ID_COLUMN else processing_id_col
+    )
+    summary["review_id_synthetic"] = review_id_synthetic
+    summary["review_id_strategy"] = review_id_strategy
     manifest = {
         "artifact_type": "workbench_csv_manifest",
         "row_count": len(rows),
@@ -2046,6 +2183,11 @@ def build_csv_privatize_response(
         "columns": {
             "text_col": request.text_col,
             "id_col": request.id_col,
+            "review_id_col": None
+            if processing_id_col == REVIEW_CASE_ID_COLUMN
+            else processing_id_col,
+            "review_id_synthetic": review_id_synthetic,
+            "review_id_strategy": review_id_strategy,
             "output_col": request.text_col if request.replace_text else request.output_col,
             "preserved_columns": fieldnames,
         },
@@ -2056,6 +2198,11 @@ def build_csv_privatize_response(
         ),
     }
     insight_output_col = request.text_col if request.replace_text else request.output_col
+    review_csv = build_review_csv(
+        engine_result.rows,
+        output_col=insight_output_col,
+        id_col=processing_id_col,
+    )
     platform_insights = platform_insight_report(
         original_rows=rows,
         output_rows=engine_result.rows,
@@ -2063,12 +2210,12 @@ def build_csv_privatize_response(
         output_col=insight_output_col,
         aggregate=summary["metrics"],
         audit_rows=engine_result.audit_rows,
-        id_col=request.id_col,
+        id_col=processing_id_col,
     )
     preview_rows = [
         csv_preview_row(
             row,
-            row_id=row.get(request.id_col) if request.id_col else str(index + 1),
+            row_id=review_row_id(row, row_index=index + 1, id_col=processing_id_col),
             text_col=request.text_col,
             output_col=insight_output_col,
         )
@@ -2076,6 +2223,7 @@ def build_csv_privatize_response(
     ]
     response = {
         "output_csv": output_csv,
+        "review_csv": review_csv,
         "audit": {"summary": summary, "rows": engine_result.audit_rows},
         "manifest": manifest,
         "platform_insights": platform_insights,
