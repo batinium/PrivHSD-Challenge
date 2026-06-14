@@ -842,6 +842,77 @@ button:disabled {
   color: #0f625b;
 }
 
+.review-save-state {
+  color: #0f625b;
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 10px;
+}
+
+.review-feedback {
+  border-top: 1px solid #e3e8ee;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.review-feedback-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.review-feedback-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-feedback-grid label span,
+.pill-toggle-group > span {
+  color: #667282;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.review-feedback-grid select {
+  background: #ffffff;
+  border: 1px solid #dbe1e8;
+  border-radius: 7px;
+  color: #253142;
+  font-size: 13px;
+  min-height: 34px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+.pill-toggle-group {
+  margin-top: 10px;
+}
+
+.pill-toggle-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.pill-toggle-group button {
+  background: #ffffff;
+  border: 1px solid #dbe1e8;
+  border-radius: 999px;
+  color: #475569;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 9px;
+}
+
+.pill-toggle-group button.active {
+  background: #eef7f4;
+  border-color: #8ac2b7;
+  color: #0f625b;
+}
+
 .safeguard-card {
   align-content: start;
   display: grid;
@@ -1852,6 +1923,7 @@ th {
   .detail-grid,
   .detail-grid.compact,
   .context-retention-strip,
+  .review-feedback-grid,
   .audit-strip {
     grid-template-columns: 1fr;
   }

@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import time
 
 import pytest
@@ -281,6 +282,59 @@ def test_workbench_csv_job_reports_progress_and_result(tmp_path, monkeypatch):
     assert job["progress"]["processed_rows"] == 2
     assert job["result"]["cache"]["hit"] is False
     assert job["result"]["manifest"]["row_count"] == 2
+
+
+def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+    monkeypatch.setattr(workbench_app, "REVIEW_CACHE_DIR", tmp_path / "reviews")
+    client = TestClient(workbench_app.app)
+    payload = {
+        "csv_text": (
+            "id,text,predicted_is_hate_speech\n"
+            "case-1,Email alex@example.test because Muslims should leave.,1\n"
+        ),
+        "text_col": "text",
+        "id_col": "id",
+        "mode": "auto",
+        "replace_text": True,
+        "disabled_providers": ["presidio", "scrubadub", "gliner"],
+        "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+    }
+    processed = client.post("/api/csv/privatize", json=payload)
+    assert processed.status_code == 200
+    cache_key = processed.json()["cache"]["key"]
+
+    update = client.put(
+        f"/api/reviews/{cache_key}/cases/case-1",
+        json={
+            "status": "escalated",
+            "reviewer_id": "ngo-demo",
+            "labels": {
+                "final_hsd_label": "confirmed_hatred",
+                "harm_risk": "high",
+                "masking_quality": "acceptable",
+                "pii_feedback": ["missed_location", "not_allowed"],
+                "context_feedback": ["target_reference_preserved"],
+                "target_categories": ["religion"],
+            },
+        },
+    )
+    assert update.status_code == 200
+    body = update.json()
+    case = body["cases"]["case-1"]
+    assert case["status"] == "escalated"
+    assert case["labels"]["pii_feedback"] == ["missed_location"]
+    assert case["labels"]["target_categories"] == ["religion"]
+    assert body["summary"]["status_counts"]["escalated"] == 1
+
+    lookup = client.get(f"/api/reviews/{cache_key}")
+    assert lookup.status_code == 200
+    assert lookup.json()["cases"]["case-1"]["labels"]["harm_risk"] == "high"
+    saved = json.loads((tmp_path / "reviews" / f"{cache_key}.json").read_text())
+    saved_text = json.dumps(saved)
+    assert "alex@example.test" not in saved_text
+    assert "Muslims should leave" not in saved_text
+    assert saved["cases"]["case-1"]["privacy"]["raw_text_retained"] is False
 
 
 def test_workbench_text_endpoint_uses_selected_span_provider(monkeypatch):

@@ -37,6 +37,8 @@ MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
 CSV_CACHE_VERSION = "workbench_csv_result_v2"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
+REVIEW_CACHE_VERSION = "workbench_review_v1"
+REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
 CSV_JOB_TTL_SECONDS = 60 * 60
 HSD_ADVISORY_MODEL_ID = "facebook/roberta-hate-speech-dynabench-r4-target"
 CARDIFF_HATE_MODEL_ID = "cardiffnlp/twitter-roberta-base-hate-latest"
@@ -122,6 +124,26 @@ class CsvPrivatizeResponse(BaseModel):
     preview_rows: list[dict[str, Any]]
     cache: dict[str, Any] = Field(default_factory=dict)
 
+
+class ReviewCaseLabels(BaseModel):
+    final_hsd_label: Literal["", "confirmed_hatred", "not_hatred", "uncertain"] = ""
+    harm_risk: Literal["", "high", "medium", "low"] = ""
+    masking_quality: Literal[
+        "",
+        "acceptable",
+        "too_much_masking",
+        "too_little_masking",
+        "uncertain",
+    ] = ""
+    pii_feedback: list[str] = Field(default_factory=list)
+    context_feedback: list[str] = Field(default_factory=list)
+    target_categories: list[str] = Field(default_factory=list)
+
+
+class ReviewCaseUpdate(BaseModel):
+    status: Literal["open", "reviewing", "escalated", "cleared"] = "open"
+    labels: ReviewCaseLabels = Field(default_factory=ReviewCaseLabels)
+    reviewer_id: str = Field(default="local-reviewer", max_length=80)
 
 app = FastAPI(title="ContextSafe-HSD Privacy Review Workbench")
 app.add_middleware(
@@ -348,6 +370,195 @@ def cached_csv_response(
         created_at=record.get("created_at"),
     )
     return response
+
+
+PII_FEEDBACK_LABELS = frozenset(
+    {
+        "missed_person",
+        "missed_location",
+        "missed_contact",
+        "missed_identifier",
+        "missed_organization",
+        "overmasked_target_group",
+        "overmasked_context",
+        "placeholder_too_specific",
+        "none",
+    }
+)
+CONTEXT_FEEDBACK_LABELS = frozenset(
+    {
+        "target_reference_preserved",
+        "target_reference_lost",
+        "threat_signal_preserved",
+        "threat_signal_lost",
+        "quotation_context_preserved",
+        "quotation_context_lost",
+        "counterspeech_context_preserved",
+        "counterspeech_context_lost",
+        "none",
+    }
+)
+TARGET_CATEGORY_LABELS = frozenset(
+    {
+        "disability",
+        "gender",
+        "historical_victim_group",
+        "nationality_or_origin",
+        "race_or_ethnicity",
+        "religion",
+        "slur_or_profanity",
+        "sexual_orientation",
+    }
+)
+
+
+def validate_result_cache_key(cache_key: str) -> str:
+    normalized = str(cache_key or "").strip().lower()
+    if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+        raise HTTPException(status_code=400, detail="Invalid result cache key.")
+    return normalized
+
+
+def review_cache_path(cache_key: str) -> Path:
+    return REVIEW_CACHE_DIR / f"{validate_result_cache_key(cache_key)}.json"
+
+
+def queue_items_for_cache(cache_key: str) -> list[dict[str, Any]]:
+    cache_key = validate_result_cache_key(cache_key)
+    record = read_csv_result_cache(cache_key)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Processed CSV result not found.")
+    result = record.get("result") or {}
+    insights = result.get("platform_insights") or {}
+    review = insights.get("ngo_review") or {}
+    return list(review.get("queue_items") or review.get("queue_preview") or [])
+
+
+def row_ids_for_cache(cache_key: str) -> set[str]:
+    return {str(item.get("row_id")) for item in queue_items_for_cache(cache_key)}
+
+
+def clean_label_list(values: list[str], allowed: frozenset[str]) -> list[str]:
+    cleaned = []
+    for value in values:
+        item = str(value or "").strip()
+        if item and item in allowed and item not in cleaned:
+            cleaned.append(item)
+    return cleaned
+
+
+def clean_review_labels(labels: ReviewCaseLabels) -> dict[str, Any]:
+    return {
+        "final_hsd_label": labels.final_hsd_label,
+        "harm_risk": labels.harm_risk,
+        "masking_quality": labels.masking_quality,
+        "pii_feedback": clean_label_list(labels.pii_feedback, PII_FEEDBACK_LABELS),
+        "context_feedback": clean_label_list(
+            labels.context_feedback,
+            CONTEXT_FEEDBACK_LABELS,
+        ),
+        "target_categories": clean_label_list(
+            labels.target_categories,
+            TARGET_CATEGORY_LABELS,
+        ),
+    }
+
+
+def empty_review_record(cache_key: str) -> dict[str, Any]:
+    now = time.time()
+    return {
+        "artifact_type": "workbench_review_annotations",
+        "version": REVIEW_CACHE_VERSION,
+        "cache_key": validate_result_cache_key(cache_key),
+        "created_at": now,
+        "updated_at": now,
+        "cases": {},
+    }
+
+
+def read_review_record(cache_key: str) -> dict[str, Any]:
+    path = review_cache_path(cache_key)
+    if not path.exists():
+        return empty_review_record(cache_key)
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty_review_record(cache_key)
+    if record.get("version") != REVIEW_CACHE_VERSION:
+        return empty_review_record(cache_key)
+    if not isinstance(record.get("cases"), dict):
+        record["cases"] = {}
+    return record
+
+
+def write_review_record(record: dict[str, Any]) -> None:
+    REVIEW_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = review_cache_path(str(record.get("cache_key", "")))
+    tmp_path = path.with_suffix(".tmp")
+    tmp_path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def review_summary(record: dict[str, Any], queue_items: list[dict[str, Any]]) -> dict[str, Any]:
+    status_counts: Counter[str] = Counter()
+    label_counts: dict[str, Counter[str]] = {
+        "final_hsd_label": Counter(),
+        "harm_risk": Counter(),
+        "masking_quality": Counter(),
+        "pii_feedback": Counter(),
+        "context_feedback": Counter(),
+        "target_categories": Counter(),
+    }
+    cases = record.get("cases") or {}
+    for item in queue_items:
+        row_id = str(item.get("row_id"))
+        case = cases.get(row_id) or {}
+        status_counts[str(case.get("status") or "open")] += 1
+        labels = case.get("labels") or {}
+        for scalar_key in ("final_hsd_label", "harm_risk", "masking_quality"):
+            value = labels.get(scalar_key)
+            if value:
+                label_counts[scalar_key][str(value)] += 1
+        for list_key in ("pii_feedback", "context_feedback", "target_categories"):
+            for value in labels.get(list_key) or []:
+                label_counts[list_key][str(value)] += 1
+    reviewed_rows = sum(
+        status_counts[status]
+        for status in ("reviewing", "escalated", "cleared")
+    )
+    return {
+        "queue_rows": len(queue_items),
+        "reviewed_rows": reviewed_rows,
+        "status_counts": dict(sorted(status_counts.items())),
+        "label_counts": {
+            key: dict(sorted(counts.items()))
+            for key, counts in label_counts.items()
+        },
+    }
+
+
+def review_response(cache_key: str) -> dict[str, Any]:
+    cache_key = validate_result_cache_key(cache_key)
+    queue_items = queue_items_for_cache(cache_key)
+    record = read_review_record(cache_key)
+    return {
+        **record,
+        "summary": review_summary(record, queue_items),
+        "review_schema": {
+            "statuses": ["open", "reviewing", "escalated", "cleared"],
+            "final_hsd_labels": ["confirmed_hatred", "not_hatred", "uncertain"],
+            "harm_risk": ["high", "medium", "low"],
+            "masking_quality": [
+                "acceptable",
+                "too_much_masking",
+                "too_little_masking",
+                "uncertain",
+            ],
+            "pii_feedback": sorted(PII_FEEDBACK_LABELS),
+            "context_feedback": sorted(CONTEXT_FEEDBACK_LABELS),
+            "target_categories": sorted(TARGET_CATEGORY_LABELS),
+        },
+    }
 
 
 def csv_progress_payload(
@@ -1681,6 +1892,42 @@ def lookup_csv_cache(request: CsvPrivatizeRequest) -> dict[str, Any]:
             record=record,
         ),
     }
+
+
+@app.get("/api/reviews/{cache_key}")
+def get_review_annotations(cache_key: str) -> dict[str, Any]:
+    return review_response(cache_key)
+
+
+@app.put("/api/reviews/{cache_key}/cases/{row_id:path}")
+def update_review_annotation(
+    cache_key: str,
+    row_id: str,
+    request: ReviewCaseUpdate,
+) -> dict[str, Any]:
+    cache_key = validate_result_cache_key(cache_key)
+    normalized_row_id = str(row_id or "").strip()
+    if not normalized_row_id:
+        raise HTTPException(status_code=400, detail="Row ID is required.")
+    known_row_ids = row_ids_for_cache(cache_key)
+    if normalized_row_id not in known_row_ids:
+        raise HTTPException(status_code=404, detail="Review case not found.")
+    record = read_review_record(cache_key)
+    now = time.time()
+    record["updated_at"] = now
+    record.setdefault("cases", {})[normalized_row_id] = {
+        "row_id": normalized_row_id,
+        "status": request.status,
+        "labels": clean_review_labels(request.labels),
+        "reviewer_id": request.reviewer_id.strip() or "local-reviewer",
+        "updated_at": now,
+        "privacy": {
+            "raw_text_retained": False,
+            "structured_feedback_only": True,
+        },
+    }
+    write_review_record(record)
+    return review_response(cache_key)
 
 
 def build_csv_privatize_response(

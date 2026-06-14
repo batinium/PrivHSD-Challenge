@@ -38,6 +38,9 @@ Open `http://127.0.0.1:5173`.
 - Helper-column CSV output adds `privatized_text` for local audit only.
 - Run CSV uses a local background job with row/phase progress polling; matching
   cached uploads load without rerunning the pipeline.
+- Human review saves structured annotations under `workbench/.cache/reviews/`
+  by processed-result cache key. Review records must contain case IDs and
+  labels only, not raw CSV text.
 - Provider/model status is derived from the active auto run. The dashboard does
   not expose manual provider or mode selection.
 - Platform insight aggregates post-classification hatred labels and target-group

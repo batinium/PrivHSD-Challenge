@@ -64,6 +64,12 @@ Run CSV starts a local background job and the UI polls row/phase progress from
 the backend. Matching cached uploads return immediately without rerunning the
 pipeline.
 
+Human review annotations are stored under `workbench/.cache/reviews/` by result
+cache key. They contain case IDs, reviewer status, and structured feedback
+labels for HSD decision, harm risk, masking quality, PII feedback, context
+feedback, and target-category correction. Raw CSV text is not written to review
+annotation files.
+
 CSV uploads are processed through the auto pipeline with fast metrics and
 local-only optional model behavior. When "Replace text column" is enabled, the
 downloaded CSV preserves the original schema and writes the privatized text back

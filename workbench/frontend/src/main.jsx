@@ -85,6 +85,55 @@ const REVIEW_STATUS_LABELS = {
   escalated: "Escalated",
   cleared: "Cleared"
 };
+const EMPTY_REVIEW_LABELS = {
+  final_hsd_label: "",
+  harm_risk: "",
+  masking_quality: "",
+  pii_feedback: [],
+  context_feedback: [],
+  target_categories: []
+};
+const FINAL_HSD_OPTIONS = [
+  ["", "No correction"],
+  ["confirmed_hatred", "Confirm hatred"],
+  ["not_hatred", "Not hatred"],
+  ["uncertain", "Uncertain"]
+];
+const HARM_RISK_OPTIONS = [
+  ["", "No override"],
+  ["high", "High"],
+  ["medium", "Moderate"],
+  ["low", "Low"]
+];
+const MASKING_QUALITY_OPTIONS = [
+  ["", "Not assessed"],
+  ["acceptable", "Acceptable"],
+  ["too_much_masking", "Too much masking"],
+  ["too_little_masking", "Too little masking"],
+  ["uncertain", "Uncertain"]
+];
+const PII_FEEDBACK_OPTIONS = [
+  ["missed_person", "Missed person"],
+  ["missed_location", "Missed location"],
+  ["missed_contact", "Missed contact"],
+  ["missed_identifier", "Missed ID"],
+  ["missed_organization", "Missed org"],
+  ["overmasked_target_group", "Overmasked target"],
+  ["overmasked_context", "Overmasked context"],
+  ["placeholder_too_specific", "Placeholder too specific"],
+  ["none", "No PII issue"]
+];
+const CONTEXT_FEEDBACK_OPTIONS = [
+  ["target_reference_preserved", "Target preserved"],
+  ["target_reference_lost", "Target lost"],
+  ["threat_signal_preserved", "Harm signal preserved"],
+  ["threat_signal_lost", "Harm signal lost"],
+  ["quotation_context_preserved", "Quote context preserved"],
+  ["quotation_context_lost", "Quote context lost"],
+  ["counterspeech_context_preserved", "Counterspeech preserved"],
+  ["counterspeech_context_lost", "Counterspeech lost"],
+  ["none", "No context issue"]
+];
 const NAV_ITEMS = [
   {
     id: "dashboard",
@@ -233,6 +282,21 @@ function itemRiskLevel(item) {
 
 function reviewStatusFor(decisions, rowId) {
   return decisions?.[rowId]?.status || "open";
+}
+
+function reviewLabelsFor(decisions, rowId) {
+  return {
+    ...EMPTY_REVIEW_LABELS,
+    ...(decisions?.[rowId]?.labels || {})
+  };
+}
+
+function toggleListValue(values, value) {
+  const current = Array.isArray(values) ? values : [];
+  if (current.includes(value)) {
+    return current.filter((item) => item !== value);
+  }
+  return [...current, value];
 }
 
 function SafeguardOverviewPanel({ result }) {
@@ -406,7 +470,95 @@ function SafeguardCard({ item }) {
   );
 }
 
-function ReviewQueueDetailPanel({ ngoReview, onReviewDecision, reviewDecisions }) {
+function PillToggleGroup({ label, onToggle, options, values }) {
+  const current = Array.isArray(values) ? values : [];
+  return (
+    <div className="pill-toggle-group">
+      <span>{label}</span>
+      <div>
+        {options.map(([value, text]) => (
+          <button
+            className={current.includes(value) ? "active" : ""}
+            key={value}
+            onClick={() => onToggle(value)}
+            type="button"
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewFeedbackPanel({ labels, onChange }) {
+  const targetOptions = Object.entries(CATEGORY_LABELS);
+  return (
+    <div className="review-feedback">
+      <div className="review-feedback-grid">
+        <label>
+          <span>HSD decision</span>
+          <select
+            value={labels.final_hsd_label || ""}
+            onChange={(event) => onChange({ final_hsd_label: event.target.value })}
+          >
+            {FINAL_HSD_OPTIONS.map(([value, text]) => (
+              <option key={value} value={value}>{text}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Risk override</span>
+          <select
+            value={labels.harm_risk || ""}
+            onChange={(event) => onChange({ harm_risk: event.target.value })}
+          >
+            {HARM_RISK_OPTIONS.map(([value, text]) => (
+              <option key={value} value={value}>{text}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Masking quality</span>
+          <select
+            value={labels.masking_quality || ""}
+            onChange={(event) => onChange({ masking_quality: event.target.value })}
+          >
+            {MASKING_QUALITY_OPTIONS.map(([value, text]) => (
+              <option key={value} value={value}>{text}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <PillToggleGroup
+        label="PII feedback"
+        onToggle={(value) => onChange({
+          pii_feedback: toggleListValue(labels.pii_feedback, value)
+        })}
+        options={PII_FEEDBACK_OPTIONS}
+        values={labels.pii_feedback}
+      />
+      <PillToggleGroup
+        label="Context feedback"
+        onToggle={(value) => onChange({
+          context_feedback: toggleListValue(labels.context_feedback, value)
+        })}
+        options={CONTEXT_FEEDBACK_OPTIONS}
+        values={labels.context_feedback}
+      />
+      <PillToggleGroup
+        label="Target correction"
+        onToggle={(value) => onChange({
+          target_categories: toggleListValue(labels.target_categories, value)
+        })}
+        options={targetOptions}
+        values={labels.target_categories}
+      />
+    </div>
+  );
+}
+
+function ReviewQueueDetailPanel({ ngoReview, onReviewCaseChange, reviewDecisions, reviewSaving }) {
   const [riskFilter, setRiskFilter] = useState("all");
   const queue = ngoReview?.queue_items || ngoReview?.queue_preview || [];
   const riskCounts = queue.reduce(
@@ -461,6 +613,7 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewDecision, reviewDecisions }
       <section className="review-detail-list">
         {queue.length && filteredQueue.length ? filteredQueue.map((item) => {
           const decision = reviewStatusFor(reviewDecisions, item.row_id);
+          const labels = reviewLabelsFor(reviewDecisions, item.row_id);
           return (
             <article className="review-case" key={item.row_id}>
               <div className="review-case-main">
@@ -491,7 +644,7 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewDecision, reviewDecisions }
                       <button
                         className={decision === action.id ? "active" : ""}
                         key={action.id}
-                        onClick={() => onReviewDecision(item.row_id, action.id)}
+                        onClick={() => onReviewCaseChange(item.row_id, { status: action.id })}
                         type="button"
                       >
                         <Icon size={15} />
@@ -500,6 +653,18 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewDecision, reviewDecisions }
                     );
                   })}
                 </div>
+                {reviewSaving === item.row_id ? (
+                  <div className="review-save-state">Saving review labels...</div>
+                ) : null}
+                <ReviewFeedbackPanel
+                  labels={labels}
+                  onChange={(labelPatch) => onReviewCaseChange(item.row_id, {
+                    labels: {
+                      ...labels,
+                      ...labelPatch
+                    }
+                  })}
+                />
               </div>
               <SafeguardCard item={item} />
             </article>
@@ -563,7 +728,7 @@ function TargetGroupsDetailPanel({ targetGroups }) {
   );
 }
 
-function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownloadManifest }) {
+function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownloadManifest, onDownloadReview }) {
   const summary = result?.audit?.summary || {};
   const validation = summary.validation || {};
   const manifest = result?.manifest || {};
@@ -588,6 +753,10 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
         <button className="ghost" disabled={!result} onClick={onDownloadManifest} type="button">
           <Archive size={17} />
           Manifest
+        </button>
+        <button className="ghost" disabled={!result} onClick={onDownloadReview} type="button">
+          <FileCheck2 size={17} />
+          Review Labels
         </button>
       </div>
       <div className="detail-grid">
@@ -976,22 +1145,37 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [processingProgress, setProcessingProgress] = useState(null);
   const [error, setError] = useState("");
   const [reviewDecisions, setReviewDecisions] = useState({});
-  const reviewStorageKey = result?.cache?.key
-    ? `contextsafe-hsd-review:${result.cache.key}`
-    : "";
+  const [reviewSaving, setReviewSaving] = useState("");
+  const reviewCacheKey = result?.cache?.key || "";
 
   useEffect(() => {
-    if (!reviewStorageKey) {
+    let cancelled = false;
+    if (!reviewCacheKey) {
       setReviewDecisions({});
-      return;
+      return undefined;
     }
-    try {
-      const stored = window.localStorage.getItem(reviewStorageKey);
-      setReviewDecisions(stored ? JSON.parse(stored) : {});
-    } catch (_err) {
-      setReviewDecisions({});
-    }
-  }, [reviewStorageKey]);
+    fetch(`/api/reviews/${reviewCacheKey}`)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Review lookup failed with ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((body) => {
+        if (!cancelled) {
+          setReviewDecisions(body.cases || {});
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setReviewDecisions({});
+          setError(err.message || "Review annotations unavailable");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewCacheKey]);
 
   const metrics = result?.audit?.summary?.metrics || {};
   const csvGauges = {
@@ -1036,24 +1220,79 @@ function CsvWorkbench({ activeView, modelStatus }) {
     if (!result) return;
     downloadTextFile("contextsafe-hsd-manifest.json", JSON.stringify(result.manifest, null, 2), "application/json");
   };
-  const updateReviewDecision = (rowId, status) => {
-    setReviewDecisions((previous) => {
-      const next = {
-        ...previous,
-        [rowId]: {
-          status,
-          updated_at: new Date().toISOString()
-        }
-      };
-      if (reviewStorageKey) {
-        try {
-          window.localStorage.setItem(reviewStorageKey, JSON.stringify(next));
-        } catch (_err) {
-          // Review decisions remain available in memory when browser storage is unavailable.
-        }
+  const downloadReview = () => {
+    if (!result) return;
+    downloadTextFile(
+      "contextsafe-hsd-review-labels.json",
+      JSON.stringify({
+        artifact_type: "workbench_review_export",
+        cache_key: reviewCacheKey,
+        exported_at: new Date().toISOString(),
+        privacy: {
+          raw_text_retained: false,
+          structured_feedback_only: true
+        },
+        cases: reviewDecisions
+      }, null, 2),
+      "application/json"
+    );
+  };
+  const updateReviewCase = async (rowId, patch) => {
+    if (!reviewCacheKey) {
+      setError("Run or load a processed CSV before saving review labels.");
+      return;
+    }
+    const previousCase = reviewDecisions[rowId] || {
+      status: "open",
+      labels: EMPTY_REVIEW_LABELS
+    };
+    const nextCase = {
+      ...previousCase,
+      status: patch.status || previousCase.status || "open",
+      labels: {
+        ...EMPTY_REVIEW_LABELS,
+        ...(previousCase.labels || {}),
+        ...(patch.labels || {})
       }
-      return next;
-    });
+    };
+    setReviewDecisions((previous) => ({
+      ...previous,
+      [rowId]: {
+        ...nextCase,
+        row_id: rowId,
+        updated_at: new Date().toISOString()
+      }
+    }));
+    setReviewSaving(rowId);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/reviews/${reviewCacheKey}/cases/${encodeURIComponent(rowId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: nextCase.status,
+            labels: nextCase.labels,
+            reviewer_id: "local-reviewer"
+          })
+        }
+      );
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Review save failed with ${response.status}`);
+      }
+      const body = await response.json();
+      setReviewDecisions(body.cases || {});
+    } catch (err) {
+      setReviewDecisions((previous) => ({
+        ...previous,
+        [rowId]: previousCase
+      }));
+      setError(err.message || "Review save failed");
+    } finally {
+      setReviewSaving("");
+    }
   };
 
   async function handleFile(event) {
@@ -1257,8 +1496,9 @@ function CsvWorkbench({ activeView, modelStatus }) {
           <section className="portal-focus-grid review-layout">
             <ReviewQueueDetailPanel
               ngoReview={ngoReview}
-              onReviewDecision={updateReviewDecision}
+              onReviewCaseChange={updateReviewCase}
               reviewDecisions={reviewDecisions}
+              reviewSaving={reviewSaving}
             />
             <div className="side-stack">
               <SafeguardOverviewPanel result={result} />
@@ -1293,6 +1533,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
             onDownloadAudit={downloadAudit}
             onDownloadCsv={downloadCsv}
             onDownloadManifest={downloadManifest}
+            onDownloadReview={downloadReview}
             result={result}
           />
           <TechnicalAuditStrip
