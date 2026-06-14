@@ -3,7 +3,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from privhsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
-from privhsd.auto.engine import AutoCandidate, choose_auto_candidate, cleanup_direct_residuals
+from privhsd.auto.engine import (
+    AutoCandidate,
+    choose_auto_candidate,
+    cleanup_direct_residuals,
+    cleanup_strict_residuals,
+)
 from privhsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
@@ -460,6 +465,124 @@ def test_auto_direct_residual_cleanup_avoids_ambiguous_name_place_overmasking():
         "IDENTIFIER",
         "EMAIL",
     ]
+
+
+def test_auto_strict_residual_cleanup_adds_contextual_rung_without_blind_overmasking():
+    cleaned, transformations = cleanup_strict_residuals(
+        "Email alex@example.test near london library and Alex."
+    )
+
+    assert "alex@example.test" not in cleaned
+    assert "[EMAIL]" in cleaned
+    assert "london library" not in cleaned
+    assert "[LOCATION]" in cleaned
+    assert "Alex" in cleaned
+    assert [item["entity_type"] for item in transformations] == [
+        "EMAIL",
+        "LOCATION",
+    ]
+
+    ambiguous, ambiguous_transformations = cleanup_strict_residuals(
+        "london library and Alex were mentioned."
+    )
+    assert ambiguous == "london library and Alex were mentioned."
+    assert ambiguous_transformations == []
+
+    placeholder_adjacent, placeholder_transformations = cleanup_strict_residuals(
+        "The [LOCATION] Library posted a statement."
+    )
+    assert placeholder_adjacent == "The [LOCATION] Library posted a statement."
+    assert placeholder_transformations == []
+
+    generic_place, generic_transformations = cleanup_strict_residuals(
+        "[PERSON] put people in [LOCATION] in PRISON for years."
+    )
+    assert generic_place == "[PERSON] put people in [LOCATION] in PRISON for years."
+    assert generic_transformations == []
+
+
+def test_auto_privacy_ladder_selects_strict_pii_candidate_when_baseline_leaves_direct_residual():
+    original = "Email alex@example.test and Muslims should leave."
+    baseline = AutoCandidate(
+        name="balanced",
+        text=original,
+        source="unit",
+    )
+    strict_text, transformations = cleanup_strict_residuals(baseline.text)
+    strict = AutoCandidate(
+        name="balanced_strict_pii",
+        text=strict_text,
+        source="unit+strict_residual_cleanup",
+        metadata={
+            "strict_residual_cleanup": {
+                "cleanup_count": len(transformations),
+                "counts_by_entity_type": {"EMAIL": len(transformations)},
+            }
+        },
+    )
+
+    chosen, scored, reason = choose_auto_candidate(
+        original,
+        [baseline, strict],
+        baseline_metrics={
+            "direct_identifier_count_after": 1,
+            "quasi_identifier_count_after": 0,
+        },
+    )
+
+    assert chosen.name == "balanced_strict_pii"
+    assert reason == "selected_least_destructive_candidate"
+    assert scored[1]["accepted"] is True
+    assert scored[1]["metrics"]["residual_direct_identifier_count"] == 0
+    assert scored[1]["metrics"]["target_cue_retention"] == 1.0
+    assert scored[1]["metrics"]["strict_residual_cleanup"] == {
+        "cleanup_count": 1,
+        "counts_by_entity_type": {"EMAIL": 1},
+    }
+
+
+def test_auto_hard_privacy_cleanup_records_hsd_drift_without_rejecting_direct_pii():
+    original = "Email alex@example.test and Muslims should leave."
+    candidates = [
+        AutoCandidate(
+            name="balanced",
+            text=original,
+            source="unit",
+        ),
+        AutoCandidate(
+            name="balanced_strict_pii",
+            text="Email [EMAIL] and Muslims should leave.",
+            source="unit+strict_residual_cleanup",
+            metadata={
+                "strict_residual_cleanup": {
+                    "cleanup_count": 1,
+                    "counts_by_entity_type": {"EMAIL": 1},
+                },
+                "hsd_advisory": {
+                    "score_drop": 0.8,
+                    "abs_drift": 0.8,
+                    "decision_changed": True,
+                    "large_drop": True,
+                    "large_abs_drift": True,
+                },
+            },
+        ),
+    ]
+
+    chosen, scored, _reason = choose_auto_candidate(
+        original,
+        candidates,
+        baseline_metrics={
+            "direct_identifier_count_after": 1,
+            "quasi_identifier_count_after": 0,
+        },
+    )
+
+    assert chosen.name == "balanced_strict_pii"
+    assert scored[1]["accepted"] is True
+    assert scored[1]["hard_reject_reasons"] == []
+    assert scored[1]["metrics"]["hard_privacy_cleanup"] is True
+    assert scored[1]["metrics"]["hsd_advisory"]["large_drop"] is True
 
 
 def test_auto_hsd_advisory_scores_candidates_in_one_batch():

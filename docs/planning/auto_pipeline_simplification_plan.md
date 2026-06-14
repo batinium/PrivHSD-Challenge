@@ -101,7 +101,9 @@ The intended simplified model is:
 2. Optional local PII helpers suggest additional spans on risky rows.
 3. Span fusion rejects invalid spans and spans that would erase HSD cues.
 4. Candidate texts are scored for privacy gain, cue retention, text retention,
-   and optional HSD-advisory drift.
+   and optional HSD-advisory drift. Stricter residual-PII cleanup is tested as
+   a candidate rung before final selection rather than hidden as an unscored
+   rewrite.
 5. The least destructive privacy-improving candidate is written back.
 6. Residual privacy and metadata leakage checks are recorded.
 ```
@@ -117,6 +119,11 @@ The next agent must document and implement this distinction consistently:
 - High-confidence direct PII should be masked by default:
   emails, phones, URLs, handles, IPs, explicit IDs, obfuscated emails, and clear
   private self-disclosed names.
+- Stricter masking should be gradual: first deterministic baseline, then
+  strict residual cleanup for high-confidence direct PII and strongly
+  contextual person/place/org residuals, then optional PII Assist/token-policy
+  evidence. Do not use privacy-mode target generalization as the default
+  strictness knob because it can obscure exact HSD wording.
 - Ambiguous names and places should not be preserved silently. They should be:
   masked when private context is strong, or flagged when public/contextual
   ambiguity is high.
@@ -567,6 +574,18 @@ Verification completed during implementation:
 - A tiny `protect --preset exact` smoke preserved schema, masked
   `james street` / `london library`, preserved `Muslims should leave`, and
   wrote the three-stage manifest.
+
+Follow-up implemented on 2026-06-14:
+
+- Added a scored strict residual-PII candidate rung inside `auto`.
+- Manifest `privacy_detection` now reports the privacy ladder and candidate
+  counts by name, including `*_strict_pii` candidates.
+- High-confidence direct PII cleanup is treated as a hard privacy rule:
+  HSD advisory drift is recorded, but does not veto removal of emails, phones,
+  URLs, handles, IPs, explicit IDs, or obfuscated emails.
+- Ambiguous person/place/org residuals remain conservative: strict cleanup only
+  masks them when deterministic context is strong; otherwise they remain
+  review/reporting signals.
 
 Remaining TODO:
 

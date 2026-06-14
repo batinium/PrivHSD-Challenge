@@ -83,7 +83,7 @@ CSV
   -> row routing decisions
   -> optional local PII Assist batches
   -> fused candidate spans
-  -> candidate generation
+  -> candidate generation, including stricter residual-PII cleanup rungs
   -> cue/privacy/drift validation
   -> row-local candidate selection
   -> residual direct-identifier cleanup
@@ -107,11 +107,22 @@ Automatic mode keeps several internal candidate sources while exposing only
 one public pipeline:
 
 - `balanced`: deterministic baseline, always present.
+- `*_strict_pii`: stricter residual cleanup generated from an existing
+  candidate. High-confidence direct identifiers such as emails, phones, URLs,
+  handles, IPs, explicit IDs, and obfuscated emails are eligible by default.
+  Ambiguous person/place/org residuals are not blindly masked; they need strong
+  deterministic private context such as self-identification, contact context,
+  address/place suffixes, or explicit location context.
 - `style_scrubbed`: deterministic plus style normalization when style risk is
   present.
 - `pii_assist_augmented`: deterministic plus accepted PII Assist spans.
 - `token_policy_candidate`: advisory research evidence only when local
   artifacts exist.
+
+The selector scores every candidate against the raw original text. Local HSD
+advisory drift can reject optional stronger candidates, but it does not
+override removal of high-confidence direct identifiers. Those hard privacy
+cleanups still record drift and residual-review status in the audit.
 
 `utility`, `balanced`, and `privacy` remain deterministic modes for legacy
 commands and tests. They are not separate public pipeline branches.
@@ -130,6 +141,10 @@ Hard rejects:
 - candidate has severe length or semantic drift when those checks are enabled;
 - candidate depends on provider/model errors without a deterministic fallback.
 
+High-confidence direct PII removal is a hard privacy rule, not a utility
+preference. If a stricter direct-PII cleanup changes HSD advisory scores, the
+drift is reported, but the identifier is still removed.
+
 ## Manifest Contract
 
 Manifests should be readable without knowing provider internals:
@@ -141,6 +156,14 @@ Manifests should be readable without knowing provider internals:
   "stages": {
     "privacy_detection": {
       "baseline": "deterministic_balanced",
+      "privacy_ladder": {
+        "order": [
+          "deterministic_baseline",
+          "strict_residual_pii_cleanup",
+          "pii_assist",
+          "token_policy_internal"
+        ]
+      },
       "pii_assist": {
         "components": {
           "presidio": "ready",

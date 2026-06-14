@@ -302,6 +302,15 @@ LOCATION_LEADING_REJECT_WORDS = {
     "your",
 }
 
+GENERIC_LOCATION_NOUNS = {
+    "country",
+    "home",
+    "jail",
+    "land",
+    "prison",
+    "world",
+}
+
 HIGH_CONFIDENCE_DIRECT_TYPES = frozenset(
     {
         "EMAIL",
@@ -548,6 +557,8 @@ def rejected_location_candidate(value: str) -> bool:
     if not words:
         return True
     lowered = [word.lower() for word in words]
+    if len(lowered) == 1 and lowered[0] in GENERIC_LOCATION_NOUNS:
+        return True
     if lowered[0] in LOCATION_LEADING_REJECT_WORDS:
         return True
     if any(word in action_context_terms() for word in lowered):
@@ -564,6 +575,14 @@ def rejected_location_candidate(value: str) -> bool:
     if any(word[:1].isupper() for word in words):
         return False
     return True
+
+
+def placeholder_adjacent_context(text: str, start: int, end: int) -> bool:
+    """Avoid re-detecting words created by earlier placeholder insertion."""
+
+    before = text[max(0, start - 16) : start].rstrip()
+    after = text[end : min(len(text), end + 16)].lstrip()
+    return before.endswith("]") or after.startswith("[")
 
 
 def high_confidence_direct_identifier_spans(text: str) -> list[Span]:
@@ -703,6 +722,8 @@ def context_spans(text: str) -> list[Span]:
                 continue
             if rejected_context_person_candidate(value):
                 continue
+            if placeholder_adjacent_context(text, start, end):
+                continue
             spans.append(
                 Span(start, end, "PERSON", value, 0.72, "context_person")
             )
@@ -725,6 +746,8 @@ def context_spans(text: str) -> list[Span]:
             if not value:
                 continue
             if rejected_location_candidate(value):
+                continue
+            if placeholder_adjacent_context(text, start, end):
                 continue
             spans.append(
                 Span(start, end, "LOCATION", value, 0.65, "context_location")

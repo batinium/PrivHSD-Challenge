@@ -6,7 +6,12 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
-from privhsd.detectors import high_confidence_direct_identifier_spans
+from privhsd.detectors import (
+    HIGH_CONFIDENCE_DIRECT_TYPES,
+    Span,
+    detect_spans,
+    merge_spans,
+)
 from privhsd.metrics import aggregate_metrics, row_metric_fast, row_metric_for_depth
 from privhsd.pipeline import PrivatizerConfig, apply_replacements, privatize_text
 from privhsd.rerank import length_drift, style_risk_count
@@ -40,6 +45,10 @@ class AutoPipelineResult:
     audit_rows: list[dict[str, Any]]
 
 
+STRICT_RESIDUAL_QUASI_SOURCES = frozenset({"context_location", "regex"})
+STRICT_RESIDUAL_REGEX_QUASI_TYPES = frozenset({"AGE", "DATE", "ORGANIZATION"})
+
+
 def provider_count(metadata: dict[str, Any]) -> int:
     return int(
         metadata.get(
@@ -71,6 +80,7 @@ def score_auto_candidate(
         - int(metrics.get("quasi_identifier_count_after", 0) or 0),
     )
     accepted_provider_spans = provider_count(candidate.metadata)
+    strict_cleanup = candidate.metadata.get("strict_residual_cleanup") or {}
     character_retention = float(metrics.get("character_utility_retention", 1.0) or 1.0)
     target_retention = float(metrics.get("target_cue_retention", 1.0) or 1.0)
     utility_retention = float(metrics.get("utility_cue_retention", 1.0) or 1.0)
@@ -78,6 +88,11 @@ def score_auto_candidate(
     hsd_drop = float(hsd_advisory.get("score_drop", 0.0) or 0.0)
     hsd_abs_drift = float(hsd_advisory.get("abs_drift", 0.0) or 0.0)
     hsd_decision_changed = bool(hsd_advisory.get("decision_changed", False))
+    strict_cleanup_counts = strict_cleanup.get("counts_by_entity_type", {})
+    hard_privacy_cleanup = direct_reduction > 0 and any(
+        int(strict_cleanup_counts.get(entity_type, 0) or 0) > 0
+        for entity_type in HIGH_CONFIDENCE_DIRECT_TYPES
+    )
     drift = length_drift(original, candidate.text)
     hard_rejects: list[str] = []
     if candidate.name != "balanced":
@@ -95,9 +110,13 @@ def score_auto_candidate(
             hard_rejects.append("new_identifier_signal")
         if drift > 0.65:
             hard_rejects.append("length_drift")
-        if bool(hsd_advisory.get("large_drop", False)):
+        if not hard_privacy_cleanup and bool(hsd_advisory.get("large_drop", False)):
             hard_rejects.append("hsd_advisory_large_drop")
-        if hsd_decision_changed and bool(hsd_advisory.get("large_abs_drift", False)):
+        if (
+            not hard_privacy_cleanup
+            and hsd_decision_changed
+            and bool(hsd_advisory.get("large_abs_drift", False))
+        ):
             hard_rejects.append("hsd_advisory_decision_drift")
     hsd_penalty = (
         hsd_drop * 2.0
@@ -132,6 +151,8 @@ def score_auto_candidate(
             "length_drift": round(drift, 4),
             "style_risk_count": candidate_style,
             "provider_accepted_span_count": accepted_provider_spans,
+            "strict_residual_cleanup": strict_cleanup or None,
+            "hard_privacy_cleanup": hard_privacy_cleanup,
             "hsd_advisory": hsd_advisory or None,
             "hsd_advisory_penalty": round(hsd_penalty, 4),
         },
@@ -177,8 +198,40 @@ def choose_auto_candidate(
     return chosen, scored, "selected_least_destructive_candidate"
 
 
-def cleanup_direct_residuals(text: str) -> tuple[str, list[dict[str, Any]]]:
-    spans = high_confidence_direct_identifier_spans(text)
+def strict_residual_identifier_spans(text: str) -> list[Span]:
+    """Residual spans safe enough for a stricter scored PII candidate.
+
+    This intentionally does not mask every PERSON/LOCATION/ORG that a detector
+    can see. High-confidence direct identifiers are always eligible; ambiguous
+    people/places are eligible only when the deterministic detector found a
+    strong private context such as self-identification, contact, street/place
+    suffixes, or explicit location context.
+    """
+
+    spans: list[Span] = []
+    for span in detect_spans(text, include_context=True, include_targets=False):
+        if span.entity_type in HIGH_CONFIDENCE_DIRECT_TYPES:
+            spans.append(span)
+        elif span.entity_type in {"PERSON", "ALIAS"} and span.source in {
+            "context_person",
+            "context_alias",
+        }:
+            spans.append(span)
+        elif (
+            span.entity_type == "LOCATION"
+            and span.source in STRICT_RESIDUAL_QUASI_SOURCES
+        ):
+            spans.append(span)
+        elif (
+            span.entity_type in STRICT_RESIDUAL_REGEX_QUASI_TYPES
+            and span.source == "regex"
+        ):
+            spans.append(span)
+    return merge_spans(spans)
+
+
+def cleanup_strict_residuals(text: str) -> tuple[str, list[dict[str, Any]]]:
+    spans = strict_residual_identifier_spans(text)
     if not spans:
         return text, []
     cleaned, transformations = apply_replacements(
@@ -187,6 +240,30 @@ def cleanup_direct_residuals(text: str) -> tuple[str, list[dict[str, Any]]]:
         PrivatizerConfig(mode="balanced", generalize_targets=False),
     )
     return cleaned, [dict(transformation) for transformation in transformations]
+
+
+def cleanup_direct_residuals(text: str) -> tuple[str, list[dict[str, Any]]]:
+    spans = [
+        span
+        for span in strict_residual_identifier_spans(text)
+        if span.entity_type in HIGH_CONFIDENCE_DIRECT_TYPES
+    ]
+    if not spans:
+        return text, []
+    cleaned, transformations = apply_replacements(
+        text,
+        merge_spans(spans),
+        PrivatizerConfig(mode="balanced", generalize_targets=False),
+    )
+    return cleaned, [dict(transformation) for transformation in transformations]
+
+
+def strict_cleanup_summary(transformations: list[dict[str, Any]]) -> dict[str, Any]:
+    counts = Counter(str(item.get("entity_type", "UNKNOWN")) for item in transformations)
+    return {
+        "cleanup_count": len(transformations),
+        "counts_by_entity_type": dict(sorted(counts.items())),
+    }
 
 
 class AutoPipelineEngine:
@@ -259,6 +336,7 @@ class AutoPipelineEngine:
         changed_count = 0
         candidate_count = 0
         rejected_candidate_count = 0
+        candidate_name_counts: Counter[str] = Counter()
         hsd_advisory_comparison_count = 0
         residual_review_required_count = 0
         residual_direct_cleanup_count = 0
@@ -270,6 +348,7 @@ class AutoPipelineEngine:
             )
             candidate_count += len(scored)
             for score in scored:
+                candidate_name_counts[str(score.get("name", "unknown"))] += 1
                 if score.get("accepted") is False:
                     rejected_candidate_count += 1
                 for reject_reason in score.get("hard_reject_reasons", []):
@@ -333,6 +412,7 @@ class AutoPipelineEngine:
             provider_rows_considered=provider_rows_considered,
             token_policy_rows_considered=token_policy_rows_considered,
             candidate_count=candidate_count,
+            candidate_name_counts=candidate_name_counts,
             rejected_candidate_count=rejected_candidate_count,
             rejection_counts=rejection_counts,
             hsd_advisory_comparison_count=hsd_advisory_comparison_count,
@@ -636,7 +716,30 @@ class AutoPipelineEngine:
                     spans=state.model_candidates,
                 )
             )
-        return self._dedupe_candidates(candidates)
+        return self._with_strict_residual_cleanup_candidates(candidates)
+
+    def _with_strict_residual_cleanup_candidates(
+        self,
+        candidates: list[AutoCandidate],
+    ) -> list[AutoCandidate]:
+        expanded = self._dedupe_candidates(candidates)
+        for candidate in list(expanded):
+            cleaned, transformations = cleanup_strict_residuals(candidate.text)
+            if not transformations or cleaned == candidate.text:
+                continue
+            metadata = dict(candidate.metadata)
+            metadata["strict_residual_cleanup"] = strict_cleanup_summary(
+                transformations
+            )
+            expanded.append(
+                AutoCandidate(
+                    name=f"{candidate.name}_strict_pii",
+                    text=cleaned,
+                    source=f"{candidate.source}+strict_residual_cleanup",
+                    metadata=metadata,
+                )
+            )
+        return self._dedupe_candidates(expanded)
 
     def _candidate_from_spans(
         self,

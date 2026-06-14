@@ -175,6 +175,7 @@ def build_stage_summary(
     provider_rows_considered: int,
     token_policy_rows_considered: int,
     candidate_count: int,
+    candidate_name_counts: Counter[str],
     rejected_candidate_count: int,
     rejection_counts: Counter[str],
     hsd_advisory_comparison_count: int,
@@ -199,6 +200,27 @@ def build_stage_summary(
     return {
         "privacy_detection": {
             "baseline": f"deterministic_{config.baseline_mode}",
+            "privacy_ladder": {
+                "order": [
+                    "deterministic_baseline",
+                    "strict_residual_pii_cleanup",
+                    "pii_assist",
+                    "token_policy_internal",
+                ],
+                "strict_residual_pii_cleanup": {
+                    "policy": (
+                        "score stricter residual cleanup candidates before final "
+                        "selection; high-confidence direct identifiers are eligible "
+                        "by default, while ambiguous person/place/org residuals need "
+                        "strong deterministic context"
+                    ),
+                    "candidate_count": sum(
+                        count
+                        for name, count in candidate_name_counts.items()
+                        if name.endswith("_strict_pii")
+                    ),
+                },
+            },
             "deterministic_baseline": {
                 "status": status_value(provider_statuses, "deterministic"),
                 "mode": config.baseline_mode,
@@ -210,6 +232,7 @@ def build_stage_summary(
             ),
             "rows_considered_for_pii_assist": provider_rows_considered,
             "chosen_candidate_counts": dict(sorted(chosen_counts.items())),
+            "candidate_counts_by_name": dict(sorted(candidate_name_counts.items())),
             "fallback_counts": dict(sorted(fallback_counts.items())),
             "changed_text_cells": changed_text_cells,
             "privacy_gain_mean": metrics.get("privacy_gain_mean", 0.0),
