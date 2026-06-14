@@ -57,14 +57,47 @@ recommended public workflow is `protect`.
 
 ## Install And Verify
 
+Use the named micromamba environment from `environment.yml`. If the environment
+already exists, update it:
+
 ```bash
-python -m pip install .
-python -m pytest -q
-contextsafe-hsd protect --help
+micromamba env update -n contextsafe-hsd -f environment.yml
+```
+
+For a new machine or checkout:
+
+```bash
+micromamba env create -f environment.yml
+```
+
+Then verify through the named environment from any directory:
+
+```bash
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m pytest -q
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 contextsafe-hsd protect --help
+```
+
+For manual shell use, activate the environment from the repository root:
+
+```bash
+micromamba activate contextsafe-hsd
+```
+
+This repository also includes `.envrc` for optional automatic activation when
+entering the directory with `direnv`. After installing and enabling `direnv`,
+run this once from the repository root:
+
+```bash
+direnv allow
 ```
 
 For package-installed usage, `contextsafe-hsd` dispatches to the same CLI as
 `python -m contextsafe_hsd.cli`.
+
+`requirements-venv.lock` preserves the dependency snapshot from the previous
+`.venv` before removal; `environment.yml` is the portable setup source.
+The `PYTHONNOUSERSITE=1` run option keeps user-level Python packages from
+masking packages installed inside the micromamba environment.
 
 ## Validate Exact Output
 

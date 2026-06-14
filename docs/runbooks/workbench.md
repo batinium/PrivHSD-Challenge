@@ -13,19 +13,27 @@ It is separate from the pipeline package.
 From the repository root:
 
 ```bash
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --install
+```
+
+If the `contextsafe-hsd` environment is active, either manually with
+`micromamba activate contextsafe-hsd` or automatically through `direnv`, the
+short form also works:
+
+```bash
 python launch.py --install
 ```
 
 After dependencies are installed once:
 
 ```bash
-python launch.py
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py
 ```
 
 Backend reload mode is opt-in:
 
 ```bash
-python launch.py --reload
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --reload
 ```
 
 Open `http://127.0.0.1:5173`.
@@ -50,8 +58,8 @@ Open `http://127.0.0.1:5173`.
 ## Verification
 
 ```bash
-python -m pytest tests/test_workbench_csv.py -q
-cd workbench/frontend && npm run build
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m pytest tests/test_workbench_csv.py -q
+micromamba run -n contextsafe-hsd npm --prefix workbench/frontend run build
 ```
 
 See also `workbench/README.md` for local app-specific notes.

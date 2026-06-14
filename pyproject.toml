@@ -41,6 +41,22 @@ token-policy = [
   "evaluate>=0.4",
   "seqeval>=1.2",
 ]
+workbench = ["fastapi>=0.111", "uvicorn[standard]>=0.30"]
+dev = [
+  "dateparser>=1.4",
+  "Faker>=40",
+  "nltk>=3.9",
+  "pyflakes>=3.4",
+  "pytest>=9.0",
+  "reportlab>=4.5",
+  "ruff>=0.15",
+  "textblob>=0.15",
+  "vulture>=2.16",
+]
+spacy-models = [
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+  "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl",
+]
 
 [project.scripts]
 contextsafe-hsd = "contextsafe_hsd.cli:main"

@@ -1,0 +1,11 @@
+name: contextsafe-hsd
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - nodejs
+  - matplotlib
+  - pandas
+  - pip:
+      - "-e .[author-risk,benchmark,classifier,dpmlm,hf-utility,presidio,gliner,scrubadub,token-actions,workbench,dev,spacy-models]"

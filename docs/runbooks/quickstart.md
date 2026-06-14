@@ -14,10 +14,37 @@ Input CSV -> Privacy Detection -> Meaning Protection -> Verification
 
 ## Install And Verify
 
+Update the reusable micromamba environment when it already exists:
+
 ```bash
-python -m pip install .
-python -m pytest -q
-contextsafe-hsd protect --help
+micromamba env update -n contextsafe-hsd -f environment.yml
+```
+
+Create it on a new machine or checkout:
+
+```bash
+micromamba env create -f environment.yml
+```
+
+Verify through the named environment:
+
+```bash
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m pytest -q
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 contextsafe-hsd protect --help
+```
+
+For manual shell use:
+
+```bash
+micromamba activate contextsafe-hsd
+```
+
+The repository includes `.envrc` for optional automatic activation when
+entering the checkout with `direnv`. After installing and enabling `direnv`,
+run this once from the repository root:
+
+```bash
+direnv allow
 ```
 
 For package-installed usage, use `contextsafe-hsd`. Repository examples may

@@ -16,19 +16,26 @@ The active operational runbook is
 From the repository root:
 
 ```bash
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --install
+```
+
+If the `contextsafe-hsd` environment is already active, either manually with
+`micromamba activate contextsafe-hsd` or automatically through `direnv`, use:
+
+```bash
 python launch.py --install
 ```
 
 After dependencies are installed once, use:
 
 ```bash
-python launch.py
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py
 ```
 
 Backend reload mode is opt-in for development:
 
 ```bash
-python launch.py --reload
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --reload
 ```
 
 Open `http://127.0.0.1:5173`.
@@ -36,8 +43,8 @@ Open `http://127.0.0.1:5173`.
 Manual launch is also supported:
 
 ```bash
-.venv/bin/python -m pip install -r workbench/backend/requirements.txt
-.venv/bin/python -m uvicorn workbench.backend.app:app \
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m pip install -e '.[workbench]'
+micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m uvicorn workbench.backend.app:app \
   --host 127.0.0.1 \
   --port 8000 \
   --reload
@@ -46,9 +53,8 @@ Manual launch is also supported:
 In a second shell:
 
 ```bash
-cd workbench/frontend
-npm install
-npm run dev
+micromamba run -n contextsafe-hsd npm install --prefix workbench/frontend
+micromamba run -n contextsafe-hsd npm --prefix workbench/frontend run dev
 ```
 
 ## Data Handling

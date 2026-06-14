@@ -20,6 +20,7 @@ FRONTEND_DIR = ROOT / "workbench" / "frontend"
 BACKEND_REQUIREMENTS = ROOT / "workbench" / "backend" / "requirements.txt"
 STARTUP_TIMEOUT_SECONDS = 30.0
 SHUTDOWN_TIMEOUT_SECONDS = 5.0
+DEFAULT_MICROMAMBA_ENV = "contextsafe-hsd"
 
 
 @dataclass(frozen=True)
@@ -29,15 +30,32 @@ class PortProcess:
     cwd: Path | None
 
 
-def venv_python() -> Path:
-    candidates = [
-        ROOT / ".venv" / "bin" / "python",
-        ROOT / ".venv" / "Scripts" / "python.exe",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return Path(sys.executable)
+def active_environment_name() -> str | None:
+    return os.environ.get("CONDA_DEFAULT_ENV") or os.environ.get("MAMBA_DEFAULT_ENV")
+
+
+def python_command() -> list[str]:
+    override = os.environ.get("CONTEXTSAFE_HSD_PYTHON")
+    if override:
+        return [override]
+
+    env_name = os.environ.get("CONTEXTSAFE_HSD_ENV", DEFAULT_MICROMAMBA_ENV)
+    if active_environment_name() == env_name:
+        return [sys.executable]
+
+    active_prefix = os.environ.get("CONDA_PREFIX") or os.environ.get("MAMBA_PREFIX")
+    if active_prefix and Path(active_prefix).name == env_name:
+        return [sys.executable]
+
+    micromamba = shutil.which("micromamba")
+    if micromamba:
+        return [micromamba, "run", "-n", env_name, "python"]
+
+    raise SystemExit(
+        "micromamba is required to launch outside the active contextsafe-hsd "
+        "environment. Install micromamba, activate contextsafe-hsd, or set "
+        "CONTEXTSAFE_HSD_PYTHON to an explicit Python executable."
+    )
 
 
 def port_is_open(host: str, port: int) -> bool:
@@ -213,10 +231,10 @@ def run_checked(command: list[str], *, cwd: Path) -> None:
     subprocess.run(command, cwd=cwd, check=True)
 
 
-def ensure_backend_deps(python: Path, *, install: bool) -> None:
+def ensure_backend_deps(python: list[str], *, install: bool) -> None:
     check = subprocess.run(
         [
-            str(python),
+            *python,
             "-c",
             "import fastapi, uvicorn",
         ],
@@ -229,12 +247,12 @@ def ensure_backend_deps(python: Path, *, install: bool) -> None:
     if not install:
         raise SystemExit(
             "FastAPI backend dependencies are missing. Run:\n"
-            "  python launch.py --install\n"
+            "  micromamba env update -n contextsafe-hsd -f environment.yml\n"
             "or:\n"
-            "  .venv/bin/python -m pip install -r workbench/backend/requirements.txt"
+            "  micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --install"
         )
     run_checked(
-        [str(python), "-m", "pip", "install", "-r", str(BACKEND_REQUIREMENTS)],
+        [*python, "-m", "pip", "install", "-r", str(BACKEND_REQUIREMENTS)],
         cwd=ROOT,
     )
 
@@ -350,7 +368,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    python = venv_python()
+    os.environ.setdefault("PYTHONNOUSERSITE", "1")
+    python = python_command()
     ensure_backend_deps(python, install=args.install)
     ensure_frontend_deps(install=args.install)
 
@@ -365,7 +384,7 @@ def main() -> int:
         raise SystemExit(f"Frontend port already in use: {args.host}:{args.frontend_port}")
 
     backend_command = [
-        str(python),
+        *python,
         "-m",
         "uvicorn",
         "workbench.backend.app:app",
