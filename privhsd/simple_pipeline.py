@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
@@ -278,6 +279,31 @@ def tradeoff_summary(
     }
 
 
+def analysis_stage_summary(
+    sanitization: dict[str, Any],
+    classification: dict[str, Any],
+) -> dict[str, Any]:
+    stages = deepcopy(sanitization.get("stages", {}))
+    verification = stages.setdefault("verification", {})
+    candidate_drift_check = verification.get("hsd_advisory")
+    classification_status = str(classification.get("status", "skipped"))
+    verification["hsd_candidate_drift_check"] = candidate_drift_check
+    verification["hsd_advisory_status"] = (
+        classification_status if classification_status == "ok" else "skipped"
+    )
+    verification["hsd_advisory"] = {
+        "status": verification["hsd_advisory_status"],
+        "use": "analysis_prediction_columns",
+        "columns": classification.get("columns", {}),
+        "skip_reason": classification.get("skip_reason"),
+        "model_count": classification.get("model_count", 0),
+        "model_ids": classification.get("model_ids", []),
+        "decision_changed_count": classification.get("decision_changed_count"),
+        "candidate_drift_check": candidate_drift_check,
+    }
+    return stages
+
+
 def run_sanitize_classify(
     input_path: Path,
     output_path: Path,
@@ -372,6 +398,8 @@ def run_sanitize_classify(
     )
     manifest = {
         "artifact_type": "sanitize_classify_csv",
+        "pipeline": "auto",
+        "preset": "analysis",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "command": command,
         "git_commit": git_commit(),
@@ -397,6 +425,7 @@ def run_sanitize_classify(
         "metric_depth": metric_depth,
         "replace_text": True,
         "exact_format_submission": False,
+        "stages": analysis_stage_summary(engine_result.summary, classification),
         "sanitization": engine_result.summary,
         "classification": classification,
         "tradeoff": tradeoff_summary(engine_result.summary, classification),

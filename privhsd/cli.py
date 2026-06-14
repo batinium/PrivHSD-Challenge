@@ -24,7 +24,7 @@ from .contribution_bounding import (
     ContributionBoundingError,
     bound_contributions,
 )
-from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv
+from .csv_pipeline import CsvPipelineError, evaluate_csv, process_csv, write_json
 from .cue_checks import CueCheckError, run_cue_checks
 from .datasets import (
     add_prepare_dynahate_parser,
@@ -295,6 +295,36 @@ def build_parser() -> argparse.ArgumentParser:
     sanitize_targets = sanitize_classify.add_mutually_exclusive_group()
     sanitize_targets.add_argument("--generalize-targets", action="store_true")
     sanitize_targets.add_argument("--preserve-targets", action="store_true")
+
+    protect = subparsers.add_parser(
+        "protect",
+        help="Protect a CSV with local privacy detection, meaning protection, and verification.",
+        description=(
+            "Protect a CSV locally. The default exact preset preserves the input "
+            "schema and writes cleaned text in place. Optional local model "
+            "artifacts are used only when already available; no external API "
+            "calls or model downloads are made."
+        ),
+    )
+    protect.add_argument("--input", type=Path, required=True)
+    protect.add_argument("--output", type=Path, required=True)
+    protect.add_argument("--text-col", default="text")
+    protect.add_argument("--id-col")
+    protect.add_argument("--manifest", type=Path)
+    protect.add_argument(
+        "--audit",
+        type=Path,
+        help="Optional sidecar audit JSON for analysis/audit presets.",
+    )
+    protect.add_argument(
+        "--preset",
+        choices=["exact", "analysis", "audit"],
+        default="exact",
+        help=(
+            "exact preserves the CSV schema; analysis appends local HSD advisory "
+            "columns; audit preserves the schema and writes deeper manifest/audit data."
+        ),
+    )
 
     bound = subparsers.add_parser(
         "bound-contributions",
@@ -1176,6 +1206,56 @@ def main(argv: list[str] | None = None) -> int:
                 overwrite_existing_hate_cols=args.overwrite_hate_columns,
                 require_hate_classification=args.require_hate_classification,
             )
+        elif args.command == "protect":
+            if args.preset == "analysis":
+                result = run_sanitize_classify(
+                    args.input,
+                    args.output,
+                    text_col=args.text_col,
+                    id_col=args.id_col,
+                    manifest_path=args.manifest,
+                    audit_path=args.audit,
+                    command=["contextsafe-hsd", *raw_argv],
+                    metric_depth="fast",
+                    allow_model_download=False,
+                    audit_level="summary",
+                    gliner_profile="pii",
+                    generalize_targets=False,
+                    style_scrub=False,
+                    require_hate_classification=False,
+                )
+                result["preset"] = "analysis"
+                if args.manifest:
+                    write_json(args.manifest, result)
+            else:
+                result = create_submission(
+                    args.input,
+                    args.output,
+                    text_cols=[args.text_col],
+                    id_col=args.id_col,
+                    manifest_path=args.manifest,
+                    command=["contextsafe-hsd", *raw_argv],
+                    mode="auto",
+                    generalize_targets=False,
+                    style_scrub=False,
+                    replace_text=True,
+                    presidio_augment=False,
+                    metric_depth="deep" if args.preset == "audit" else "fast",
+                    allow_model_download=False,
+                    audit_level="row" if args.preset == "audit" else "summary",
+                    gliner_profile="pii",
+                )
+                result["preset"] = args.preset
+                if args.manifest:
+                    write_json(args.manifest, result)
+                if args.audit:
+                    write_json(
+                        args.audit,
+                        {
+                            "summary": result,
+                            "rows": result.get("row_audits", []),
+                        },
+                    )
         elif args.command == "bound-contributions":
             result = bound_contributions(
                 args.input,

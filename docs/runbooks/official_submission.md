@@ -6,7 +6,14 @@ Last verified: 2026-06-14
 Primary code: `privhsd/csv_pipeline.py`, `privhsd/submission.py`,
 `privhsd/auto/`
 
-Use this when an official or challenge-style CSV arrives.
+Use this when an official or challenge-style CSV arrives. The public workflow
+is:
+
+```text
+Input CSV -> Privacy Detection -> Meaning Protection -> Verification
+```
+
+The first deliverable is always an exact cleaned CSV plus manifest.
 
 ## 1. Isolate Raw Data
 
@@ -37,78 +44,85 @@ python -m privhsd.cli profile-dataset \
   --output data/outputs/official.profile.json
 ```
 
-## 3. Create The First Exact Output
+## 3. Create Exact Output
 
 ```bash
-python -m privhsd.cli create-submission \
+python -m privhsd.cli protect \
+  --preset exact \
   --input data/official/OFFICIAL.csv \
-  --output data/outputs/official.auto.csv \
+  --output data/outputs/official.protected.csv \
   --text-col TEXT_COLUMN \
   --id-col ID_COLUMN \
-  --replace-text \
-  --mode auto \
-  --metric-depth fast \
-  --manifest data/outputs/official.auto.manifest.json
+  --manifest data/outputs/official.protected.manifest.json
 ```
 
-Do not pass `--allow-model-download` on official data unless the run note
-explicitly approves downloading optional local model weights.
+This is the documented default path. It preserves source column names, column
+order, row count, row order, IDs, labels, and non-text metadata. It writes
+cleaned text only and must not append helper columns or HSD predictions.
 
-This command must use `--replace-text`. It preserves the source column names,
-column order, row count, row order, IDs, and non-text metadata, and the manifest
-records hashes, metrics, provider/model status, load counts, preserved columns,
-and strict validation. It does not append helper columns or HSD predictions.
+Do not enable external downloads or ad hoc model changes on official data.
+Optional local components may be used only when already installed and
+configured; unavailable components should appear as skipped or unavailable in
+the manifest.
 
 ## 4. Validate Shape
 
 ```bash
 python -m privhsd.cli validate-submission \
   --source data/official/OFFICIAL.csv \
-  --submission data/outputs/official.auto.csv \
+  --submission data/outputs/official.protected.csv \
   --text-col TEXT_COLUMN \
   --id-col ID_COLUMN \
-  --output data/outputs/official.auto.validation.json
+  --output data/outputs/official.validation.json
 ```
 
-Do not tune before this exact-format output exists.
+Do not tune before this exact-format output exists and validates.
 
-## 5. Run Evidence
+## 5. Review The Manifest
+
+The manifest should be explainable through three stages:
+
+- `privacy_detection`: what was found and which local PII Assist components
+  were ready, skipped, or unavailable.
+- `meaning_protection`: whether masking preserved HSD-relevant cues such as
+  target groups, threats/actions, negation, modality, quotation,
+  counterspeech, and reporting/rationale cues.
+- `verification`: residual direct identifiers, metadata leakage status, HSD
+  advisory drift status, exact-shape validation, and author-risk hook status.
+
+If an author/user column exists, the manifest should record whether
+author-risk evaluation ran. If the data does not support repeated-author
+analysis, record the skipped reason rather than inventing one.
+
+## 6. Run Evidence
 
 Run source-aware regression with only columns that exist:
 
 ```bash
 python -m privhsd.cli source-regression-report \
   --original data/official/OFFICIAL.csv \
-  --protected data/outputs/official.auto.csv \
+  --protected data/outputs/official.protected.csv \
   --original-text-col TEXT_COLUMN \
   --protected-text-col TEXT_COLUMN \
   --id-col ID_COLUMN \
   --group-col SOURCE_COLUMN \
   --group-col LABEL_COLUMN \
   --group-col SPLIT_COLUMN \
-  --output data/outputs/official.auto.source_regression.json
+  --output data/outputs/official.source_regression.json
 ```
 
-If labels are available, run utility benchmarking. If repeated author/user
-columns exist, run author-risk evaluation. If they do not, record the
-structured skip rather than inventing an author label.
+If labels are available, record local utility evidence separately from the
+exact cleaned CSV. If repeated author/user columns exist, run author-risk
+evaluation as a Verification sidecar; otherwise record the structured skip.
 
-## 6. Submit In This Order
+## 7. Submit
 
-1. `auto` exact-format output.
-2. Deterministic `balanced` only if auto provider/model behavior looks weak or
-   official feedback indicates it.
-3. Style-scrubbed or reranked exact output only after validation.
-4. Provider-fusion or token-policy candidate paths only after reranking and
-   exact-format validation.
-
-Never upload raw Presidio, raw GLiNER, raw scrubadub, DPMLM, SanText, or LLM
-output directly. Those historical/planning paths are candidate or comparison
-tools only; the current operational upload path is the single exact-format
-submission pipeline.
+Submit the exact cleaned CSV produced by `protect --preset exact` after shape
+validation and manifest review. Do not upload `analysis` output, audit
+sidecars, raw provider output, or research/debug candidate output.
 
 ## Decision Rule
 
-Prefer the candidate that passes exact validation, reduces identifiers and
-style risk, preserves target/action/negation/modality cues, has a reproducible
-manifest, and can be explained as preprocessing support for human review.
+Prefer the candidate that validates exactly, reduces direct and quasi
+identifiers, preserves HSD-relevant meaning cues, has a reproducible manifest,
+and reports residual risk instead of hiding it.

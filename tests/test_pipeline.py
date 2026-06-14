@@ -124,6 +124,61 @@ def test_short_name_threat_context_preserves_action_cue():
     assert "[LOCATION]" in result.text
 
 
+def test_lowercase_address_and_private_place_context_are_masked():
+    text = "james street is near london library"
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "[LOCATION] is near [LOCATION]"
+    assert "james street" not in result.text
+    assert "london library" not in result.text
+
+
+def test_titlecase_address_and_mixedcase_place_context_are_masked():
+    text = "James Street is near London library"
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "[LOCATION] is near [LOCATION]"
+    assert "James Street" not in result.text
+    assert "London library" not in result.text
+
+
+def test_lowercase_meeting_context_masks_person_and_place():
+    text = "i met james smith at london library"
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "i met [PERSON] at [LOCATION]"
+    assert "james smith" not in result.text
+    assert "london library" not in result.text
+
+
+def test_lowercase_call_context_masks_two_word_name_only():
+    text = "call james smith after the report"
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "call [PERSON] after the report"
+    assert "james smith" not in result.text
+
+
+def test_lowercase_reporting_context_preserves_hsd_cues():
+    text = (
+        "reported james smith because he quoted Muslims should leave "
+        "and I replied do not attack Muslims."
+    )
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "james smith" not in result.text
+    assert "[PERSON]" in result.text
+    assert "Muslims should leave" in result.text
+    assert "do not attack Muslims" in result.text
+
+
+def test_hsd_statement_without_private_identifier_is_unchanged():
+    text = "Muslims should leave"
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == text
+
+
 def test_adjacent_social_handles_are_masked_individually():
     text = "@foo@bar said immigrants should leave."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))

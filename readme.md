@@ -1,15 +1,87 @@
 # ContextSafe-HSD
 
-ContextSafe-HSD is a local privacy-preserving text privatization pipeline for
-hate-speech detection datasets. It rewrites text to reduce direct identifiers,
-quasi-identifiers, and author-style signals while preserving the target,
-hostility, negation, and context cues that downstream HSD models or human
-reviewers need.
+ContextSafe-HSD is a local, auditable preprocessing pipeline for hate-speech
+detection datasets. It rewrites CSV text to reduce personal and
+re-identifying details while preserving the target, hostility, negation,
+modality, quotation, counterspeech, and reporting cues that downstream review
+may need.
 
-This repository is a preprocessing system, not a production hate-speech
-classifier and not an automated takedown tool.
+It is not a production hate-speech classifier, moderation system, legal
+decision system, or promise that every identifier has been removed. The goal is
+to reduce, check, and report residual privacy risk while keeping the cleaned
+CSV usable.
 
-## What Is In The System
+## Public Pipeline
+
+```text
+Input CSV
+  -> Privacy Detection
+  -> Meaning Protection
+  -> Verification
+  -> exact cleaned CSV + manifest
+```
+
+The default human-facing command is `protect`. It uses the current exact
+`auto` path internally, preserves the input CSV schema, writes cleaned text
+back to the text column, and records an audit manifest when requested.
+
+```bash
+python -m privhsd.cli protect \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.protected.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.protected.manifest.json
+```
+
+Default behavior is `--preset exact`: the output has the same columns, order,
+row count, IDs, and non-text values as the source CSV. HSD advisory checks, if
+available, are verification checks only; exact output does not append HSD
+prediction columns.
+
+## Presets
+
+| Preset | Output | Use |
+| --- | --- | --- |
+| `exact` | Cleaned CSV in the original schema plus manifest | Default upload-style path. |
+| `analysis` | Local enriched CSV with advisory HSD columns | Review and triage only; not exact-format. |
+| `audit` | Exact cleaned CSV plus deeper sidecar/audit reporting when supported | Local audit before sharing or submission. |
+
+The deterministic privacy baseline always runs. Optional local PII Assist
+components may add evidence when installed and configured, but downloads are
+not part of sensitive-data processing by default.
+
+Older commands such as `create-submission`, `sanitize-classify`, and
+`anonymize` remain available for compatibility, research, and debugging. The
+recommended public workflow is `protect`.
+
+## Install And Verify
+
+```bash
+python -m pip install .
+python -m pytest -q
+python -m privhsd.cli protect --help
+```
+
+For package-installed usage, `contextsafe-hsd` and `privhsd` dispatch to the
+same CLI as `python -m privhsd.cli`.
+
+## Validate Exact Output
+
+```bash
+python -m privhsd.cli validate-submission \
+  --source INPUT.csv \
+  --submission data/outputs/INPUT.protected.csv \
+  --text-col text \
+  --id-col id \
+  --output data/outputs/INPUT.validation.json
+```
+
+The manifest and validation report are sidecars. They should not contain raw
+row text and should be stored under ignored `data/` paths with generated CSVs,
+model weights, and run notes.
+
+## Repository Map
 
 ```text
 contextsafe_hsd/     Public Python package alias
@@ -24,157 +96,16 @@ workbench/           Decoupled FastAPI + React demo app
 data/                Ignored local datasets, models, and reports
 ```
 
-Start with [docs/README.md](docs/README.md). For a full method explanation,
-read [docs/research/methodology.md](docs/research/methodology.md). For parallel
-agent work, use [docs/agent_workstreams.md](docs/agent_workstreams.md).
-
-## Install And Test
-
-```bash
-python -m pip install .
-python -m pytest -q
-```
-
-Optional extras are installed only for the workflows that need them:
-
-```bash
-python -m pip install '.[benchmark]'
-python -m pip install '.[presidio]'
-python -m pip install '.[token-policy]'
-python -m pip install '.[hsd-advisory]'
-```
-
-`.[token-policy]` uses PyTorch/Transformers and will use CUDA when the local
-PyTorch build sees a CUDA GPU.
-
-## One-Command Sanitize And Classify CSV
-
-For a practical enriched output, replace the input text column in place and add
-HSD prediction columns:
-
-```bash
-python -m privhsd.cli sanitize-classify \
-  --input INPUT.csv \
-  --output data/outputs/INPUT.sanitized_classified.csv \
-  --text-col text \
-  --id-col id \
-  --manifest data/outputs/INPUT.sanitized_classified.manifest.json \
-  --require-hate-classification \
-  --max-model-batch-size 32
-```
-
-This command runs the single `auto` sanitization path with a deterministic
-balanced baseline, replaces `text` in place, appends hate-speech prediction
-columns, and writes a raw-text-free manifest with a `tradeoff` summary for
-identifier removal, cue retention, overmask warnings, and
-original-vs-sanitized HSD score drift. Default hate columns are
-`is_hate_speech`, `hate_speech_score`, and `hate_speech_model_count`; if the
-label column already exists, the prediction label is written to
-`predicted_is_hate_speech` unless `--overwrite-hate-columns` is set. Because
-prediction columns are added, this is an enriched analysis output, not an
-exact-format upload.
-
-The always-available layer is deterministic masking. Auto mode reports status
-for optional Presidio, scrubadub, GLiNER, token-policy, semantic, local LLM,
-and HSD advisory components. Providers and models that are actually available
-to the current engine are lazy-loaded only when the route needs them. Model
-downloads are off by default; pass `--allow-model-download` only when you
-explicitly want approved OSS Hugging Face models downloaded or refreshed. The
-default HSD advisory registry is:
-
-```text
-facebook/roberta-hate-speech-dynabench-r4-target
-cardiffnlp/twitter-roberta-base-hate-latest
-```
-
-## Create An Exact-Format Candidate
-
-```bash
-python -m privhsd.cli create-submission \
-  --input data/public_dev/recommended_merged.csv \
-  --output data/outputs/recommended_merged.auto.csv \
-  --text-col text \
-  --id-col id \
-  --replace-text \
-  --mode auto \
-  --metric-depth fast \
-  --manifest data/outputs/recommended_merged.auto.manifest.json
-```
-
-`create-submission` requires `--replace-text`. `--mode auto` runs deterministic
-balanced masking for every row, discovers local optional providers/models,
-routes only risky rows to them, and writes the selected text back into the
-original text column. The output preserves the source columns and order; a
-four-column CSV such as `source,author_id,text,is_hate_speech` stays exactly
-four columns in that order. The manifest records `artifact_type:
-exact_format_submission`, input/output hashes, preserved columns, metrics,
-provider/model status for `auto`, and strict validation results.
-
-Validate upload shape:
-
-```bash
-python -m privhsd.cli validate-submission \
-  --source data/public_dev/recommended_merged.csv \
-  --submission data/outputs/recommended_merged.auto.csv \
-  --text-col text \
-  --id-col id \
-  --output data/outputs/recommended_merged.auto.validation.json
-```
-
-Run source-aware regression:
-
-```bash
-python -m privhsd.cli source-regression-report \
-  --original data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.auto.csv \
-  --original-text-col text \
-  --protected-text-col text \
-  --id-col id \
-  --group-col source \
-  --group-col label \
-  --group-col split \
-  --group-col platform \
-  --group-col type \
-  --output data/outputs/recommended_merged.auto.source_regression.json
-```
-
-## Current Evidence Snapshot
-
-Current evidence, readiness, and caveats live in
+Start with [docs/runbooks/quickstart.md](docs/runbooks/quickstart.md). For the
+architecture, read [docs/reference/pipeline.md](docs/reference/pipeline.md) and
+[docs/reference/providers_and_models.md](docs/reference/providers_and_models.md).
+Current readiness and caveats live in
 [docs/planning/current_status.md](docs/planning/current_status.md).
 
-The short version: `auto` is the primary exact-format path, `balanced` remains
-the deterministic fallback, token-policy models are advisory/reranking support,
-and exact submissions use `--metric-depth fast` by default. `privacy` mode, or
-`--generalize-targets`, can generalize protected target cues; the default
-submission path preserves them for HSD review. Use sampled or deep metrics only
-for explicit local audits under ignored `data/` paths.
-
-## Demo Workbench
-
-The local web demo lives in [workbench/](workbench/). It runs a FastAPI backend
-against the existing `privhsd` APIs and a React/Vite frontend for paste-text
-testing, span highlighting, risk gauges, and audit JSON export.
-
-Launch both servers from the repository root:
-
-```bash
-python launch.py --install
-```
-
-After dependencies are installed once:
-
-```bash
-python launch.py
-```
-
-Backend reload mode is opt-in for development:
-
-```bash
-python launch.py --reload
-```
-
 ## Python API
+
+The public CLI wraps the exact `auto` path. Python callers can use the same
+path through `create_submission`:
 
 ```python
 from pathlib import Path
@@ -194,6 +125,6 @@ hsd.create_submission(
 
 ## Data Policy
 
-Downloaded datasets, generated CSVs, model weights, and reports under `data/`
-are ignored by git. Keep raw sensitive examples out of markdown, commits,
-issues, screenshots, and presentation material.
+Downloaded datasets, generated CSVs, model weights, manifests, reports, and
+run notes belong under ignored `data/` paths. Keep raw sensitive examples out
+of markdown, commits, issues, screenshots, and presentation material.

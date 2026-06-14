@@ -54,6 +54,9 @@ Stable contracts and system design:
 Current status, risks, and future work:
 
 - [planning/current_status.md](planning/current_status.md)
+- [planning/auto_pipeline_simplification_plan.md](planning/auto_pipeline_simplification_plan.md)
+  - next-agent handoff for making `auto` the single explainable public
+  pipeline around Privacy Detection, Meaning Protection, and Verification.
 - [planning/known_weaknesses.md](planning/known_weaknesses.md)
 - [planning/roadmap.md](planning/roadmap.md)
 - [planning/decisions.md](planning/decisions.md)

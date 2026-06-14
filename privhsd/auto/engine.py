@@ -6,12 +6,19 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
+from privhsd.detectors import high_confidence_direct_identifier_spans
 from privhsd.metrics import aggregate_metrics, row_metric_fast, row_metric_for_depth
-from privhsd.pipeline import PrivatizerConfig, privatize_text
+from privhsd.pipeline import PrivatizerConfig, apply_replacements, privatize_text
 from privhsd.rerank import length_drift, style_risk_count
 from privhsd.span_providers.base import SpanCandidate
 
-from .audit import row_audit_limit, status_summary
+from .audit import (
+    MEANING_PROTECTION_REJECTION_REASONS,
+    author_risk_hook,
+    build_stage_summary,
+    row_audit_limit,
+    status_summary,
+)
 from .context import AutoPipelineContext
 from .row_state import AutoRowState
 from .routing import cheap_profile, route_row
@@ -170,6 +177,18 @@ def choose_auto_candidate(
     return chosen, scored, "selected_least_destructive_candidate"
 
 
+def cleanup_direct_residuals(text: str) -> tuple[str, list[dict[str, Any]]]:
+    spans = high_confidence_direct_identifier_spans(text)
+    if not spans:
+        return text, []
+    cleaned, transformations = apply_replacements(
+        text,
+        spans,
+        PrivatizerConfig(mode="balanced", generalize_targets=False),
+    )
+    return cleaned, [dict(transformation) for transformation in transformations]
+
+
 class AutoPipelineEngine:
     def __init__(self, context: AutoPipelineContext) -> None:
         self.context = context
@@ -236,28 +255,49 @@ class AutoPipelineEngine:
         metric_rows: list[dict[str, Any]] = []
         chosen_counts: Counter[str] = Counter()
         fallback_counts: Counter[str] = Counter()
+        rejection_counts: Counter[str] = Counter()
         changed_count = 0
+        candidate_count = 0
+        rejected_candidate_count = 0
+        hsd_advisory_comparison_count = 0
+        residual_review_required_count = 0
+        residual_direct_cleanup_count = 0
         for state, candidates in candidate_groups:
             chosen, scored, reason = choose_auto_candidate(
                 state.original,
                 candidates,
                 baseline_metrics=state.baseline_metrics,
             )
+            candidate_count += len(scored)
+            for score in scored:
+                if score.get("accepted") is False:
+                    rejected_candidate_count += 1
+                for reject_reason in score.get("hard_reject_reasons", []):
+                    rejection_counts[str(reject_reason)] += 1
+                if score.get("metrics", {}).get("hsd_advisory"):
+                    hsd_advisory_comparison_count += 1
             chosen_counts[chosen.name] += 1
             if reason.startswith("fallback"):
                 fallback_counts[reason] += 1
+            chosen_text, residual_cleanup = cleanup_direct_residuals(chosen.text)
+            residual_direct_cleanup_count += len(residual_cleanup)
             output_row = dict(state.row)
-            output_row[target_col] = chosen.text
+            output_row[target_col] = chosen_text
             output_rows.append(output_row)
-            if state.original != chosen.text:
+            if state.original != chosen_text:
                 changed_count += 1
             metrics = row_metric_for_depth(
                 state.original,
-                chosen.text,
+                chosen_text,
                 metric_depth=self.context.config.metric_depth,
                 row_index=state.row_index,
             )
             metric_rows.append(metrics)
+            residual_review_required = bool(metrics.get("privacy_warnings")) or int(
+                metrics.get("residual_identifier_count", 0) or 0
+            ) > 0
+            if residual_review_required:
+                residual_review_required_count += 1
             audit_rows.append(
                 self._row_audit(
                     state,
@@ -265,11 +305,50 @@ class AutoPipelineEngine:
                     scored=scored,
                     selection_reason=reason,
                     metrics=metrics,
+                    residual_review_required=residual_review_required,
+                    chosen_text=chosen_text,
+                    residual_cleanup=residual_cleanup,
                 )
             )
 
+        metrics = aggregate_metrics(metric_rows)
+        provider_rows_considered = sum(1 for state in states if state.decision.use_providers)
+        if config.max_provider_rows is not None:
+            provider_rows_considered = min(provider_rows_considered, config.max_provider_rows)
+        token_policy_rows_considered = sum(
+            1 for state in states if state.decision.use_token_policy
+        )
+        stage_summary = build_stage_summary(
+            config=config,
+            row_count=len(rows),
+            changed_text_cells=changed_count,
+            chosen_counts=chosen_counts,
+            fallback_counts=fallback_counts,
+            provider_statuses=self.context.provider_status,
+            model_statuses=self.context.model_status,
+            provider_load_counts=self.context.provider_load_counts,
+            model_load_counts=self.context.model_load_counts,
+            audit_counters=self.context.audit_counters,
+            metrics=metrics,
+            provider_rows_considered=provider_rows_considered,
+            token_policy_rows_considered=token_policy_rows_considered,
+            candidate_count=candidate_count,
+            rejected_candidate_count=rejected_candidate_count,
+            rejection_counts=rejection_counts,
+            hsd_advisory_comparison_count=hsd_advisory_comparison_count,
+            residual_review_required_count=residual_review_required_count,
+            residual_direct_cleanup_count=residual_direct_cleanup_count,
+            author_risk=author_risk_hook(
+                fieldnames,
+                rows,
+                author_metadata_rows=sum(
+                    1 for state in states if state.profile.author_metadata_available
+                ),
+            ),
+        )
         summary = {
             "artifact_type": "auto_csv_privatization",
+            "pipeline": "auto",
             "row_count": len(rows),
             "text_col": text_col,
             "id_col": id_col,
@@ -281,13 +360,14 @@ class AutoPipelineEngine:
             "changed_text_cells": changed_count,
             "chosen_counts": dict(sorted(chosen_counts.items())),
             "fallback_counts": dict(sorted(fallback_counts.items())),
+            "stages": stage_summary,
             "providers": status_summary(self.context.provider_status),
             "models": status_summary(self.context.model_status),
             "load_counts": {
                 "providers": dict(sorted(self.context.provider_load_counts.items())),
                 "models": dict(sorted(self.context.model_load_counts.items())),
             },
-            "metrics": aggregate_metrics(metric_rows),
+            "metrics": metrics,
         }
         return AutoPipelineResult(
             rows=output_rows,
@@ -606,6 +686,9 @@ class AutoPipelineEngine:
         scored: list[dict[str, Any]],
         selection_reason: str,
         metrics: dict[str, Any],
+        residual_review_required: bool,
+        chosen_text: str,
+        residual_cleanup: list[dict[str, Any]],
     ) -> dict[str, Any]:
         accepted_provider_counts = Counter(
             output.provider
@@ -617,13 +700,43 @@ class AutoPipelineEngine:
             for output in state.model_outputs
             if output.spans
         )
+        meaning_protection_rejections = [
+            {
+                "candidate": str(score.get("name", "unknown")),
+                "reasons": [
+                    reason
+                    for reason in score.get("hard_reject_reasons", [])
+                    if reason in MEANING_PROTECTION_REJECTION_REASONS
+                ],
+            }
+            for score in scored
+            if any(
+                reason in MEANING_PROTECTION_REJECTION_REASONS
+                for reason in score.get("hard_reject_reasons", [])
+            )
+        ]
         return {
             "row_id": state.row_id,
             "row_index": state.row_index,
             "chosen_candidate": chosen.name,
             "chosen_reason": selection_reason,
+            "why_chosen": selection_reason,
+            "privacy_gain": metrics.get("privacy_gain"),
+            "meaning_protection_rejections": meaning_protection_rejections,
+            "residual_review_required": residual_review_required,
+            "residual_direct_cleanup_count": len(residual_cleanup),
+            "residual_direct_cleanup": residual_cleanup,
+            "residual_identifier_count": metrics.get("residual_identifier_count", 0),
+            "residual_direct_identifier_count": metrics.get(
+                "residual_direct_identifier_count",
+                0,
+            ),
+            "residual_quasi_identifier_count": metrics.get(
+                "residual_quasi_identifier_count",
+                0,
+            ),
             "candidate_count": len(scored),
-            "changed": state.original != chosen.text,
+            "changed": state.original != chosen_text,
             "risk_profile": state.profile.audit_record(),
             "routing": state.decision.audit_record(),
             "accepted_provider_spans_by_provider": dict(
@@ -636,5 +749,6 @@ class AutoPipelineEngine:
             "metrics": metrics,
             "review_recommended": state.decision.review_recommended
             or bool(state.provider_errors)
-            or bool(state.model_errors),
+            or bool(state.model_errors)
+            or residual_review_required,
         }

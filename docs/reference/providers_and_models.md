@@ -6,8 +6,9 @@ Last verified: 2026-06-14
 Primary code: `privhsd/auto/context.py`, `privhsd/auto/model_registry.py`,
 `privhsd/span_providers/`, `privhsd/models/`
 
-This is the authoritative reference for optional providers and local model
-behavior.
+This is the authoritative reference for optional local helpers and model
+behavior. Public runbooks should say `PII Assist`; this file records the
+component-level detail needed for debugging and research.
 
 Detailed implementation handoffs live in planning docs. For GLiNER PII,
 future `openai/privacy-filter` work, provider lifecycle history, and benchmark
@@ -16,63 +17,75 @@ gates, use `docs/planning/privacy_span_model_integration_plan.md`.
 ## Lifecycle Rules
 
 - Build one `AutoPipelineContext` at command startup.
-- Discover providers and local model artifacts once at command startup.
+- Discover optional dependencies and local model artifacts once at command
+  startup.
 - Initialize optional providers/models lazily when routing sends rows to them,
   then keep loaded components alive until the run finishes.
 - Batch provider/model inference when the component API supports it.
-- Default to local-only model usage. Downloads require
-  `--allow-model-download`.
+- Default sensitive-data processing to local-only model usage. Downloads
+  require explicit debug/research approval and are not part of the public
+  `protect` workflow.
 - Missing optional dependencies or artifacts must produce structured manifest
   status and deterministic fallback, not exact-output failure.
 - Provider/model audit payloads must not include raw row text.
 
-## Provider Order
+## PII Assist
+
+PII Assist is the internal grouping for local privacy-detection helpers. It is
+not a public menu of pipeline branches.
 
 | Component | Status rule | Role |
 | --- | --- | --- |
-| Deterministic provider | Always ready | Baseline spans and fallback candidate |
-| Presidio | Ready if dependency and spaCy model initialize | Names, locations, durable dates after filtering |
-| scrubadub | Ready if dependency initializes | Supplemental identifier spans |
-| GLiNER | Ready if dependency and local/download-allowed model exist | Supplemental NER spans; supports `general` and `pii` profiles |
-| Token-policy ensemble | Ready if local model dirs and torch/transformers initialize | Advisory token-action evidence |
-| HSD advisory ensemble | Ready if torch/transformers initialize and approved local/download-allowed models load | Candidate drift support and enriched hate prediction columns |
-| Semantic models | Ready only if artifacts and dependencies exist | Candidate drift/audit support |
-| Local LLM reviewer | Disabled by default in official mode | Structured local review only |
+| Deterministic baseline | Always ready | Required direct/quasi identifier spans and fallback candidate. |
+| Presidio | Ready if dependency and spaCy model initialize | Supplemental names, locations, and durable dates after filtering. |
+| scrubadub | Ready if dependency initializes | Supplemental direct identifier spans. |
+| GLiNER | Ready only if dependency and local artifact/config are present | Supplemental NER spans. It must not download models during sensitive-data processing. |
 
-## Trusted Enriched Pipeline
+Public manifests should group these under
+`stages.privacy_detection.pii_assist.components`. Provider-specific errors and
+load counts may also remain in debug sections for reproducibility.
 
-The selected `sanitize-classify` configuration for large local CSV triage is:
-
-```text
-deterministic balanced baseline
-  -> routed Presidio spans
-  -> routed scrubadub spans
-  -> routed token-policy ensemble spans
-  -> candidate generation and fusion
-  -> two-model RoBERTa HSD advisory candidate scoring
-  -> selected sanitized text
-  -> appended HSD label, score, and model-count columns
-```
-
-Provider/model loads are per run, not per row. The final 3,830-row unseen test
-loaded Presidio once, scrubadub once, the token-policy ensemble once, and the
-HSD advisory ensemble once.
-
-Example manifest status:
+Example grouped status:
 
 ```json
 {
+  "stages": {
+    "privacy_detection": {
+      "baseline": "deterministic_balanced",
+      "pii_assist": {
+        "components": {
+          "presidio": "ready",
+          "scrubadub": "ready",
+          "gliner": "missing_artifact"
+        }
+      }
+    }
+  },
   "providers": {
     "deterministic": {"status": "ready"},
     "presidio": {"status": "ready"},
-    "gliner": {"status": "missing_artifact"},
-    "scrubadub": {"status": "ready"}
-  },
-  "models": {
-    "token_policy_ensemble": {"status": "ready", "device": "cuda"}
+    "scrubadub": {"status": "ready"},
+    "gliner": {"status": "missing_artifact"}
   }
 }
 ```
+
+## HSD Advisory
+
+HSD advisory models belong under Verification.
+
+In exact mode, they may compare original-vs-cleaned HSD signal drift and write
+status to the manifest. They must not append columns to exact output. If no
+approved local advisory model is available, exact mode should still run and
+record a skipped status.
+
+In analysis mode, the same runtime may append advisory prediction columns after
+sanitization. These columns are local diagnostic signals, not production
+hate-speech labels or moderation decisions.
+
+The default advisory ensemble may use approved OSS Hugging Face classifiers
+when they are available locally or explicitly allowed for a non-sensitive
+debug/research run.
 
 ## Token-Policy Role
 
@@ -97,30 +110,39 @@ Runtime mapping:
 - `REVIEW` is routing/audit evidence.
 
 Token-policy output never directly overwrites final text. It must pass fusion,
-candidate scoring, cue checks, and exact-format validation before influencing
-an output candidate.
+candidate scoring, cue checks, residual checks, and exact-format validation
+before influencing an output candidate. Public quickstart and official
+runbooks should not ask users to choose token-policy settings.
 
-## HSD Advisory Role
+## Other Research Model Paths
 
-The default advisory ensemble uses these approved OSS Hugging Face classifiers
-when they are available locally or `--allow-model-download` is set:
+Semantic models, DPMLM candidates, and local LLM reviewers are research or
+debug aids unless promoted by a later planning decision. They must not become
+additional public pipeline branches. Any candidate they produce needs the same
+Meaning Protection and Verification checks as the default exact path.
+
+## Trusted Enriched Analysis
+
+`protect --preset analysis` and the compatibility command `sanitize-classify`
+may produce a local enriched CSV:
 
 ```text
-facebook/roberta-hate-speech-dynabench-r4-target
-cardiffnlp/twitter-roberta-base-hate-latest
+Privacy Detection
+  -> Meaning Protection
+  -> Verification with HSD advisory prediction columns
 ```
 
-`sanitize-classify` uses the same runtime to append prediction columns after
-sanitization. The command also compares original-vs-sanitized scores in the
-manifest without storing row text. The Cardiff multiclass hate model is in the
-approved registry as an opt-in diagnostic probe, but it is not part of the
-default binary label ensemble.
+This output is useful for triage and error analysis. Because it may append
+columns, it is not exact-format and should not be treated as the upload path.
 
 ## Acceptance Tests
 
-- Fake provider/model load counters show one load per run, not one load per row.
-- Missing dependency/artifact statuses do not fail exact submission.
-- CUDA model load failures fall back to CPU or skip according to configured
-  severity.
+- Deterministic baseline always runs.
+- Missing optional dependency/artifact statuses do not fail exact submission.
+- PII Assist components load at most once per run, not once per row.
+- GLiNER does not download models during sensitive-data processing.
+- Exact mode writes no HSD prediction columns.
+- Advisory HSD predictions are documented as local diagnostics, not production
+  classifier truth.
 - Token-policy candidates cannot mask protected target terms unless fusion and
   cue policy explicitly allow it.

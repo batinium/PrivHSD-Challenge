@@ -14,10 +14,13 @@ from statistics import mean
 from typing import Any, Iterable
 
 from .detectors import (
+    HIGH_CONFIDENCE_DIRECT_TYPES,
     TAGS,
     TARGET_GROUP_CATEGORIES,
     Span,
     detect_spans,
+    high_confidence_direct_identifier_spans,
+    merge_spans,
     target_group_term_patterns,
 )
 from .resource_config import load_utility_cue_terms
@@ -99,6 +102,66 @@ def span_counts(spans: Iterable[Span]) -> Counter[str]:
 
 def identifier_spans(text: str) -> list[Span]:
     return detect_spans(text, include_context=True, include_targets=False)
+
+
+def residual_high_confidence_direct_spans(spans: Iterable[Span]) -> list[Span]:
+    return [
+        span
+        for span in spans
+        if span.entity_type in HIGH_CONFIDENCE_DIRECT_TYPES
+        and span.source in {"regex", "regex_obfuscated_email"}
+    ]
+
+
+def high_confidence_residual_spans(text: str) -> list[Span]:
+    """Direct residual identifiers that are safe to replace without context guessing."""
+    return merge_spans(high_confidence_direct_identifier_spans(text))
+
+
+def cleanup_high_confidence_residuals(text: str) -> dict[str, Any]:
+    """Replace only direct high-confidence residual identifiers in already-cleaned text."""
+    spans = high_confidence_residual_spans(text)
+    if not spans:
+        return {
+            "text": text,
+            "changed": False,
+            "cleanup_count": 0,
+            "counts_by_entity_type": {},
+            "transformations": (),
+        }
+
+    parts: list[str] = []
+    transformations: list[dict[str, Any]] = []
+    cursor = 0
+    output_cursor = 0
+    for span in spans:
+        prefix = text[cursor : span.start]
+        parts.append(prefix)
+        output_cursor += len(prefix)
+        replacement = span.replacement_tag()
+        parts.append(replacement)
+        transformations.append(
+            {
+                "entity_type": span.entity_type,
+                "source": span.source,
+                "source_start": span.start,
+                "source_end": span.end,
+                "output_start": output_cursor,
+                "output_end": output_cursor + len(replacement),
+                "replacement": replacement,
+            }
+        )
+        output_cursor += len(replacement)
+        cursor = span.end
+    parts.append(text[cursor:])
+    cleaned = "".join(parts)
+    return {
+        "text": cleaned,
+        "changed": cleaned != text,
+        "cleanup_count": len(spans),
+        "counts_by_entity_type": sorted_counter(span_counts(spans)),
+        "transformations": tuple(transformations),
+    }
 
 
 def direct_spans(spans: Iterable[Span]) -> list[Span]:
@@ -227,12 +290,16 @@ def _row_metric_impl(
     after_spans = identifier_spans(privatized)
     before_direct_spans = direct_spans(before_spans)
     after_direct_spans = direct_spans(after_spans)
+    after_high_confidence_direct_spans = residual_high_confidence_direct_spans(
+        after_spans
+    )
     before_quasi_spans = quasi_spans(before_spans)
     after_quasi_spans = quasi_spans(after_spans)
     before_counts = span_counts(before_spans)
     after_counts = span_counts(after_spans)
     before_direct_counts = span_counts(before_direct_spans)
     after_direct_counts = span_counts(after_direct_spans)
+    after_high_confidence_direct_counts = span_counts(after_high_confidence_direct_spans)
     before_quasi_counts = span_counts(before_quasi_spans)
     after_quasi_counts = span_counts(after_quasi_spans)
 
@@ -240,6 +307,7 @@ def _row_metric_impl(
     after_privacy = len(after_spans)
     before_direct = len(before_direct_spans)
     after_direct = len(after_direct_spans)
+    after_high_confidence_direct = len(after_high_confidence_direct_spans)
     before_quasi = len(before_quasi_spans)
     after_quasi = len(after_quasi_spans)
     before_cues = cue_count(original)
@@ -315,6 +383,10 @@ def _row_metric_impl(
             after_direct_counts
         ),
         "residual_direct_identifier_count": after_direct,
+        "residual_high_confidence_direct_identifier_count": after_high_confidence_direct,
+        "residual_high_confidence_direct_identifier_counts_by_entity_type": sorted_counter(
+            after_high_confidence_direct_counts
+        ),
         "quasi_identifier_count_before": before_quasi,
         "quasi_identifier_count_after": after_quasi,
         "quasi_identifier_counts_by_entity_type_before": sorted_counter(
@@ -443,6 +515,8 @@ def aggregate_metrics(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
             "residual_identifier_count": 0,
             "residual_identifier_counts_by_entity_type": {},
             "residual_direct_identifier_count": 0,
+            "residual_high_confidence_direct_identifier_count": 0,
+            "residual_high_confidence_direct_identifier_counts_by_entity_type": {},
             "quasi_identifier_counts": {"before": 0, "after": 0},
             "quasi_identifier_counts_by_entity_type": {"before": {}, "after": {}},
             "residual_quasi_identifier_count": 0,
@@ -543,6 +617,16 @@ def aggregate_metrics(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         ),
         "residual_direct_identifier_count": sum(
             row.get("residual_direct_identifier_count", 0) for row in materialized
+        ),
+        "residual_high_confidence_direct_identifier_count": sum(
+            row.get("residual_high_confidence_direct_identifier_count", 0)
+            for row in materialized
+        ),
+        "residual_high_confidence_direct_identifier_counts_by_entity_type": sorted_counter(
+            counter_sum(
+                materialized,
+                "residual_high_confidence_direct_identifier_counts_by_entity_type",
+            )
         ),
         "quasi_identifier_counts": {"before": quasi_before, "after": quasi_after},
         "quasi_identifier_counts_by_entity_type": {

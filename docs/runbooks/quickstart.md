@@ -5,26 +5,90 @@ Owner area: common local workflow
 Last verified: 2026-06-14
 Primary code: `privhsd/cli.py`, package metadata, tests
 
-Use this for first-run setup and the shortest local validation path.
+Use this for first-run setup and the shortest local privacy-protection path.
+The public workflow is:
+
+```text
+Input CSV -> Privacy Detection -> Meaning Protection -> Verification
+```
 
 ## Install And Verify
 
 ```bash
 python -m pip install .
 python -m pytest -q
-contextsafe-hsd --help
+python -m privhsd.cli protect --help
 ```
 
-Optional extras are installed only for workflows that need them:
+For package-installed usage, replace `python -m privhsd.cli` with
+`contextsafe-hsd` or `privhsd`.
+
+## Protect A CSV
 
 ```bash
-python -m pip install '.[benchmark]'
-python -m pip install '.[presidio]'
-python -m pip install '.[token-policy]'
-python -m pip install '.[hsd-advisory]'
+python -m privhsd.cli protect \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.protected.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.protected.manifest.json
 ```
 
-## Prepare Public Data
+This defaults to `--preset exact`. It writes cleaned text back into the input
+text column and preserves the source schema: columns, column order, row count,
+row order, IDs, labels, and non-text metadata values. It does not append HSD
+prediction columns.
+
+The manifest leads with three stages:
+
+- `privacy_detection`: deterministic baseline plus any ready local PII Assist.
+- `meaning_protection`: checks that target/action/negation/reporting cues are
+  not erased by masking.
+- `verification`: residual identifier checks, exact-shape checks, optional HSD
+  advisory drift status, metadata leakage status, and author-risk hook status.
+
+Missing optional local components should be recorded as skipped or unavailable,
+not treated as a failure for exact output.
+
+## Presets
+
+```bash
+python -m privhsd.cli protect --preset exact \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.protected.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.protected.manifest.json
+```
+
+Use `exact` for the default cleaned CSV plus manifest.
+
+```bash
+python -m privhsd.cli protect --preset analysis \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.analysis.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.analysis.manifest.json
+```
+
+Use `analysis` only for local review. It may append advisory HSD prediction
+columns after sanitization. These columns are not production classifier truth
+and are not part of exact-format output.
+
+```bash
+python -m privhsd.cli protect --preset audit \
+  --input INPUT.csv \
+  --output data/outputs/INPUT.audit.csv \
+  --text-col text \
+  --id-col id \
+  --manifest data/outputs/INPUT.audit.manifest.json
+```
+
+Use `audit` when you want exact output plus deeper sidecar reporting where the
+installed runtime supports it.
+
+## Prepare Public Development Data
 
 ```bash
 python -m privhsd.cli prepare-recommended-datasets \
@@ -35,86 +99,26 @@ python -m privhsd.cli prepare-recommended-datasets \
 
 Downloaded raw files stay under ignored `data/public_dev/raw/`.
 
-## Sanitize And Classify A CSV
-
-Use this when you want one enriched CSV for local analysis or unseen-data
-triage:
+## Validate Exact Shape
 
 ```bash
-python -m privhsd.cli sanitize-classify \
-  --input INPUT.csv \
-  --output data/outputs/INPUT.sanitized_classified.csv \
-  --text-col text \
-  --id-col id \
-  --manifest data/outputs/INPUT.sanitized_classified.manifest.json \
-  --require-hate-classification \
-  --max-model-batch-size 32
-```
-
-The output keeps original rows and columns, replaces `text` with sanitized
-text, and appends HSD prediction columns. If the input already has
-`is_hate_speech`, the command preserves it and writes
-`predicted_is_hate_speech` unless `--overwrite-hate-columns` is set. The other
-default appended columns are `hate_speech_score` and
-`hate_speech_model_count`. Model downloads are off by default; add
-`--allow-model-download` only for an explicit OSS-model run. Without
-`--require-hate-classification`, unavailable advisory classifiers leave the
-classification fields blank or `0` and record a skipped status in the manifest.
-The manifest includes a `tradeoff` summary for identifier removal, cue
-retention, overmask warnings, and original-vs-sanitized HSD score drift.
-
-The always-on layer is deterministic balanced masking. Auto mode reports status
-for optional Presidio, scrubadub, GLiNER, token-policy, semantic, local LLM, and
-HSD advisory components from installed local dependencies and artifacts.
-Providers and models that are actually available to the current engine are
-lazy-loaded only when routed rows need them. The default HSD advisory registry
-is:
-
-```text
-facebook/roberta-hate-speech-dynabench-r4-target
-cardiffnlp/twitter-roberta-base-hate-latest
-```
-
-If those HSD models are not available locally and downloads are not explicitly
-allowed, remove `--require-hate-classification` for a fallback run and treat the
-missing model status in the manifest as a blocker for trusted hate columns.
-
-## Create And Validate An Exact Auto Candidate
-
-```bash
-python -m privhsd.cli create-submission \
-  --input data/public_dev/recommended_merged.csv \
-  --output data/outputs/recommended_merged.auto.csv \
-  --text-col text \
-  --id-col id \
-  --replace-text \
-  --mode auto \
-  --metric-depth fast \
-  --manifest data/outputs/recommended_merged.auto.manifest.json
-
 python -m privhsd.cli validate-submission \
   --source data/public_dev/recommended_merged.csv \
-  --submission data/outputs/recommended_merged.auto.csv \
+  --submission data/outputs/recommended_merged.protected.csv \
   --text-col text \
   --id-col id \
-  --output data/outputs/recommended_merged.auto.validation.json
+  --output data/outputs/recommended_merged.validation.json
 ```
 
-`create-submission` requires `--replace-text`; it preserves row order, source
-columns, metadata values, and column order, then validates that shape after
-writing. In `auto` mode the manifest includes provider/model discovery status,
-load counts, input/output SHA-256 hashes, metrics, preserved columns, and the
-validation report. It does not append helper or prediction columns.
-
-For a package-installed command, replace `python -m privhsd.cli` with
-`contextsafe-hsd`.
+Validation should pass before any output is shared. Do not tune or compare
+alternate runs until the exact cleaned CSV exists and its manifest is readable.
 
 ## Minimal Evidence Pass
 
 ```bash
 python -m privhsd.cli source-regression-report \
   --original data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.auto.csv \
+  --protected data/outputs/recommended_merged.protected.csv \
   --original-text-col text \
   --protected-text-col text \
   --id-col id \
@@ -123,13 +127,17 @@ python -m privhsd.cli source-regression-report \
   --group-col split \
   --group-col platform \
   --group-col type \
-  --output data/outputs/recommended_merged.auto.source_regression.json
+  --output data/outputs/recommended_merged.source_regression.json
 ```
 
-Use `--metric-depth fast` for exact submissions. Use `sampled` or `deep` only
-for explicit local audits under ignored `data/`.
+Use only group columns that exist in the dataset. If an author/user column is
+available and repeated-author analysis is needed, record whether that
+Verification hook ran or why it was skipped.
 
 ## Python API
+
+The CLI is the public path. Python callers can invoke the same exact `auto`
+path directly:
 
 ```python
 from pathlib import Path
@@ -149,7 +157,6 @@ hsd.create_submission(
 
 ## Run Notes
 
-For official or benchmark runs, keep dated notes under ignored
-`data/outputs/`. Record commands, commit hash, artifact paths, aggregate local
-metrics, official scores, and limitations. Do not commit raw examples or
-generated run logs.
+Keep dated notes under ignored `data/outputs/`. Record commands, commit hash,
+artifact paths, aggregate local metrics, official scores when available, and
+limitations. Do not commit raw examples or generated run logs.

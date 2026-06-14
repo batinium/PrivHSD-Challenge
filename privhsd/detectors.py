@@ -104,6 +104,15 @@ REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
             r"Square|Sq\.?)\b"
         ),
     ),
+    (
+        "LOCATION",
+        re.compile(
+            rf"\b{NAME_WORD_PATTERN}\s+"
+            r"(?:street|st\.?|avenue|ave\.?|road|rd\.?|boulevard|blvd\.?|"
+            r"lane|ln\.?|drive|dr\.?|court|ct\.?|square|sq\.?)\b",
+            re.I,
+        ),
+    ),
 )
 ADJACENT_USER_PATTERN = re.compile(r"@[A-Za-z0-9._-]{2,64}\b")
 
@@ -168,6 +177,17 @@ PERSON_CONTEXT_PATTERNS: Sequence[tuple[re.Pattern[str], bool]] = (
     ),
     (
         re.compile(
+            r"\b(?i:(?:i|we|they|he|she|someone)\s+"
+            r"(?:met|saw|reported|called|contacted|messaged|emailed)|"
+            r"met|saw|reported|call|called|contact|contacted|message|messaged|"
+            r"email|emailed)\s+"
+            r"(?!aged?\b|at\b|from\b|in\b|near\b|on\b|via\b|while\b|with\b)"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        True,
+    ),
+    (
+        re.compile(
             rf"\b({NAME_PHRASE_PATTERN})\s+"
             r"(?:said|emailed|called|posted|quoted|replied|wrote)\b"
         ),
@@ -198,16 +218,23 @@ ALIAS_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
 )
 
 
-LOCATION_CONTEXT_PATTERNS: Sequence[re.Pattern[str]] = (
-    re.compile(
-        r"\b(?i:from|in|near|at)\s+"
-        rf"({NAME_PHRASE_PATTERN})\b"
+LOCATION_CONTEXT_PATTERNS: Sequence[tuple[re.Pattern[str], bool]] = (
+    (
+        re.compile(
+            r"\b(?i:from|in|near|at|works\s+at|studies\s+at|"
+            r"meet\s+at|meets\s+at|met\s+at|lives\s+near|live\s+near)\s+"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        True,
     ),
-    re.compile(
-        r"\b(?i:leave|left|leaving|visit|visited|visiting|"
-        r"move\s+to|moved\s+to|return\s+to|go\s+back\s+to|"
-        r"deport\s+to|deported\s+to)\s+"
-        rf"({NAME_PHRASE_PATTERN})\b"
+    (
+        re.compile(
+            r"\b(?i:leave|left|leaving|visit|visited|visiting|"
+            r"move\s+to|moved\s+to|return\s+to|go\s+back\s+to|"
+            r"deport\s+to|deported\s+to)\s+"
+            rf"({NAME_PHRASE_PATTERN})\b"
+        ),
+        True,
     ),
 )
 
@@ -223,13 +250,82 @@ KNOWN_LOCATION_TERMS: Sequence[str] = (
     "Washington",
 )
 
+PLACE_CONTEXT_SUFFIXES = {
+    "academy",
+    "airport",
+    "avenue",
+    "boulevard",
+    "bridge",
+    "campus",
+    "center",
+    "centre",
+    "church",
+    "clinic",
+    "college",
+    "court",
+    "drive",
+    "hospital",
+    "institute",
+    "lane",
+    "library",
+    "mosque",
+    "park",
+    "place",
+    "road",
+    "school",
+    "square",
+    "station",
+    "street",
+    "temple",
+    "university",
+    "way",
+}
+
+LOCATION_LEADING_REJECT_WORDS = {
+    "a",
+    "an",
+    "at",
+    "any",
+    "dot",
+    "every",
+    "me",
+    "my",
+    "near",
+    "on",
+    "our",
+    "that",
+    "the",
+    "their",
+    "these",
+    "this",
+    "those",
+    "your",
+}
+
+HIGH_CONFIDENCE_DIRECT_TYPES = frozenset(
+    {
+        "EMAIL",
+        "PHONE",
+        "URL",
+        "USER",
+        "IP_ADDRESS",
+        "IDENTIFIER",
+    }
+)
+
 CONTEXT_NAME_STOP_WORDS = {
+    "after",
     "and",
     "are",
     "at",
+    "because",
+    "before",
+    "belong",
+    "belongs",
     "but",
     "called",
     "emailed",
+    "for",
     "from",
     "in",
     "is",
@@ -244,8 +340,10 @@ CONTEXT_NAME_STOP_WORDS = {
     "says",
     "should",
     "that",
+    "to",
     "was",
     "were",
+    "when",
     "who",
     "with",
     "wrote",
@@ -253,6 +351,8 @@ CONTEXT_NAME_STOP_WORDS = {
 
 CONTEXT_PERSON_REJECT_WORDS = {
     "a",
+    "age",
+    "aged",
     "an",
     "any",
     "as",
@@ -277,6 +377,7 @@ CONTEXT_PERSON_REJECT_WORDS = {
     "those",
     "us",
     "we",
+    "while",
     "you",
 }
 
@@ -429,9 +530,51 @@ def rejected_context_person_candidate(value: str) -> bool:
     lowered = [word.lower() for word in words]
     if any(word in CONTEXT_PERSON_REJECT_WORDS for word in lowered):
         return True
+    if lowered[-1] in PLACE_CONTEXT_SUFFIXES and not any(
+        word[:1].isupper() for word in words
+    ):
+        return True
     if len(words) == 1 and lowered[0] in action_context_terms():
         return True
     return any(contains_external_profanity(word) for word in words)
+
+
+def location_words(value: str) -> list[str]:
+    return [match.group(0) for match in re.finditer(NAME_WORD_PATTERN, value)]
+
+
+def rejected_location_candidate(value: str) -> bool:
+    words = location_words(value)
+    if not words:
+        return True
+    lowered = [word.lower() for word in words]
+    if lowered[0] in LOCATION_LEADING_REJECT_WORDS:
+        return True
+    if any(word in action_context_terms() for word in lowered):
+        return True
+    if contains_target_group_term(value):
+        return True
+    if any(contains_external_profanity(word) for word in words):
+        return True
+    known_locations = {term.lower() for term in KNOWN_LOCATION_TERMS}
+    if value.lower() in known_locations:
+        return False
+    if lowered[-1] in PLACE_CONTEXT_SUFFIXES:
+        return len(words) < 2
+    if any(word[:1].isupper() for word in words):
+        return False
+    return True
+
+
+def high_confidence_direct_identifier_spans(text: str) -> list[Span]:
+    """Return only direct residual identifiers that are safe to auto-clean."""
+    return merge_spans(
+        [
+            span
+            for span in regex_spans(text)
+            if span.entity_type in HIGH_CONFIDENCE_DIRECT_TYPES
+        ]
+    )
 
 
 def adjacent_user_spans(text: str) -> list[Span]:
@@ -501,8 +644,9 @@ def regex_spans(text: str) -> list[Span]:
     for entity_type, pattern in REGEX_PATTERNS:
         for match in pattern.finditer(text):
             value = match.group(0)
-            if entity_type == "LOCATION" and contains_target_group_term(value):
-                continue
+            if entity_type == "LOCATION":
+                if rejected_location_candidate(value):
+                    continue
             spans.append(
                 Span(
                     start=match.start(),
@@ -568,18 +712,19 @@ def context_spans(text: str) -> list[Span]:
             spans.append(
                 Span(start, end, "ALIAS", text[start:end], 0.7, "context_alias")
             )
-    for pattern in LOCATION_CONTEXT_PATTERNS:
+    for pattern, allow_lowercase in LOCATION_CONTEXT_PATTERNS:
         for match in pattern.finditer(text):
             start, end = match.span(1)
             start, end, value = trim_context_span(
                 text,
                 start,
                 end,
-                require_titlecase=True,
+                require_titlecase=not allow_lowercase,
+                stop_at_connector=allow_lowercase,
             )
             if not value:
                 continue
-            if value.lower() in {"the", "a", "an"} or contains_target_group_term(value):
+            if rejected_location_candidate(value):
                 continue
             spans.append(
                 Span(start, end, "LOCATION", value, 0.65, "context_location")

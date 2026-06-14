@@ -130,6 +130,24 @@ def test_sanitize_classify_replaces_text_and_appends_predictions(tmp_path):
     assert manifest["classification"]["status"] == "ok"
     assert manifest["classification"]["model_count"] == 2
     assert manifest["classification"]["prediction_counts"] == {"0": 1, "1": 1}
+    assert manifest["pipeline"] == "auto"
+    assert manifest["preset"] == "analysis"
+    assert set(manifest["stages"]) == {
+        "privacy_detection",
+        "meaning_protection",
+        "verification",
+    }
+    assert manifest["stages"]["privacy_detection"]["pii_assist"]["label"] == (
+        "PII Assist"
+    )
+    verification = manifest["stages"]["verification"]
+    assert verification["hsd_advisory_status"] == "ok"
+    assert verification["hsd_advisory"]["use"] == "analysis_prediction_columns"
+    assert verification["hsd_advisory"]["model_count"] == 2
+    assert verification["author_risk"]["author_or_user_column_exists"] is False
+    assert manifest["sanitization"]["stages"]["verification"][
+        "hsd_advisory_status"
+    ] == "skipped"
     assert manifest["tradeoff"]["identifier_count_after"] == 0
     assert manifest["tradeoff"]["classification_decision_changed_count"] == 0
     assert manifest["validation"]["valid"] is True

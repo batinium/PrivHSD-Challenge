@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from privhsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
-from privhsd.auto.engine import AutoCandidate, choose_auto_candidate
+from privhsd.auto.engine import AutoCandidate, choose_auto_candidate, cleanup_direct_residuals
 from privhsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
@@ -91,6 +91,31 @@ def test_create_submission_auto_preserves_exact_four_column_shape(tmp_path):
     assert manifest["metric_depth"] == "fast"
     assert manifest["validation"]["valid"] is True
     assert manifest["metrics"]["metric_depth_counts"] == {"fast": 4}
+    summary = manifest["text_column_summaries"]["text"]
+    assert set(summary["stages"]) == {
+        "privacy_detection",
+        "meaning_protection",
+        "verification",
+    }
+    privacy_detection = summary["stages"]["privacy_detection"]
+    assert privacy_detection["baseline"] == "deterministic_balanced"
+    assert privacy_detection["pii_assist"]["label"] == "PII Assist"
+    assert privacy_detection["pii_assist"]["components"] == {
+        "gliner": "disabled",
+        "presidio": "disabled",
+        "scrubadub": "disabled",
+    }
+    verification = summary["stages"]["verification"]
+    assert verification["hsd_advisory_status"] == "skipped"
+    assert verification["hsd_advisory"]["skipped_reason"] == "disabled"
+    assert verification["author_risk"] == {
+        "author_or_user_column_exists": True,
+        "author_columns": ["author_id"],
+        "author_metadata_rows": 4,
+        "repeated_author_data_available": False,
+        "author_risk_evaluation_ran": False,
+        "skipped_reason": "not_run_manifest_hook_only",
+    }
 
 
 def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(
@@ -328,6 +353,11 @@ def test_auto_engine_uses_provider_batch_api_once_per_provider():
     assert result.audit_rows[0]["accepted_provider_spans_by_provider"] == {
         "batched_provider": 1
     }
+    assert result.audit_rows[0]["chosen_candidate"]
+    assert result.audit_rows[0]["why_chosen"]
+    assert result.audit_rows[0]["privacy_gain"] is not None
+    assert "meaning_protection_rejections" in result.audit_rows[0]
+    assert "residual_review_required" in result.audit_rows[0]
     assert result.audit_rows[1]["accepted_provider_spans_by_provider"] == {
         "batched_provider": 1
     }
@@ -405,6 +435,33 @@ def test_auto_candidate_rejects_large_hsd_advisory_drop():
     assert "hsd_advisory_decision_drift" in scored[1]["hard_reject_reasons"]
 
 
+def test_auto_direct_residual_cleanup_avoids_ambiguous_name_place_overmasking():
+    cleaned, transformations = cleanup_direct_residuals(
+        "Email alex@example.test call +1 202 555 0100 visit "
+        "https://example.test/post @alex 192.0.2.44 case#ABC123 "
+        "alex [at] example dot test near london library and Alex."
+    )
+
+    assert "alex@example.test" not in cleaned
+    assert "+1 202 555 0100" not in cleaned
+    assert "https://example.test/post" not in cleaned
+    assert "@alex" not in cleaned
+    assert "192.0.2.44" not in cleaned
+    assert "case#ABC123" not in cleaned
+    assert "alex [at] example dot test" not in cleaned
+    assert "london library" in cleaned
+    assert "Alex" in cleaned
+    assert [item["entity_type"] for item in transformations] == [
+        "EMAIL",
+        "PHONE",
+        "URL",
+        "USER",
+        "IP_ADDRESS",
+        "IDENTIFIER",
+        "EMAIL",
+    ]
+
+
 def test_auto_hsd_advisory_scores_candidates_in_one_batch():
     loads = []
     hsd_batches = []
@@ -439,6 +496,13 @@ def test_auto_hsd_advisory_scores_candidates_in_one_batch():
     assert context.model_load_counts["hsd_advisory"] == 1
     assert hsd_batches == [{"count": 6, "batch_size": 8}]
     assert result.summary["models"]["items"]["hsd_advisory"]["status"] == "ready"
+    verification = result.summary["stages"]["verification"]
+    assert verification["hsd_advisory_status"] == "ok"
+    assert verification["hsd_advisory"]["candidate_comparisons"] == 4
+    assert verification["hsd_advisory"]["rejection_counts"] == {
+        "hsd_advisory_decision_drift": 2,
+        "hsd_advisory_large_drop": 2,
+    }
     assert all(row["privatized_text"] == row["text"] for row in result.rows)
     for row in result.audit_rows:
         assert any(

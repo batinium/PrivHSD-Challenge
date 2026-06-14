@@ -1,10 +1,12 @@
 import csv
 from dataclasses import dataclass
 import json
+import subprocess
+import sys
 
 import pytest
 
-from privhsd.cli import build_parser
+from privhsd.cli import build_parser, main
 from privhsd.submission import (
     SubmissionError,
     create_submission,
@@ -125,6 +127,129 @@ def test_submission_commands_are_registered():
     assert anonymize_args.mode == "auto"
     assert rerank_args.mode == "auto"
     assert validate_args.command == "validate-submission"
+
+
+def test_protect_help_is_short_public_surface():
+    result = subprocess.run(
+        [sys.executable, "-m", "privhsd.cli", "protect", "--help"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "--preset" in result.stdout
+    assert "exact" in result.stdout
+    assert "preserves the input schema" in result.stdout
+    assert "--disable-provider" not in result.stdout
+    assert "--disable-model" not in result.stdout
+    assert "--gliner-profile" not in result.stdout
+    assert "--metric-depth" not in result.stdout
+
+
+def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr("privhsd.auto.context.has_module", lambda _name: False)
+    monkeypatch.setattr("privhsd.auto.model_registry.module_available", lambda _name: False)
+    source = tmp_path / "source.csv"
+    output = tmp_path / "protected.csv"
+    manifest_path = tmp_path / "manifest.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "id": "1",
+                "text": "Muslims should leave",
+                "label": "hate",
+            }
+        )
+
+    exit_code = main(
+        [
+            "protect",
+            "--input",
+            str(source),
+            "--output",
+            str(output),
+            "--text-col",
+            "text",
+            "--id-col",
+            "id",
+            "--manifest",
+            str(manifest_path),
+            "--preset",
+            "exact",
+        ]
+    )
+    captured = capsys.readouterr()
+
+    rows = read_rows(output)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert '"preset": "exact"' in captured.out
+    assert list(rows[0]) == ["id", "text", "label"]
+    assert not any(column.startswith("hate_speech") for column in rows[0])
+    assert not any(column.startswith("predicted_") for column in rows[0])
+    assert manifest["pipeline"] == "auto"
+    assert manifest["preset"] == "exact"
+    assert set(manifest["stages"]) == {
+        "privacy_detection",
+        "meaning_protection",
+        "verification",
+    }
+    assert manifest["stages"]["verification"]["hsd_advisory_status"] == "skipped"
+    assert manifest["validation"]["valid"] is True
+
+
+def test_protect_analysis_appends_hsd_advisory_columns(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr("privhsd.auto.context.has_module", lambda _name: False)
+    monkeypatch.setattr("privhsd.auto.model_registry.module_available", lambda _name: False)
+    source = tmp_path / "source.csv"
+    output = tmp_path / "analysis.csv"
+    manifest_path = tmp_path / "manifest.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "id": "1",
+                "text": "Everyone deserves respect.",
+                "label": "not_hate",
+            }
+        )
+
+    exit_code = main(
+        [
+            "protect",
+            "--input",
+            str(source),
+            "--output",
+            str(output),
+            "--text-col",
+            "text",
+            "--id-col",
+            "id",
+            "--manifest",
+            str(manifest_path),
+            "--preset",
+            "analysis",
+        ]
+    )
+    capsys.readouterr()
+
+    rows = read_rows(output)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert list(rows[0]) == [
+        "id",
+        "text",
+        "label",
+        "is_hate_speech",
+        "hate_speech_score",
+        "hate_speech_model_count",
+    ]
+    assert manifest["preset"] == "analysis"
+    assert manifest["exact_format_submission"] is False
+    assert manifest["stages"]["verification"]["hsd_advisory_status"] == "skipped"
 
 
 def test_create_submission_privatizes_in_place_and_writes_manifest(tmp_path):

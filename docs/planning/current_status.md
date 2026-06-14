@@ -10,12 +10,19 @@ reports remain under ignored `data/outputs/`.
 
 ## Readiness
 
-Current readiness: hackathon demo ready with caveats.
+Current readiness: simplified public pipeline ready for local verification with
+caveats.
 
-The exact-format auto pipeline works on local tests and the ignored external
-TweetEval unseen CSV. It preserves schema, records provider/model status, and
-loads optional heavy components once per run. It is not a guarantee that every
-identifier is removed; residual-risk review remains required.
+`protect` is now the short public command. Its default exact preset calls the
+existing exact `auto` path, preserves schema, writes cleaned text only, and
+records a stage-first manifest. The public story is:
+
+```text
+Input CSV -> Privacy Detection -> Meaning Protection -> Verification
+```
+
+It is not a guarantee that every identifier is removed; residual risk is
+reduced, checked, and reported.
 
 The enriched `sanitize-classify` workflow is available for local unseen-data
 triage. It preserves original rows and metadata, replaces the selected text
@@ -25,9 +32,13 @@ exact-format upload path.
 
 ## Current CLI Contract
 
-- `create-submission` is the exact-format path. It requires `--replace-text`,
-  preserves row count/order/columns, and rejects helper columns during
-  validation.
+- `protect` is the public default. `--preset exact` preserves schema and
+  writes cleaned text only; `--preset analysis` appends advisory HSD columns
+  for local review; `--preset audit` preserves exact output and requests deeper
+  sidecar/audit reporting.
+- `create-submission` remains the legacy exact-format path. It requires
+  `--replace-text`, preserves row count/order/columns, and rejects helper
+  columns during validation.
 - `anonymize` is the general CSV path. It defaults to `mode=balanced`,
   `output_col=privatized_text`, and `metric-depth=fast`; `--mode auto`
   enables routed optional providers/models.
@@ -35,15 +46,32 @@ exact-format upload path.
   text column, and appends advisory HSD columns. If a gold
   `is_hate_speech` column exists, predictions are written to
   `predicted_is_hate_speech` unless `--overwrite-hate-columns` is passed.
-- Optional Presidio, scrubadub, GLiNER, token-policy, and HSD advisory outputs
-  are advisory evidence behind routing, fusion, candidate scoring, and
-  fallback. GLiNER model/profile selection and provider batching are
-  implemented; `openai/privacy-filter`, HydroXai, and public PII span
-  benchmarking are still proposed work.
+- Optional Presidio, scrubadub, and GLiNER are presented publicly as internal
+  PII Assist. Deterministic rules always run. GLiNER only runs with local
+  artifacts/configuration; downloads are not part of sensitive-data
+  processing.
+- Token-policy and HSD advisory outputs remain internal advisory evidence
+  behind routing, fusion, candidate scoring, verification, and fallback.
 - Exact and auto CSV paths default to `metric-depth=fast`; sampled/deep metrics
   are opt-in local audits.
 
 ## Latest Verification Snapshot
+
+Simplification implementation verification:
+
+- `git diff --check`: passed.
+- `python -m privhsd.cli protect --help`: passed.
+- `python -m privhsd.cli create-submission --help`: passed.
+- `python -m privhsd.cli sanitize-classify --help`: passed.
+- `python -m pytest tests/test_pipeline.py tests/test_metrics.py tests/test_auto_pipeline.py tests/test_submission.py tests/test_simple_pipeline.py -q`: 61 passed.
+- `python -m pytest tests/test_pipeline.py tests/test_metrics.py -q`: 38 passed.
+- `python -m pytest tests/test_submission.py tests/test_auto_pipeline.py tests/test_simple_pipeline.py -q`: 23 passed.
+- `python -m pytest tests/test_metadata_leakage.py tests/test_workbench_csv.py -q`: 6 passed, 9 dependency deprecation warnings.
+- `python -m pytest tests/test_synthetic_pii_stress.py -q`: 3 passed.
+- `python -m pytest -q`: 200 passed, 1 skipped, 9 dependency deprecation warnings.
+- Tiny `protect --preset exact` smoke preserved schema, masked lower-case
+  address/place examples, kept `Muslims should leave`, and wrote a
+  `privacy_detection` / `meaning_protection` / `verification` manifest.
 
 Most recent local configuration search and final enriched CSV run:
 

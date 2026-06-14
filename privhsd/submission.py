@@ -241,6 +241,7 @@ def create_submission(
         context = AutoPipelineContext.create(auto_config)
         output_rows = [dict(row) for row in rows]
         text_column_summaries: dict[str, Any] = {}
+        audit_rows_by_col: dict[str, list[dict[str, Any]]] = {}
         changed_text_cells = 0
         metrics_by_col: dict[str, Any] = {}
         for column in text_cols:
@@ -254,6 +255,7 @@ def create_submission(
             )
             output_rows = engine_result.rows
             text_column_summaries[column] = engine_result.summary
+            audit_rows_by_col[column] = engine_result.audit_rows
             changed_text_cells += int(engine_result.summary.get("changed_text_cells", 0) or 0)
             metrics_by_col[column] = engine_result.summary["metrics"]
 
@@ -271,8 +273,25 @@ def create_submission(
             if len(metrics_by_col) == 1
             else {"by_text_col": metrics_by_col}
         )
+        stages = (
+            next(iter(text_column_summaries.values())).get("stages", {})
+            if len(text_column_summaries) == 1
+            else {
+                "by_text_col": {
+                    column: summary.get("stages", {})
+                    for column, summary in text_column_summaries.items()
+                }
+            }
+        )
+        row_audits = (
+            next(iter(audit_rows_by_col.values()))
+            if len(audit_rows_by_col) == 1
+            else {"by_text_col": audit_rows_by_col}
+        )
         manifest = {
             "artifact_type": "exact_format_submission",
+            "pipeline": "auto",
+            "preset": "exact",
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "command": command,
             "git_commit": git_commit(),
@@ -298,8 +317,10 @@ def create_submission(
             "style_scrub": style_scrub,
             "replace_text": replace_text,
             "changed_text_cells": changed_text_cells,
+            "stages": stages,
             "metrics": metrics,
             "text_column_summaries": text_column_summaries,
+            "row_audits": row_audits,
             "providers": context.provider_status,
             "models": context.model_status,
             "load_counts": {
