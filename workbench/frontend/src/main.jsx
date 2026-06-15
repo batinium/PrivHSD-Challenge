@@ -65,7 +65,7 @@ const CATEGORY_LABELS = {
   sexual_orientation: "Sexual orientation"
 };
 const AUTO_DASHBOARD_DISABLED_MODELS = ["semantic", "local_llm"];
-const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub", "gliner"];
+const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub"];
 const AUTO_MODEL_ORDER = ["hsd_advisory", "local_llm"];
 const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
 const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
@@ -1080,12 +1080,6 @@ function orderedStatusItems(items, order, options = {}) {
       const status = source[name];
       if (!status) return false;
       const statusText = String(status.status || "");
-      if (
-        name === "gliner"
-        && (statusText.startsWith("disabled") || status.pipeline_role === "explicit_research_only")
-      ) {
-        return false;
-      }
       if (!includeDisabled && statusText.startsWith("disabled")) return false;
       return true;
     })

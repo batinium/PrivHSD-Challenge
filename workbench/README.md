@@ -95,8 +95,7 @@ into the selected text column. When it is disabled, the backend adds a
 - Auto mode reports the active dashboard path: deterministic baseline,
   Presidio/scrubadub PII assist, candidate selection, exact-format export, and
   optional sidecar-only local LLM review.
-- GLiNER is not shown in the dashboard unless an explicit local GLiNER model is
-  configured for a research run.
+- GLiNER public controls were removed from the workbench runtime.
 - Filtered Presidio adds broader NER spans for likely names, locations, and
   durable dates, then rejects protected HSD cues and noisy spans.
 - HSD advisory uses the registered hate-speech classifiers to score the

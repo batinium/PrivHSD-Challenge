@@ -32,10 +32,7 @@ from contextsafe_hsd.simple_pipeline import (
     build_final_pipeline_rows,
 )
 from contextsafe_hsd.span_providers.base import SpanProvider
-from contextsafe_hsd.span_providers.registry import (
-    SUPPORTED_PROVIDER_NAMES,
-    load_span_provider,
-)
+from contextsafe_hsd.span_providers.registry import load_span_provider
 
 
 MAX_TEXT_LENGTH = 20_000
@@ -95,8 +92,6 @@ class PrivatizeRequest(BaseModel):
     generalize_targets: bool | None = None
     use_presidio: bool = False
     providers: list[str] = Field(default_factory=list)
-    gliner_model: str | None = None
-    gliner_profile: Literal["general", "pii"] = "general"
     run_hsd_classifier: bool = False
 
 
@@ -132,8 +127,6 @@ class CsvPrivatizeRequest(BaseModel):
     disabled_providers: list[str] = Field(default_factory=list)
     disabled_models: list[str] = Field(default_factory=list)
     metric_depth: Literal["fast", "sampled", "deep"] = "fast"
-    gliner_model: str | None = None
-    gliner_profile: Literal["general", "pii"] = "general"
     hsd_classification_backend: Literal["ml", "local_llm"] = "ml"
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions"
     local_llm_model: str = "openai/gpt-oss-20b"
@@ -431,8 +424,6 @@ def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]
         "disabled_providers": sorted(request.disabled_providers),
         "disabled_models": disabled_models,
         "metric_depth": request.metric_depth,
-        "gliner_model": request.gliner_model or "",
-        "gliner_profile": request.gliner_profile,
         "hsd_classification_backend": request.hsd_classification_backend,
         "local_llm_endpoint": request.local_llm_endpoint,
         "local_llm_model": request.local_llm_model,
@@ -909,8 +900,7 @@ def current_auto_pipeline_profile(
         "baseline": "deterministic_balanced",
         "pii_assist": {
             "default_components": ["presidio", "scrubadub"],
-            "explicit_research_components": ["gliner"],
-            "gliner_default": "disabled_without_explicit_local_model",
+            "removed_components": ["gliner"],
         },
         "candidate_ladder": [
             "balanced",
@@ -1755,12 +1745,6 @@ def model_status() -> dict[str, Any]:
                 "active_by_default": True,
                 "pipeline_role": "default_pii_assist",
             },
-            "gliner": {
-                "available": module_available("gliner"),
-                "active_by_default": False,
-                "pipeline_role": "explicit_research_only",
-                "status": "disabled_without_explicit_local_model",
-            },
             "scrubadub": {
                 "available": module_available("scrubadub"),
                 "active_by_default": True,
@@ -1831,7 +1815,7 @@ def provider_status_template() -> dict[str, Any]:
             "available": bool(status.get(name, {}).get("available", False)),
             "status": "not_requested",
         }
-        for name in sorted(SUPPORTED_PROVIDER_NAMES)
+        for name in ("presidio", "scrubadub")
     }
 
 
@@ -1839,26 +1823,18 @@ def selected_provider_names(request: PrivatizeRequest) -> list[str]:
     names = [name.strip().lower() for name in request.providers if name.strip()]
     if request.use_presidio and "presidio" not in names:
         names.append("presidio")
-    return [name for name in names if name in SUPPORTED_PROVIDER_NAMES]
+    return [name for name in names if name in {"presidio", "scrubadub"}]
 
 
 def run_selected_span_providers(
     text: str,
     names: list[str],
-    *,
-    gliner_model: str | None = None,
-    gliner_profile: str = "general",
 ) -> tuple[list[Any], dict[str, Any]]:
     candidates = []
     report = provider_status_template()
     for name in names:
         try:
-            provider_kwargs = (
-                {"gliner_model": gliner_model, "gliner_profile": gliner_profile}
-                if name == "gliner"
-                else {}
-            )
-            provider: SpanProvider = load_span_provider(name, **provider_kwargs)
+            provider: SpanProvider = load_span_provider(name)
             output = provider.propose(text)
         except Exception as exc:
             report[name] = {
@@ -1944,8 +1920,6 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
     provider_candidates, provider_report = run_selected_span_providers(
         request.text,
         provider_names,
-        gliner_model=request.gliner_model,
-        gliner_profile=request.gliner_profile,
     )
     presidio_status = provider_report.get("presidio", {})
     presidio_audit = presidio_status.get("audit")
@@ -2157,8 +2131,6 @@ def build_csv_privatize_response(
                 if request.generalize_targets is not None
                 else False
             ),
-            gliner_model=request.gliner_model,
-            gliner_profile=request.gliner_profile,
             hsd_classification_backend=request.hsd_classification_backend,
             local_llm_endpoint=request.local_llm_endpoint,
             local_llm_model=request.local_llm_model,

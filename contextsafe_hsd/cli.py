@@ -98,19 +98,6 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
         help="Allow optional model loaders to download weights. Default is local-only.",
     )
     parser.add_argument(
-        "--gliner-model",
-        help=(
-            "GLiNER model ID or local path for the optional GLiNER provider. "
-            "Remote IDs require --allow-model-download unless already cached."
-        ),
-    )
-    parser.add_argument(
-        "--gliner-profile",
-        choices=["general", "pii"],
-        default="general",
-        help="GLiNER label/threshold profile for optional privacy span detection.",
-    )
-    parser.add_argument(
         "--hsd-advisory-model",
         dest="hsd_advisory_models",
         action="append",
@@ -540,8 +527,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help=(
-            "Optional span provider for audited candidates: presidio, gliner, "
-            "or scrubadub. Repeatable."
+            "Optional span provider for audited candidates: presidio or "
+            "scrubadub. Repeatable."
         ),
     )
     rerank.add_argument("--author-col")
@@ -869,8 +856,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                gliner_model=args.gliner_model,
-                gliner_profile=args.gliner_profile,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "sanitize-classify":
@@ -895,8 +880,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                gliner_model=args.gliner_model,
-                gliner_profile=args.gliner_profile,
                 hsd_advisory_models=args.hsd_advisory_models,
                 hsd_classification_backend=args.hsd_classification_backend.replace(
                     "-",
@@ -937,7 +920,6 @@ def main(argv: list[str] | None = None) -> int:
                     metric_depth="fast",
                     allow_model_download=False,
                     audit_level="summary",
-                    gliner_profile="pii",
                     author_group_masking=args.enable_author_group_masking,
                     author_group_col=args.author_group_col,
                     author_group_min_repetitions=args.author_group_min_repetitions,
@@ -1088,8 +1070,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                gliner_model=args.gliner_model,
-                gliner_profile=args.gliner_profile,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "create-submission":
@@ -1118,8 +1098,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                gliner_model=args.gliner_model,
-                gliner_profile=args.gliner_profile,
                 hsd_advisory_models=args.hsd_advisory_models,
                 author_group_masking=args.enable_author_group_masking,
                 author_group_col=args.author_group_col,

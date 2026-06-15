@@ -123,8 +123,6 @@ exact parser contract. These are intentionally not part of `protect`:
 
 ```text
 --allow-model-download
---gliner-model MODEL_ID_OR_LOCAL_PATH
---gliner-profile general|pii
 --hsd-advisory-model APPROVED_MODEL_ID
 --device cpu|auto|cuda  # defaults to cpu; opt in to cuda/auto explicitly
 --max-model-batch-size N
@@ -137,10 +135,8 @@ exact parser contract. These are intentionally not part of `protect`:
 --generalize-targets | --preserve-targets
 ```
 
-GLiNER flags are research/debug-only. The default public `protect` and `auto`
-path do not use GLiNER unless a command explicitly configures a model; model
-downloads remain opt-in and should not be used during sensitive-data
-processing.
+GLiNER public configuration flags were removed from the runtime surface. The
+final path uses deterministic detectors plus Presidio/scrubadub PII Assist.
 
 Token-policy candidate generation and its training/evaluation commands were
 removed from the production CLI. The final path relies on deterministic
