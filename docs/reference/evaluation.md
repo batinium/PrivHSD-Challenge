@@ -98,8 +98,8 @@ Use this sequence when choosing the trusted single CSV pipeline:
    validity, provider status, local LLM review status, identifier residuals,
    and cue retention.
 6. Optionally mirror the same configuration through `sanitize-classify` for
-   local enriched analysis of HSD advisory score drift. Do not upload that CSV,
-   because it appends prediction columns.
+   local enriched analysis. Do not upload that CSV, because it appends
+   prediction columns.
 
 Latest recorded local 3,830-row TweetEval unseen enriched-analysis run predates
 the final simplification and used `sanitize-classify`. It remains historical
@@ -115,13 +115,12 @@ sidecar review. Historical manifest summary:
 - HSD decision agreement: 0.9802, with 76 decision changes;
 - HSD positive/negative counts: 1,971 / 1,859.
 
-## External Utility Probes
+## Historical Utility Probes
 
-Optional external HSD/toxicity probes are research and audit evidence, not
-official moderation decisions. The detailed implementation handoff for adding
-probe kinds, Cardiff multiclass target drift, an HSD advisory ensemble,
-continuous hate-score probes, toxicity-bias probes, and generated span/rationale
-probes lives in
+Optional external HSD/toxicity probes were research evidence, not official
+moderation decisions. Historical planning for probe kinds, Cardiff multiclass
+target drift, advisory ensembles, continuous hate-score probes, toxicity-bias
+probes, and generated span/rationale probes lives in
 `docs/planning/utility_probe_integration_plan.md`.
 
 ## Public Dataset Benchmarks

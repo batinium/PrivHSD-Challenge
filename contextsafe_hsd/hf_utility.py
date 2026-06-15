@@ -623,7 +623,8 @@ def resolve_models(model_ids: list[str] | None) -> list[HfUtilityModel]:
     unknown = [model_id for model_id in requested if model_id not in registry]
     if unknown:
         raise HfUtilityError(
-            "unknown HF utility model(s); use hf-model-registry: "
+            "unknown HF utility model(s); inspect APPROVED_MODELS in "
+            "contextsafe_hsd.hf_utility: "
             + ", ".join(unknown)
         )
     return [registry[model_id] for model_id in requested]

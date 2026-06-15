@@ -36,14 +36,6 @@ from .datasets import (
     prepare_tweet_eval_unseen,
 )
 from .dataset_profile import DatasetProfileError, profile_dataset
-from .hf_utility import (
-    DEFAULT_DEVICE as DEFAULT_HF_DEVICE,
-    DEFAULT_DROP_THRESHOLD,
-    DEFAULT_SAMPLE_SIZE,
-    HfUtilityError,
-    run_hf_utility_evaluation,
-    write_model_registry,
-)
 from .lm_context_benchmark import (
     DEFAULT_ENDPOINT as DEFAULT_LM_CONTEXT_ENDPOINT,
     DEFAULT_MAX_TOKENS as DEFAULT_LM_CONTEXT_MAX_TOKENS,
@@ -96,15 +88,6 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
         "--allow-model-download",
         action="store_true",
         help="Allow optional model loaders to download weights. Default is local-only.",
-    )
-    parser.add_argument(
-        "--hsd-advisory-model",
-        dest="hsd_advisory_models",
-        action="append",
-        help=(
-            "Approved OSS HSD classifier model for advisory scoring. Repeat to "
-            "override the default ensemble."
-        ),
     )
     parser.add_argument(
         "--device",
@@ -468,38 +451,6 @@ def build_parser() -> argparse.ArgumentParser:
     author_risk.add_argument("--test-size", type=float, default=0.25)
     author_risk.add_argument("--random-state", type=int, default=13)
 
-    hf_registry = subparsers.add_parser(
-        "hf-model-registry",
-        help="Write the approved optional Hugging Face utility model registry.",
-    )
-    hf_registry.add_argument("--output", type=Path)
-
-    hf_utility = subparsers.add_parser(
-        "evaluate-hf-utility",
-        help="Run optional Hugging Face HSD/toxicity utility probes.",
-    )
-    hf_utility.add_argument("--input", type=Path, required=True)
-    hf_utility.add_argument("--text-col", required=True)
-    hf_utility.add_argument("--privatized-col", default="privatized_text")
-    hf_utility.add_argument("--id-col")
-    hf_utility.add_argument("--label-col")
-    hf_utility.add_argument("--output", type=Path)
-    hf_utility.add_argument(
-        "--model",
-        dest="models",
-        action="append",
-        help="Approved HF model ID. Repeat to evaluate multiple models.",
-    )
-    hf_utility.add_argument("--sample-size", type=int, default=DEFAULT_SAMPLE_SIZE)
-    hf_utility.add_argument("--device", default=DEFAULT_HF_DEVICE)
-    hf_utility.add_argument("--batch-size", type=int, default=8)
-    hf_utility.add_argument(
-        "--drop-threshold",
-        type=float,
-        default=DEFAULT_DROP_THRESHOLD,
-    )
-    hf_utility.add_argument("--decision-threshold", type=float, default=0.5)
-
     rerank = subparsers.add_parser(
         "rerank-candidates",
         help="Generate row-local privatization candidates and choose the best tradeoff.",
@@ -856,7 +807,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "sanitize-classify":
             generalize_targets = None
@@ -880,7 +830,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                hsd_advisory_models=args.hsd_advisory_models,
                 hsd_classification_backend=args.hsd_classification_backend.replace(
                     "-",
                     "_",
@@ -1031,23 +980,6 @@ def main(argv: list[str] | None = None) -> int:
                 test_size=args.test_size,
                 random_state=args.random_state,
             )
-        elif args.command == "hf-model-registry":
-            result = write_model_registry(args.output)
-        elif args.command == "evaluate-hf-utility":
-            result = run_hf_utility_evaluation(
-                args.input,
-                text_col=args.text_col,
-                privatized_col=args.privatized_col,
-                id_col=args.id_col,
-                label_col=args.label_col,
-                output_path=args.output,
-                model_ids=args.models,
-                sample_size=args.sample_size,
-                device=args.device,
-                batch_size=args.batch_size,
-                drop_threshold=args.drop_threshold,
-                decision_threshold=args.decision_threshold,
-            )
         elif args.command == "rerank-candidates":
             result = run_candidate_reranking(
                 args.input,
@@ -1070,7 +1002,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "create-submission":
             generalize_targets = None
@@ -1098,7 +1029,6 @@ def main(argv: list[str] | None = None) -> int:
                 disabled_providers=args.disabled_providers,
                 disabled_models=args.disabled_models,
                 audit_level=args.audit_level,
-                hsd_advisory_models=args.hsd_advisory_models,
                 author_group_masking=args.enable_author_group_masking,
                 author_group_col=args.author_group_col,
                 author_group_min_repetitions=args.author_group_min_repetitions,
@@ -1268,7 +1198,6 @@ def main(argv: list[str] | None = None) -> int:
         CsvPipelineError,
         CueCheckError,
         DatasetProfileError,
-        HfUtilityError,
         LmContextBenchmarkError,
         MetadataLeakageError,
         OSError,

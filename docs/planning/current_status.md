@@ -68,11 +68,10 @@ exact-format upload path.
   `is_hate_speech` column exists, predictions are written to
   `predicted_is_hate_speech` unless `--overwrite-hate-columns` is passed.
 - Optional Presidio and scrubadub are presented publicly as internal PII
-  Assist. Deterministic rules always run. GLiNER is no longer part of the
-  default public auto path after a no-gain ablation; it remains available only
-  for explicit local research/debug runs with configured artifacts.
-- Token-policy and HSD advisory outputs remain internal advisory evidence
-  behind routing, fusion, candidate scoring, verification, and fallback.
+  Assist. Deterministic rules always run. GLiNER public knobs were removed from
+  the runtime surface.
+- Token-policy and HF HSD advisory public runtime paths were removed. The final
+  classifier story is sidecar-only local LLM review.
 - Exact and auto CSV paths default to `metric-depth=fast`; sampled/deep metrics
   are opt-in local audits.
 
@@ -83,13 +82,13 @@ Travel handoff on 2026-06-15:
 - No pipeline or LLM experiment process is intentionally left running.
 - The main deterministic pipeline is intact. Use `protect --preset exact
   --llm-review local-llm` for the final upload-shaped CSV plus LLM sidecars.
-  Use `sanitize-classify` only for local analysis because it appends HSD helper
+  Use `sanitize-classify` only for local analysis because it appends helper
   columns.
 - Local LLM classification is functional through the OpenAI-compatible endpoint
   `http://100.120.207.64:1234/v1/chat/completions` with model
   `openai/gpt-oss-20b`.
-- The old HF HSD advisory classifier is disabled when
-  `--hsd-classification-backend local-llm` is selected.
+- The old HF HSD advisory classifier and evaluation commands are removed from
+  the public runtime.
 - Optional author-group masking is implemented for `protect`,
   `create-submission`, and `sanitize-classify`. It treats numeric `author`
   values as grouping keys only and masks only repeated detector-backed factual
@@ -198,18 +197,18 @@ python -m privhsd.cli sanitize-classify \
   --max-model-batch-size 32
 ```
 
-Final aggregate result:
+Historical enriched-analysis aggregate result:
 
 - validation passed, 3,830 rows in and 3,830 rows out;
 - `text` replaced in place and `is_hate_speech`, `hate_speech_score`,
   `hate_speech_model_count` appended;
 - chosen candidates: balanced 1,662, provider fusion 124, style scrubbed
-  1,099, token policy 945;
+  1,099, removed token-policy branch 945;
 - direct identifiers 4,205 -> 1, quasi identifiers -> 0;
 - target cue retention mean 1.0062, utility cue retention mean 1.0048,
   character utility retention mean 0.8512;
-- HSD advisory status ok, two models, 1,971 positive and 1,859 negative
-  predictions, 0.9802 original-vs-sanitized decision agreement.
+- Historical HSD advisory status ok, two models, 1,971 positive and 1,859
+  negative predictions, 0.9802 original-vs-sanitized decision agreement.
 
 Focused regression after detector tuning:
 
@@ -219,8 +218,7 @@ Focused regression after detector tuning:
   GLiNER, Presidio, scrubadub, torch, and transformers importable;
   sentence-transformers and Detoxify not importable.
 
-Most recent local verification after the simplified pipeline and HSD advisory
-ensemble update:
+Most recent local verification before this final cleanup:
 
 - `python -m compileall privhsd contextsafe_hsd workbench/backend`: passed.
 - `python -m pytest tests/test_simple_pipeline.py tests/test_auto_pipeline.py tests/test_hf_utility.py tests/test_submission.py tests/test_csv_pipeline.py -q`: 29 passed.

@@ -98,8 +98,6 @@ into the selected text column. When it is disabled, the backend adds a
 - GLiNER public controls were removed from the workbench runtime.
 - Filtered Presidio adds broader NER spans for likely names, locations, and
   durable dates, then rejects protected HSD cues and noisy spans.
-- HSD advisory uses the registered hate-speech classifiers to score the
-  original and chosen protected candidate for each row, then rejects candidate
-  rewrites that lose too much hatred-detection signal. Platform insight uses
-  CSV post-classification labels when present; otherwise it uses these real
-  pipeline HSD advisory scores. It is not auto-moderation.
+- Local LLM sidecar review is the final HSD classification surface. Platform
+  insight uses CSV post-classification labels when present and otherwise reads
+  sidecar classification metadata; it is not auto-moderation.

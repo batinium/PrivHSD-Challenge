@@ -191,20 +191,12 @@ def test_sanitize_classify_command_is_registered():
             "--text-col",
             "body",
             "--allow-model-download",
-            "--hsd-advisory-model",
-            "facebook/roberta-hate-speech-dynabench-r4-target",
-            "--hsd-advisory-model",
-            "cardiffnlp/twitter-roberta-base-hate-latest",
         ]
     )
 
     assert args.command == "sanitize-classify"
     assert args.text_col == "body"
     assert args.device == "cpu"
-    assert args.hsd_advisory_models == [
-        "facebook/roberta-hate-speech-dynabench-r4-target",
-        "cardiffnlp/twitter-roberta-base-hate-latest",
-    ]
 
 
 def test_sanitize_classify_command_maps_local_llm_backend():

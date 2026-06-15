@@ -66,7 +66,7 @@ workflows.
 | Command | Owner workstream | Notes |
 | --- | --- | --- |
 | `create-submission` | CSV contract and auto orchestration | Legacy exact-output interface without sidecar LLM review. Prefer `protect --preset exact --llm-review local-llm` for the final path. |
-| `sanitize-classify` | Auto orchestration and HSD advisory | Enriched local output: text replaced in place plus appended advisory HSD prediction columns. Not exact-format. |
+| `sanitize-classify` | Auto orchestration and classification analysis | Enriched local output: text replaced in place plus appended prediction columns. Not exact-format. |
 | `anonymize` | CSV contract and deterministic masking | Local deterministic output path; may add helper columns unless replace-text behavior is requested. |
 | `validate-submission` | CSV contract and submission | Required exact-shape gate. |
 | `profile-dataset` | CSV contract and submission | Inspect columns before choosing a run path. |
@@ -94,7 +94,6 @@ Important legacy exact-output flags:
 | `benchmark-utility` | Metrics and evaluation | Local classifier utility proxy, not part of the public exact path. |
 | `ablate` | Metrics and evaluation | Compare deterministic privatization variants. |
 | `compare-presidio` | Provider evaluation | Optional provider comparison. |
-| `evaluate-hf-utility` | Model evaluation | Optional Hugging Face HSD/toxicity probes. |
 | `benchmark-lm-context` | Model evaluation | Local LM Studio context-labeler benchmark. |
 | `bound-contributions` | CSV contract and evaluation | Drops rows; not exact-format by default. |
 
@@ -102,7 +101,6 @@ Important legacy exact-output flags:
 
 | Command | Owner workstream | Notes |
 | --- | --- | --- |
-| `hf-model-registry` | Model evaluation | Write the approved optional HF utility model registry. |
 | `train-classifier` | Classifier baseline | Train a local TF-IDF/logistic baseline. |
 | `evaluate-classifier` | Classifier baseline | Evaluate the local baseline on labeled CSV rows. |
 | `predict-classifier` | Classifier baseline | Write row-preserving baseline predictions. |
@@ -123,7 +121,6 @@ exact parser contract. These are intentionally not part of `protect`:
 
 ```text
 --allow-model-download
---hsd-advisory-model APPROVED_MODEL_ID
 --device cpu|auto|cuda  # defaults to cpu; opt in to cuda/auto explicitly
 --max-model-batch-size N
 --max-provider-rows N
@@ -142,6 +139,10 @@ Token-policy candidate generation and its training/evaluation commands were
 removed from the production CLI. The final path relies on deterministic
 detectors, PII Assist providers, cue-preserving candidate selection, and
 sidecar-only local LLM review.
+
+Hugging Face HSD advisory evaluation commands and model-selection knobs were
+removed from the production CLI. Local LLM sidecar review is the final
+classification surface.
 
 Important `sanitize-classify` prediction flags:
 

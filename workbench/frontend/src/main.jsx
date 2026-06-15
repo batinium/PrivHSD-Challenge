@@ -64,9 +64,8 @@ const CATEGORY_LABELS = {
   slur_or_profanity: "Slur / profanity",
   sexual_orientation: "Sexual orientation"
 };
-const AUTO_DASHBOARD_DISABLED_MODELS = ["semantic", "local_llm"];
 const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub"];
-const AUTO_MODEL_ORDER = ["hsd_advisory", "local_llm"];
+const AUTO_MODEL_ORDER = ["local_llm"];
 const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
 const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
 const RISK_FILTERS = [
@@ -823,9 +822,7 @@ function NgoDashboard({ result }) {
   const targetGroups = insight.target_groups || {};
   const ngoReview = insight.ngo_review || {};
   const rowCount = insight.row_count || result?.manifest?.row_count || 0;
-  const sourceLabel = classification.source === "pipeline_hsd_advisory"
-    ? "HSD advisory model flags"
-    : classification.source === "csv_post_classification_columns"
+  const sourceLabel = classification.source === "csv_post_classification_columns"
       ? "CSV classification labels"
       : classification.source === "local_llm_hsd_review"
         ? "local LLM review"
@@ -984,9 +981,6 @@ function DataIntakePanel({
       <div className="backend-control">
         <span>HSD Review Backend</span>
         <div className="segmented-control backend-selector">
-          <button className={hsdBackend === "ml" ? "active" : ""} onClick={() => onHsdBackend("ml")} type="button">
-            ML classifier
-          </button>
           <button className={hsdBackend === "local_llm" ? "active" : ""} onClick={() => onHsdBackend("local_llm")} type="button">
             Local LLM
           </button>
@@ -1087,15 +1081,8 @@ function orderedStatusItems(items, order, options = {}) {
 }
 
 function modelStatusFromSummary(modelStatus) {
-  const hsd = modelStatus?.hsd_advisory;
   const localLlm = modelStatus?.local_llm;
   return {
-    hsd_advisory: hsd
-      ? {
-          status: hsd.available ? "available" : "missing_dependency",
-          ...hsd
-        }
-      : undefined,
     local_llm: localLlm
       ? {
           status: localLlm.status || "disabled_until_selected",
@@ -1238,7 +1225,7 @@ function csvRequestPayload({
     mode: "auto",
     style_scrub: false,
     disabled_providers: [],
-    disabled_models: hsdBackend === "local_llm" ? ["semantic"] : AUTO_DASHBOARD_DISABLED_MODELS,
+    disabled_models: ["semantic"],
     metric_depth: "fast",
     hsd_classification_backend: hsdBackend,
     local_llm_endpoint: localLlmEndpoint,
@@ -1256,7 +1243,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [textCol, setTextCol] = useState("");
   const [idCol, setIdCol] = useState("");
   const [replaceText, setReplaceText] = useState(true);
-  const [hsdBackend, setHsdBackend] = useState("ml");
+  const [hsdBackend, setHsdBackend] = useState("local_llm");
   const [localLlmEndpoint, setLocalLlmEndpoint] = useState(DEFAULT_LOCAL_LLM_ENDPOINT);
   const [localLlmModel, setLocalLlmModel] = useState(DEFAULT_LOCAL_LLM_MODEL);
   const [localLlmBatchSize, setLocalLlmBatchSize] = useState("10");

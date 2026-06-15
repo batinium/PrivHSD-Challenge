@@ -85,6 +85,9 @@ commit/push stable milestones.
   affect the local LLM HSD review runtime used by the final sidecar path.
 - Removed token-policy experiment/runtime modules, CLI commands, workbench
   model controls, training runbook, and legacy tests from the production tree.
+- Removed GLiNER and HF HSD advisory public runtime knobs from the CLI and
+  workbench dashboard. Historical advisory code remains quarantined outside the
+  final exact CSV path.
 
 Focused verification so far:
 

@@ -35,7 +35,7 @@ Input CSV
 | --- | --- | --- |
 | Privacy Detection | Find direct and quasi identifiers, build a deterministic baseline, and merge optional local PII Assist evidence. | `detectors.py`, `pipeline.py`, `metrics.py`, `span_providers/`, `auto/` |
 | Meaning Protection | Reject or warn on candidates that erase HSD-relevant cues: targets, threats/actions, negation, modality, quotation, counterspeech, and reporting/rationale context. | `cue_checks.py`, `context.py`, `rationale_checks.py`, `rerank.py` |
-| Verification | Check exact shape, residual identifiers, metadata leakage, HSD advisory drift when available, source slices, and author-risk hook status. | `submission.py`, `metrics.py`, `metadata_leakage.py`, `source_report.py`, `author_risk.py`, `models/hsd_advisory_runtime.py` |
+| Verification | Check exact shape, residual identifiers, metadata leakage, local LLM review status, source slices, and author-risk hook status. | `submission.py`, `metrics.py`, `metadata_leakage.py`, `source_report.py`, `author_risk.py`, `models/local_llm_hsd_review_runtime.py` |
 
 Provider names, model names, load counts, and debug fields may remain in
 manifests for auditability, but public summaries should lead with these three
@@ -56,8 +56,9 @@ contextsafe-hsd protect \
 ```
 
 `--preset exact` calls the current exact `auto` path and preserves the input
-CSV schema. It writes cleaned text only. HSD advisory output is a Verification
-signal in the manifest, not appended prediction columns.
+CSV schema. It writes cleaned text only. Local LLM HSD labels, reason tags, and
+validated PII suggestions are Verification signals in sidecars, not appended
+prediction columns.
 
 `--preset analysis` is the enriched local-analysis path. It may append
 advisory HSD columns after sanitization and is not an exact-format upload path.
@@ -144,8 +145,8 @@ Hard rejects:
 - candidate depends on provider/model errors without a deterministic fallback.
 
 High-confidence direct PII removal is a hard privacy rule, not a utility
-preference. If a stricter direct-PII cleanup changes HSD advisory scores, the
-drift is reported, but the identifier is still removed.
+preference. If a stricter direct-PII cleanup changes classification evidence,
+the drift is reported in sidecars, but the identifier is still removed.
 
 ## Manifest Contract
 
@@ -178,7 +179,11 @@ Manifests should be readable without knowing provider internals:
     },
     "verification": {
       "residual_direct_identifier_count": 0,
-      "hsd_advisory_status": "skipped",
+      "local_llm_hsd_review": {
+        "status": "ok",
+        "parse_count": 100,
+        "fallback_count": 0
+      },
       "metadata_leakage_status": "not_run",
       "author_risk": {
         "author_column_exists": false,
@@ -195,13 +200,12 @@ debug compatibility. Row-level audit fields should include the chosen
 candidate, why it was chosen, privacy gain, meaning-protection rejections, and
 whether residual review is required.
 
-## HSD Advisory
+## Local LLM Review
 
-HSD advisory models are Verification aids. In exact mode, they can check
-original-vs-cleaned drift and write status to the manifest. If unavailable,
-exact mode should still run and record a skipped status. In analysis mode,
-they may append prediction columns, but those columns are local advisory
-signals and not production hate-speech labels.
+Local LLM review is a Verification aid. In exact mode, it reads only cleaned
+text and writes HSD labels, reason tags, parse/fallback counts, and validated
+PII suggestions to manifest/audit sidecars. It must not rewrite whole comments
+or append columns to the output CSV.
 
 ## Author-Risk Hook
 

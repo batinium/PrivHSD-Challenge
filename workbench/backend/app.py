@@ -6,7 +6,6 @@ import hashlib
 import hmac
 from collections import Counter
 import csv
-from functools import lru_cache
 import importlib.util
 import io
 import json
@@ -44,9 +43,6 @@ CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
 CSV_JOB_TTL_SECONDS = 60 * 60
-HSD_ADVISORY_MODEL_ID = "facebook/roberta-hate-speech-dynabench-r4-target"
-CARDIFF_HATE_MODEL_ID = "cardiffnlp/twitter-roberta-base-hate-latest"
-LOCAL_CLASSIFIER_PATH = ROOT / "data/outputs/privhsd_classifier.pkl"
 CSV_JOBS: dict[str, dict[str, Any]] = {}
 CSV_JOBS_LOCK = threading.Lock()
 CSV_PROGRESS_PHASES = {
@@ -92,7 +88,6 @@ class PrivatizeRequest(BaseModel):
     generalize_targets: bool | None = None
     use_presidio: bool = False
     providers: list[str] = Field(default_factory=list)
-    run_hsd_classifier: bool = False
 
 
 class PrivatizeResponse(BaseModel):
@@ -890,7 +885,7 @@ def current_auto_pipeline_profile(
     *,
     disabled_models: set[str] | frozenset[str] | None = None,
 ) -> dict[str, Any]:
-    disabled = set(disabled_models or set())
+    _ = disabled_models
     return {
         "public_stage_model": [
             "privacy_detection",
@@ -917,20 +912,13 @@ def current_auto_pipeline_profile(
                 "direct_identifier_increase",
                 "new_identifier_signal",
                 "length_drift",
-                "hsd_advisory_large_drop",
-                "hsd_advisory_decision_drift",
             ],
             "protected_cue_policy": (
                 "target_action_negation_modality_quote_counterspeech_reporting"
             ),
         },
         "verification": {
-            "hsd_advisory_default_models": [
-                HSD_ADVISORY_MODEL_ID,
-                CARDIFF_HATE_MODEL_ID,
-            ],
-            "hsd_advisory_enabled_for_this_profile": "hsd_advisory" not in disabled,
-            "hsd_classification_backends": ["ml", "local_llm"],
+            "hsd_classification_backends": ["local_llm"],
             "local_llm_review_default": "disabled_until_selected",
             "post_classification_hatred_columns": list(POST_CLASSIFICATION_LABEL_COLUMNS),
             "post_classification_score_columns": list(POST_CLASSIFICATION_SCORE_COLUMNS),
@@ -1672,17 +1660,6 @@ def model_status() -> dict[str, Any]:
             "label": "Deterministic privacy and cue checks",
             "role": "Always runs. This is the submission-safe layer.",
         },
-        "hsd_advisory": {
-            "available": module_available("transformers")
-            and module_available("torch"),
-            "active_by_default": True,
-            "pipeline_role": "auto_lazy_verification",
-            "model_ids": [HSD_ADVISORY_MODEL_ID, CARDIFF_HATE_MODEL_ID],
-            "role": (
-                "Lazy auto-pipeline HSD preservation check. It compares "
-                "candidate rewrites and rejects large hatred-score drift."
-            ),
-        },
         "local_llm": {
             "available": True,
             "active_by_default": False,
@@ -1694,33 +1671,6 @@ def model_status() -> dict[str, Any]:
                 "Optional OpenAI-compatible local LLM review. It only receives "
                 "post-cleaning text and does not run during status checks."
             ),
-        },
-        "hsd_classifiers": {
-            "primary": {
-                "available": module_available("transformers")
-                and module_available("torch"),
-                "active_by_default": False,
-                "model_id": HSD_ADVISORY_MODEL_ID,
-                "role": (
-                    "Optional HSD utility classifier. It scores original and "
-                    "protected text to surface decision or score drift."
-                ),
-            },
-            "cardiff_hate_latest": {
-                "available": module_available("transformers")
-                and module_available("torch"),
-                "active_by_default": False,
-                "model_id": CARDIFF_HATE_MODEL_ID,
-                "status": "registered_not_loaded",
-            },
-            "local_tfidf_logreg": {
-                "available": LOCAL_CLASSIFIER_PATH.exists(),
-                "active_by_default": False,
-                "path": str(LOCAL_CLASSIFIER_PATH.relative_to(ROOT)),
-                "status": "available"
-                if LOCAL_CLASSIFIER_PATH.exists()
-                else "missing_artifact",
-            },
         },
         "llm_guidance": {
             "available": False,
@@ -1751,59 +1701,6 @@ def model_status() -> dict[str, Any]:
                 "pipeline_role": "default_pii_assist",
             },
         },
-    }
-
-
-@lru_cache(maxsize=1)
-def load_hsd_classifier() -> Any:
-    from contextsafe_hsd.models.hsd_advisory_runtime import HsdAdvisoryRuntime
-
-    return HsdAdvisoryRuntime.from_model_id(
-        HSD_ADVISORY_MODEL_ID,
-        allow_model_download=False,
-        device="cpu",
-        decision_threshold=0.5,
-        large_drop_threshold=0.25,
-        max_abs_drift=0.35,
-    )
-
-
-def run_hsd_classifier(original: str, privatized: str) -> dict[str, Any]:
-    status = model_status()["hsd_classifiers"]["primary"]
-    if not status["available"]:
-        return {
-            "active": False,
-            "available": False,
-            "status": "missing_dependency",
-            "model_id": HSD_ADVISORY_MODEL_ID,
-            "message": "Install torch and transformers to run HSD classifier scoring.",
-        }
-    try:
-        classifier = load_hsd_classifier()
-        scores = classifier.score_texts([original, privatized], batch_size=2)
-        if len(scores) != 2:
-            return {
-                "active": False,
-                "available": True,
-                "status": "unexpected_model_output",
-                "model_id": HSD_ADVISORY_MODEL_ID,
-                "message": "Classifier returned an unexpected number of scores.",
-            }
-        comparison = classifier.compare(scores[0], scores[1])
-    except Exception as exc:  # pragma: no cover - optional dependency/model path
-        return {
-            "active": False,
-            "available": True,
-            "status": "runtime_error",
-            "model_id": HSD_ADVISORY_MODEL_ID,
-            "message": str(exc),
-        }
-    return {
-        "active": True,
-        "available": True,
-        "status": "ok",
-        "role": "hsd_utility_classifier",
-        **comparison,
     }
 
 
@@ -1978,17 +1875,15 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         "status": "removed",
         "message": "Token-policy ensemble candidate generation was removed from the final pipeline.",
     }
-    hsd_classifier = (
-        run_hsd_classifier(request.text, result.text)
-        if request.run_hsd_classifier
-        else {
-            "active": False,
-            "available": model_status()["hsd_classifiers"]["primary"]["available"],
-            "status": "not_requested",
-            "model_id": HSD_ADVISORY_MODEL_ID,
-            "message": "Enable Run HSD classifier to score original/protected drift.",
-        }
-    )
+    hsd_classifier = {
+        "active": False,
+        "available": False,
+        "status": "removed",
+        "message": (
+            "Workbench HF HSD classifier scoring was removed from the final "
+            "runtime; use sidecar local LLM review in the CSV pipeline."
+        ),
+    }
     llm_guidance = llm_review_guidance(metric=metric, cue=cue, context=context)
     return {
         "privatized_text": result.text,

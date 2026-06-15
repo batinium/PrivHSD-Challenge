@@ -71,22 +71,14 @@ Example grouped status:
 }
 ```
 
-## HSD Advisory
+## Local LLM Review
 
-HSD advisory models belong under Verification.
+Local LLM review belongs under Verification.
 
-In exact mode, they may compare original-vs-cleaned HSD signal drift and write
-status to the manifest. They must not append columns to exact output. If no
-approved local advisory model is available, exact mode should still run and
-record a skipped status.
-
-In analysis mode, the same runtime may append advisory prediction columns after
-sanitization. These columns are local diagnostic signals, not production
-hate-speech labels or moderation decisions.
-
-The default advisory ensemble may use approved OSS Hugging Face classifiers
-when they are available locally or explicitly allowed for a non-sensitive
-debug/research run.
+In exact mode, it reviews cleaned text only and writes HSD labels, reason tags,
+provider diagnostics, parse/fallback counts, and validated PII suggestions to
+sidecars. It must not append columns to exact output and must not rewrite whole
+comments.
 
 ## Removed Model Paths
 
@@ -94,6 +86,10 @@ Token-policy candidate generation and training/evaluation commands were removed
 from the production code path. The final pipeline keeps deterministic span
 detection, Presidio/scrubadub PII Assist, candidate selection with cue
 preservation, and sidecar-only local LLM review.
+
+Hugging Face HSD advisory model-selection and evaluation commands were removed
+from the production CLI. Historical advisory results remain planning evidence
+only.
 
 ## Other Research Model Paths
 
@@ -109,7 +105,7 @@ may produce a local enriched CSV:
 ```text
 Privacy Detection
   -> Meaning Protection
-  -> Verification with HSD advisory prediction columns
+  -> Verification with local LLM review columns
 ```
 
 This output is useful for triage and error analysis. Because it may append
