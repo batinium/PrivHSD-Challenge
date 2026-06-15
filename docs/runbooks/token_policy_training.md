@@ -73,6 +73,10 @@ contextsafe-hsd evaluate-token-policy-ensemble \
 
 ## Candidate Helper Path
 
+The token-policy ensemble is not part of the default public auto/protect path.
+Enable it only for explicit research or audit ablations where its behavior is
+being measured.
+
 Use standalone predictions only as candidate support:
 
 ```bash

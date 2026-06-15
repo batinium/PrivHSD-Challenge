@@ -57,6 +57,15 @@ def token_policy_artifact_status(model_dir: Path) -> dict[str, Any]:
 def discover_token_policy(config: AutoPipelineConfig) -> dict[str, Any]:
     if "token_policy_ensemble" in config.disabled_models or "token-policy" in config.disabled_models:
         return disabled_status("model")
+    if not config.enable_token_policy:
+        return {
+            "status": "disabled",
+            "kind": "model",
+            "detail": (
+                "Token-policy candidate generation is disabled by default; "
+                "use --enable-token-policy only for research/audit ablations."
+            ),
+        }
     dependency = dependency_status(("torch", "transformers"), kind="model")
     if dependency:
         return dependency

@@ -540,6 +540,7 @@ def run_candidate_reranking(
     audit_level: str = "summary",
     gliner_model: str | None = None,
     gliner_profile: str = "general",
+    enable_token_policy: bool = False,
     hsd_advisory_models: list[str] | None = None,
 ) -> dict[str, Any]:
     candidate_cols = candidate_cols or []
@@ -567,6 +568,7 @@ def run_candidate_reranking(
             "provider_language": presidio_language,
             "gliner_model": gliner_model,
             "gliner_profile": gliner_profile,
+            "enable_token_policy": enable_token_policy,
         }
         if hsd_advisory_models is not None:
             config_kwargs["hsd_advisory_models"] = tuple(hsd_advisory_models)

@@ -204,6 +204,14 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
         help="Disable an automatically discovered model. Repeatable.",
     )
     parser.add_argument(
+        "--enable-token-policy",
+        action="store_true",
+        help=(
+            "Enable research/audit token-policy candidate generation. "
+            "Disabled by default for explainability."
+        ),
+    )
+    parser.add_argument(
         "--audit-level",
         choices=["summary", "row", "debug"],
         default="summary",
@@ -1171,6 +1179,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "sanitize-classify":
@@ -1197,6 +1206,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
@@ -1352,6 +1362,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "dpmlm-spike":
@@ -1415,6 +1426,7 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
+                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "validate-submission":

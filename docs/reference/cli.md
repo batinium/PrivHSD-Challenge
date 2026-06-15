@@ -132,6 +132,7 @@ exact parser contract. These are intentionally not part of `protect`:
 --max-provider-rows N
 --disable-provider NAME
 --disable-model NAME
+--enable-token-policy
 --audit-level summary|row|debug
 --style-scrub
 --presidio-augment
@@ -142,6 +143,10 @@ GLiNER flags are research/debug-only. The default public `protect` and `auto`
 path do not use GLiNER unless a command explicitly configures a model; model
 downloads remain opt-in and should not be used during sensitive-data
 processing.
+
+Token-policy ensemble candidate generation is also disabled by default. Use
+`--enable-token-policy` only for research or audit ablations where token-action
+candidate behavior is being measured explicitly.
 
 Important `sanitize-classify` prediction flags:
 

@@ -144,7 +144,13 @@ def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(
     assert manifest["providers"]["presidio"]["status"] == "missing_dependency"
     assert manifest["providers"]["scrubadub"]["status"] == "missing_dependency"
     assert manifest["providers"]["gliner"]["status"] == "disabled"
-    assert manifest["models"]["token_policy_ensemble"]["status"] == "missing_dependency"
+    assert manifest["models"]["token_policy_ensemble"]["status"] == "disabled"
+    assert (
+        manifest["stages"]["meaning_protection"].get(
+            "rows_considered_for_token_policy_internal"
+        )
+        is None
+    )
     assert "[EMAIL]" in read_rows(output)[0]["text"]
 
 
@@ -291,6 +297,7 @@ def test_auto_context_loads_fake_provider_and_model_once_per_run():
 
     context = AutoPipelineContext.create(
         AutoPipelineConfig(
+            enable_token_policy=True,
             disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
             disabled_models=frozenset({"semantic", "hsd_advisory"}),
         ),

@@ -203,16 +203,36 @@ def build_stage_summary(
         comparison_count=hsd_advisory_comparison_count,
         rejection_counts=rejection_counts,
     )
+    privacy_ladder_order = [
+        "deterministic_baseline",
+        "strict_residual_pii_cleanup",
+        "pii_assist",
+    ]
+    meaning_protection = {
+        "protected_cue_policy": (
+            "target_action_negation_modality_quote_counterspeech_reporting"
+        ),
+        "candidate_count": candidate_count,
+        "rejected_candidate_count": rejected_candidate_count,
+        "cue_loss_rejections": int(sum(meaning_rejection_counts.values())),
+        "rejection_counts": dict(sorted(meaning_rejection_counts.items())),
+        "target_cue_retention_mean": metrics.get("target_cue_retention_mean"),
+        "target_term_retention_mean": metrics.get("target_term_retention_mean"),
+        "utility_cue_retention_mean": metrics.get("utility_cue_retention_mean"),
+        "character_utility_retention_mean": metrics.get(
+            "character_utility_retention_mean"
+        ),
+    }
+    if config.enable_token_policy:
+        privacy_ladder_order.append("token_policy_internal")
+        meaning_protection["rows_considered_for_token_policy_internal"] = (
+            token_policy_rows_considered
+        )
     return {
         "privacy_detection": {
             "baseline": f"deterministic_{config.baseline_mode}",
             "privacy_ladder": {
-                "order": [
-                    "deterministic_baseline",
-                    "strict_residual_pii_cleanup",
-                    "pii_assist",
-                    "token_policy_internal",
-                ],
+                "order": privacy_ladder_order,
                 "strict_residual_pii_cleanup": {
                     "policy": (
                         "score stricter residual cleanup candidates before final "
@@ -243,22 +263,7 @@ def build_stage_summary(
             "changed_text_cells": changed_text_cells,
             "privacy_gain_mean": metrics.get("privacy_gain_mean", 0.0),
         },
-        "meaning_protection": {
-            "protected_cue_policy": (
-                "target_action_negation_modality_quote_counterspeech_reporting"
-            ),
-            "candidate_count": candidate_count,
-            "rejected_candidate_count": rejected_candidate_count,
-            "cue_loss_rejections": int(sum(meaning_rejection_counts.values())),
-            "rejection_counts": dict(sorted(meaning_rejection_counts.items())),
-            "rows_considered_for_token_policy_internal": token_policy_rows_considered,
-            "target_cue_retention_mean": metrics.get("target_cue_retention_mean"),
-            "target_term_retention_mean": metrics.get("target_term_retention_mean"),
-            "utility_cue_retention_mean": metrics.get("utility_cue_retention_mean"),
-            "character_utility_retention_mean": metrics.get(
-                "character_utility_retention_mean"
-            ),
-        },
+        "meaning_protection": meaning_protection,
         "verification": {
             "residual_identifier_count": metrics.get("residual_identifier_count", 0),
             "residual_direct_identifier_count": metrics.get(

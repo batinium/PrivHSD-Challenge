@@ -46,6 +46,7 @@ class AutoPipelineConfig:
     gliner_profile: str = "general"
     token_policy_model_dirs: tuple[Path, ...] = DEFAULT_TOKEN_POLICY_MODEL_DIRS
     token_policy_mode: str = "mean_prob"
+    enable_token_policy: bool = False
     hsd_advisory_model: str = DEFAULT_HSD_ADVISORY_MODEL
     hsd_advisory_models: tuple[str, ...] = DEFAULT_HSD_ADVISORY_MODELS
     hsd_advisory_decision_threshold: float = 0.5

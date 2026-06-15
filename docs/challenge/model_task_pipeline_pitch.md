@@ -45,7 +45,7 @@ output narrow and checkable.**
 
 | Task | What it does | Model / technology |
 | --- | --- | --- |
-| Privacy risk detection | Finds names, emails, handles, locations, organizations, IDs, phone numbers. | Deterministic regex/rule detector is always present; optional local Presidio, scrubadub, GLiNER, and token-policy spans can add candidates in auto mode |
+| Privacy risk detection | Finds names, emails, handles, locations, organizations, IDs, phone numbers. | Deterministic regex/rule detector is always present; optional local Presidio and scrubadub can add candidates; GLiNER and token-policy are explicit research/audit paths |
 | Author doxxing risk identification | Detects details that can expose or re-identify the author or target: repeated handle, school/workplace, city, contact info, signature, unique style markers. | PII span combinations, metadata checks, style-risk heuristics, optional author-risk classifier |
 | Risk hiding | Replaces accepted spans with placeholders and optionally reduces author-style leakage. | Deterministic policy: `[PERSON]`, `[USER]`, `[EMAIL]`, `[LOCATION]`, `[ORG]`, `[ID]`; style scrubber |
 | Meaning protection | Checks whether masking removed target group, threat, negation, quote, counterspeech, or other HSD cues. | Rule-based cue checks plus HSD model drift check |

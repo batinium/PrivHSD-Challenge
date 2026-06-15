@@ -110,10 +110,12 @@ Runtime mapping:
 - `NORMALIZE_STYLE` is style-candidate evidence.
 - `REVIEW` is routing/audit evidence.
 
-Token-policy output never directly overwrites final text. It must pass fusion,
-candidate scoring, cue checks, residual checks, and exact-format validation
-before influencing an output candidate. Public quickstart and official
-runbooks should not ask users to choose token-policy settings.
+Token-policy output is disabled by default in the public auto/protect path and
+should be enabled only for explicit research or audit ablations. It never
+directly overwrites final text. When enabled, it must pass fusion, candidate
+scoring, cue checks, residual checks, and exact-format validation before
+influencing an output candidate. Public quickstart and official runbooks should
+not ask users to choose token-policy settings.
 
 ## Other Research Model Paths
 

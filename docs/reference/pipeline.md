@@ -103,6 +103,10 @@ Routing decides when optional helpers are useful. Missing dependencies,
 missing artifacts, model errors, or cue-loss failures must fall back to the
 deterministic candidate and be recorded in the manifest.
 
+Token-policy candidate generation is disabled by default for the public auto
+path. It remains available only for explicit research/audit ablations and must
+not be presented as token-level classifier causality.
+
 ## Candidate Policy
 
 Automatic mode keeps several internal candidate sources while exposing only
@@ -118,8 +122,8 @@ one public pipeline:
 - `style_scrubbed`: deterministic plus style normalization when style risk is
   present.
 - `pii_assist_augmented`: deterministic plus accepted PII Assist spans.
-- `token_policy_candidate`: advisory research evidence only when local
-  artifacts exist.
+- `token_policy_candidate`: research/audit-only token-action candidate when
+  explicitly enabled.
 
 The selector scores every candidate against the raw original text. Local HSD
 advisory drift can reject optional stronger candidates, but it does not
@@ -129,10 +133,10 @@ cleanups still record drift and residual-review status in the audit.
 `utility`, `balanced`, and `privacy` remain deterministic modes for legacy
 commands and tests. They are not separate public pipeline branches.
 
-Research/debug candidate paths, including DPMLM and local LLM generation, must
-go through reranking, cue checks, residual checks, and exact-format validation
-before any output can be considered for sharing. They are not the public
-default path.
+Research/debug candidate paths, including token-policy, DPMLM, and local LLM
+generation, must go through reranking, cue checks, residual checks, and
+exact-format validation before any output can be considered for sharing. They
+are not the public default path.
 
 Hard rejects:
 
@@ -162,8 +166,7 @@ Manifests should be readable without knowing provider internals:
         "order": [
           "deterministic_baseline",
           "strict_residual_pii_cleanup",
-          "pii_assist",
-          "token_policy_internal"
+          "pii_assist"
         ]
       },
       "pii_assist": {

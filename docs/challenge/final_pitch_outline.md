@@ -25,8 +25,7 @@ preserving the evidence needed to detect and review hate.
    validation, typed placeholders, manifests, hashes, cue checks, slice
    regression, and human-review queues.
 3. Evidence: show the current exact-format `auto` result, the deterministic
-   `balanced` fallback, and transformer token-policy/advisory evidence without
-   raw text.
+   `balanced` fallback, and advisory drift evidence without raw text.
 4. Rights framing: this is not a takedown engine. It preserves target/action
    and negation cues so vulnerable-group abuse is not hidden and lawful
    expression is not flattened into "hate" by a noisy model.
@@ -116,8 +115,8 @@ default and reports cue retention.
 
 Yes. RoBERTa and HateBERT token-policy models were fine-tuned on weak
 token-action labels, evaluated with grouped K-folds, and tested on external
-TweetEval data. They are advisory so that deterministic audit and validation
-still control final output.
+TweetEval data. They are disabled by default and kept as research/audit
+evidence so deterministic audit and validation still control final output.
 
 **What are the limitations?**
 

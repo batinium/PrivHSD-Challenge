@@ -349,7 +349,10 @@ class AutoPipelineEngine:
                     baseline=baseline,
                     baseline_metrics=baseline_metrics,
                     profile=profile,
-                    decision=route_row(profile),
+                    decision=route_row(
+                        profile,
+                        enable_token_policy=config.enable_token_policy,
+                    ),
                 )
             )
             self._emit_progress(
