@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: planning and evidence snapshot
-Last verified: 2026-06-14
+Last verified: 2026-06-15
 Primary code: all workstreams
 
 This file records durable conclusions. Raw outputs, model weights, and row-level
@@ -56,6 +56,84 @@ exact-format upload path.
   are opt-in local audits.
 
 ## Latest Verification Snapshot
+
+Travel handoff on 2026-06-15:
+
+- No pipeline or LLM experiment process is intentionally left running.
+- The main deterministic pipeline is intact. Use `protect --preset exact` or
+  `create-submission --replace-text` for an upload-shaped CSV that keeps the
+  original columns and replaces `text` 1:1. Use `sanitize-classify` only for
+  local analysis because it appends HSD helper columns.
+- Local LLM classification is functional through the OpenAI-compatible endpoint
+  `http://100.120.207.64:1234/v1/chat/completions` with model
+  `openai/gpt-oss-20b`.
+- The old HF HSD advisory classifier is disabled when
+  `--hsd-classification-backend local-llm` is selected.
+- Optional author-group masking is implemented for `protect`,
+  `create-submission`, and `sanitize-classify`. It treats numeric `author`
+  values as grouping keys only and masks only repeated detector-backed factual
+  spans, not style.
+
+Real train split full sweep:
+
+```bash
+python -m contextsafe_hsd.cli sanitize-classify \
+  --input data/train/train_split.csv \
+  --output data/outputs/real_train_split/train_split.local_llm_gpt_oss.author_group.csv \
+  --text-col text \
+  --hsd-classification-backend local-llm \
+  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --local-llm-model openai/gpt-oss-20b \
+  --local-llm-batch-size 10 \
+  --require-hate-classification \
+  --metric-depth fast \
+  --enable-author-group-masking \
+  --author-group-col author \
+  --progress \
+  --manifest data/outputs/real_train_split/train_split.local_llm_gpt_oss.author_group.manifest.json \
+  --audit data/outputs/real_train_split/train_split.local_llm_gpt_oss.author_group.audit.json
+```
+
+Observed result:
+
+- Validation passed; input and output both had 1,154 rows.
+- `text` changed on 312 rows.
+- Identifier detections: 434 before -> 3 after.
+- Direct identifiers: 215 before -> 0 after.
+- Remaining residuals: 3 quasi-identifier `LOCATION` detections.
+- Target cue retention mean 0.9982; utility cue retention mean 0.9991;
+  character utility retention mean 0.9469.
+- Local LLM classification parsed all 1,154 rows, made 176 requests, and had
+  60 fallback rows; classification elapsed time was 361.431 seconds.
+- Local LLM prediction counts were 685 non-HSD and 469 HSD.
+- Against the available `hs` column, local LLM classification metrics were:
+  accuracy 0.7764, balanced accuracy 0.7798, precision 0.6141, recall 0.7890,
+  F1 0.6906, confusion matrix TN 608 / FP 181 / FN 77 / TP 288.
+- Author-group masking found 25 authors, considered all 25, found only 3
+  candidate residual values, found 0 repeated values, and changed 0 rows.
+- The author-group run was text- and label-identical to the previous local LLM
+  run without author-group masking.
+
+Performance notes:
+
+- The slow parts before LLM were Presidio provider preprocessing and final
+  metric/selection verification. The LLM endpoint was not contacted until those
+  stages completed.
+- The direct batch-size-20 LLM-only experiment was started on the already
+  sanitized output to test request reduction, then stopped at user request
+  before it produced a result. There is no valid batch-size-20 conclusion yet.
+- Before retrying LLM-call reduction, add a cached/classify-only command or a
+  progress hook around `LocalLlmHsdReviewRuntime.review_texts`; otherwise it is
+  hard to tell whether a large batch is slow or stalled.
+
+Cleanup follow-up:
+
+- Plan a large dead-code cleanup separately. Highest-value targets are legacy
+  abandoned candidate/model paths, duplicated CSV command surfaces, slow metric
+  recomputation, stale workbench paths, and disabled advisory/model branches.
+- Do not remove the intact MVP path: exact CSV protection/submission,
+  deterministic masking, PII Assist, local LLM classification metadata, author
+  group masking, validation, and manifest/audit generation.
 
 Simplification implementation verification:
 
