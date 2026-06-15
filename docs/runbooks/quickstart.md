@@ -1,200 +1,71 @@
 # Quickstart
 
 Status: active
-Owner area: common local workflow
 Last verified: 2026-06-15
-Primary code: `contextsafe_hsd/cli.py`, package metadata, tests
 
-Use this for first-run setup and the shortest local privacy-protection path.
-The public workflow is:
-
-```text
-Input CSV -> Privacy Detection -> Meaning Protection -> Verification
-```
-
-## Install And Verify
-
-Update the reusable micromamba environment when it already exists:
+## Install
 
 ```bash
-micromamba env update -n contextsafe-hsd -f environment.yml
+python -m pip install -e '.[dev]'
 ```
 
-Create it on a new machine or checkout:
+Optional local helpers:
 
 ```bash
-micromamba env create -f environment.yml
+python -m pip install -e '.[presidio,scrubadub]'
 ```
 
-Verify through the named environment:
+## Verify
 
 ```bash
-micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m pytest -q
-micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 contextsafe-hsd protect --help
+python -m ruff check contextsafe_hsd tests workbench/backend
+python -m pytest -q
+python -m contextsafe_hsd.cli --help
+python -m contextsafe_hsd.cli protect --help
 ```
-
-For manual shell use:
-
-```bash
-micromamba activate contextsafe-hsd
-```
-
-The repository includes `.envrc` for optional automatic activation when
-entering the checkout with `direnv`. After installing and enabling `direnv`,
-run this once from the repository root:
-
-```bash
-direnv allow
-```
-
-For package-installed usage, use `contextsafe-hsd`. Repository examples may
-also use `python -m contextsafe_hsd.cli`.
 
 ## Protect A CSV
 
 ```bash
-contextsafe-hsd protect \
+python -m contextsafe_hsd.cli protect \
   --input INPUT.csv \
-  --output data/outputs/INPUT.protected.csv \
+  --output OUTPUT.csv \
   --text-col text \
-  --id-col id \
+  --id-col ID \
+  --preset exact \
   --llm-review local-llm \
   --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
   --local-llm-model openai/gpt-oss-20b \
-  --manifest data/outputs/INPUT.protected.manifest.json
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json
 ```
 
-This defaults to `--preset exact`. It writes cleaned text back into the input
-text column and preserves the source schema: columns, column order, row count,
-row order, IDs, labels, and non-text metadata values. It does not append HSD
-prediction columns.
+Use `--llm-review off` when no local OpenAI-compatible server is available.
 
-`--llm-review local-llm` adds sidecar-only HSD classification, reason tags, and
-validated residual PII suggestions. The LLM sees cleaned text only and does not
-rewrite comments. Omit `--llm-review local-llm` for a fast/offline exact run;
-the manifest records that LLM review was skipped.
-
-The manifest leads with three stages:
-
-- `privacy_detection`: deterministic baseline plus any ready local PII Assist.
-- `meaning_protection`: checks that target/action/negation/reporting cues are
-  not erased by masking.
-- `verification`: residual identifier checks, exact-shape checks, local LLM
-  review status/counts when selected, metadata leakage status, and author-risk
-  hook status.
-
-Missing optional local components should be recorded as skipped or unavailable,
-not treated as a failure for exact output.
-
-## Presets
+## Validate
 
 ```bash
-contextsafe-hsd protect --preset exact \
+python -m contextsafe_hsd.cli validate-submission \
+  --source INPUT.csv \
+  --submission OUTPUT.csv \
+  --text-col text \
+  --output OUTPUT.validation.json
+```
+
+## Profile Incoming Data
+
+```bash
+python -m contextsafe_hsd.cli profile-dataset \
   --input INPUT.csv \
-  --output data/outputs/INPUT.protected.csv \
   --text-col text \
-  --id-col id \
-  --llm-review local-llm \
-  --manifest data/outputs/INPUT.protected.manifest.json
+  --id-col ID \
+  --output INPUT.profile.json
 ```
 
-Use `exact` for the final upload-shaped cleaned CSV plus manifest/audit
-sidecars. LLM labels and suggestions stay in JSON sidecars, not the CSV.
+The profile command reports schema and aggregate counts without printing raw row
+text.
 
-```bash
-contextsafe-hsd protect --preset analysis \
-  --input INPUT.csv \
-  --output data/outputs/INPUT.analysis.csv \
-  --text-col text \
-  --id-col id \
-  --manifest data/outputs/INPUT.analysis.manifest.json
-```
+## Data Handling
 
-Use `analysis` only for local review. It may append advisory HSD prediction
-columns after sanitization. These columns are not production classifier truth
-and are not part of exact-format output.
-
-```bash
-contextsafe-hsd protect --preset audit \
-  --input INPUT.csv \
-  --output data/outputs/INPUT.audit.csv \
-  --text-col text \
-  --id-col id \
-  --manifest data/outputs/INPUT.audit.manifest.json
-```
-
-Use `audit` when you want exact output plus deeper sidecar reporting where the
-installed runtime supports it.
-
-## Prepare Public Development Data
-
-```bash
-contextsafe-hsd prepare-recommended-datasets \
-  --output-dir data/public_dev \
-  --raw-dir data/public_dev/raw \
-  --merged-output data/public_dev/recommended_merged.csv
-```
-
-Downloaded raw files stay under ignored `data/public_dev/raw/`.
-
-## Validate Exact Shape
-
-```bash
-contextsafe-hsd validate-submission \
-  --source data/public_dev/recommended_merged.csv \
-  --submission data/outputs/recommended_merged.protected.csv \
-  --text-col text \
-  --id-col id \
-  --output data/outputs/recommended_merged.validation.json
-```
-
-Validation should pass before any output is shared. Do not tune or compare
-alternate runs until the exact cleaned CSV exists and its manifest is readable.
-
-## Minimal Evidence Pass
-
-```bash
-contextsafe-hsd source-regression-report \
-  --original data/public_dev/recommended_merged.csv \
-  --protected data/outputs/recommended_merged.protected.csv \
-  --original-text-col text \
-  --protected-text-col text \
-  --id-col id \
-  --group-col source \
-  --group-col label \
-  --group-col split \
-  --group-col platform \
-  --group-col type \
-  --output data/outputs/recommended_merged.source_regression.json
-```
-
-Use only group columns that exist in the dataset. If an author/user column is
-available and repeated-author analysis is needed, record whether that
-Verification hook ran or why it was skipped.
-
-## Python API
-
-The CLI is the public path. Python callers can invoke the same exact `auto`
-path directly:
-
-```python
-from pathlib import Path
-
-import contextsafe_hsd as hsd
-
-hsd.create_submission(
-    Path("INPUT.csv"),
-    Path("SUBMISSION.csv"),
-    text_cols=["text"],
-    id_col="id",
-    manifest_path=Path("SUBMISSION.manifest.json"),
-    replace_text=True,
-    mode="auto",
-)
-```
-
-## Run Notes
-
-Keep dated notes under ignored `data/outputs/`. Record commands, commit hash,
-artifact paths, aggregate local metrics, official scores when available, and
-limitations. Do not commit raw examples or generated run logs.
+Write generated CSVs, manifests, audits, local run notes, datasets, and model
+artifacts under ignored `data/` paths. Do not commit raw sensitive examples.

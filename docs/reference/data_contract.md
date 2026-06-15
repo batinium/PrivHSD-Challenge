@@ -1,80 +1,58 @@
 # Data Contract
 
 Status: active
-Owner area: CSV contract and submission
-Last verified: 2026-06-14
-Primary code: `contextsafe_hsd/csv_pipeline.py`, `contextsafe_hsd/submission.py`,
-`contextsafe_hsd/`
+Last verified: 2026-06-15
 
-This is the authoritative contract for exact-format outputs. Any agent changing
-CSV reading, writing, submission creation, validation, or public API wrappers
-must check this file.
+This is the exact CSV contract for `protect`.
 
-## Exact-Format Contract
+## Exact Output Rules
 
-The official path must satisfy all of these rules before upload:
+- Input is a CSV with a selected text column.
+- Output preserves row count and row order.
+- Output preserves column names and column order exactly.
+- Only the selected text column is replaced.
+- Every non-text value is preserved byte-for-byte.
+- No helper, classification, score, suggestion, or audit columns are appended.
+- Manifest, audit, validation, and review data are sidecars.
+- Sidecars must not contain raw original row text.
 
-- Input is a CSV with at least one text column.
-- A row ID column is optional. When a stable review key is needed, use a
-  precomputed privacy-safe fingerprint/hash column rather than a raw author or
-  user identifier.
-- Output has the same row count and row order.
-- Output preserves every non-text column exactly.
-- Exact-format output replaces the selected text column or columns in place.
-- Column order is unchanged.
-- IDs, labels, source/split columns, author IDs, and other metadata are
-  preserved byte-for-byte.
-- A four-column input such as `source,author_id,text,is_hate_speech` must
-  produce exactly those four columns, in that order, when `--replace-text` is
-  used.
-- Local audit output may add `privatized_text`, HSD prediction columns, audit
-  JSON, or manifest files, but this must be opt-in and must never be used as
-  the exact official upload.
-- Manifest files record command, commit, hashes, mode, metric depth, validation
-  status, aggregate metrics, and warnings where available. Auto/enriched
-  manifests also record provider/model status and load counts; deterministic
-  `balanced`/`utility`/`privacy` manifests do not have provider/model status.
-- Raw official examples, generated sensitive rows, provider/model outputs, and
-  detailed reports stay under ignored `data/` paths.
+Example:
 
-## Allowed Output Modes
+```text
+source,ID,text,hs
+train,1,Email alex@example.test because Muslims should leave.,1
+```
 
-| Mode | Shape | Intended use |
-| --- | --- | --- |
-| `create-submission --replace-text` | Exact input schema with selected text column(s) replaced | Official upload candidate |
-| `sanitize-classify` | Original columns preserved, selected text replaced, HSD prediction columns appended | Local enriched analysis/unseen-data triage, not upload |
-| `anonymize --replace-text` | Exact input schema with one selected text column replaced | Local compatibility path |
-| `anonymize` without replace | Adds helper output column | Local audit only |
-| Workbench replace-text CSV | Exact input schema with selected text replaced | Demo/download candidate |
-| Workbench helper-column CSV | Adds `privatized_text` | Local audit only |
+must remain:
 
-## Validation Gate
+```text
+source,ID,text,hs
+train,1,Email [EMAIL] because Muslims should leave.,1
+```
 
-Every exact candidate should be followed by:
+## Validation
 
 ```bash
-contextsafe-hsd validate-submission \
+python -m contextsafe_hsd.cli validate-submission \
   --source INPUT.csv \
   --submission OUTPUT.csv \
   --text-col text \
-  --output data/outputs/OUTPUT.validation.json
+  --output OUTPUT.validation.json
 ```
 
-Add `--id-col case_fingerprint` only when the source and submission both have a
-privacy-safe stable key. Omit it when there is no such column.
+Use `--id-col` only for a privacy-safe stable key present in both files. Do not
+use raw author, username, handle, or account columns as review IDs.
 
-Validation failure blocks upload, even if local privacy or utility metrics look
-good.
+Validation failure blocks hand-in even when privacy metrics look good.
 
-## Ownership Notes
+## Sidecars
 
-- Do not change the exact CSV contract from a provider/model workstream.
-- If challenge rules allow row filtering, document that as a runbook exception;
-  do not silently relax this contract.
-- `bound-contributions` can preserve schema among retained rows, but it drops
-  rows and is therefore not an exact-format submission path by default.
-- `sanitize-classify` is intentionally not exact-format because it adds
-  prediction columns. If a source already contains `is_hate_speech`, it appends
-  `predicted_is_hate_speech` by default; `--overwrite-hate-columns` is required
-  to replace existing hate columns. Use `create-submission --replace-text` for
-  uploads.
+The final pipeline may write:
+
+- `OUTPUT.manifest.json`: aggregate stage, provider, model, validation, and
+  local LLM review status.
+- `OUTPUT.audit.json`: row-level raw-text-free audit details.
+- `OUTPUT.validation.json`: explicit exact-shape validation report.
+
+Local LLM HSD labels, reason tags, parse/fallback counts, and residual PII
+suggestions belong in these sidecars only.

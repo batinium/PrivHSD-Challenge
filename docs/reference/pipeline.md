@@ -1,171 +1,92 @@
 # Pipeline Reference
 
 Status: active
-Owner area: auto orchestration, deterministic masking, candidate selection
-Last verified: 2026-06-14
-Primary code: `contextsafe_hsd/auto/`, `contextsafe_hsd/detectors.py`,
-`contextsafe_hsd/pipeline.py`, `contextsafe_hsd/rerank.py`,
-`contextsafe_hsd/span_providers/`
+Last verified: 2026-06-15
 
-This is the authoritative architecture reference. Operational commands belong
-in runbooks; readiness and open risks belong in planning docs.
-
-## Mission
-
-ContextSafe-HSD is a local, auditable CSV-in/CSV-out privatization system for
-hate-speech detection datasets. It reduces direct identifiers,
-quasi-identifiers, and author-style signals while preserving target,
-hostility, negation, modality, quotation, counterspeech, and rationale cues.
-
-It is preprocessing infrastructure. It is not a moderation decision system, a
-legal decision system, a production hate-speech classifier, or a promise that
-every identifier has been removed.
-
-## Public Stage Model
+The final public story is one command and one backend path:
 
 ```text
-Input CSV
-  -> Privacy Detection
-  -> Meaning Protection
-  -> Verification
-  -> exact cleaned CSV + manifest
+input CSV
+  -> deterministic PII sanitization
+  -> Presidio/scrubadub PII Assist
+  -> span fusion, residual cleanup, and candidate selection
+  -> HSD target/action/negation/quote/counterspeech cue safeguards
+  -> local LLM sidecar review on cleaned text only
+  -> exact-format output CSV with only the text column replaced
+  -> manifest/audit sidecars
 ```
 
-| Stage | Responsibility | Main implementation areas |
-| --- | --- | --- |
-| Privacy Detection | Find direct and quasi identifiers, build a deterministic baseline, and merge optional local PII Assist evidence. | `detectors.py`, `pipeline.py`, `metrics.py`, `span_providers/`, `auto/` |
-| Meaning Protection | Reject or warn on candidates that erase HSD-relevant cues: targets, threats/actions, negation, modality, quotation, counterspeech, and reporting/rationale context. | `cue_checks.py`, `context.py`, `rationale_checks.py`, `rerank.py` |
-| Verification | Check exact shape, residual identifiers, metadata leakage, local LLM review status, source slices, and author-risk hook status. | `submission.py`, `metrics.py`, `metadata_leakage.py`, `source_report.py`, `author_risk.py`, `models/local_llm_hsd_review_runtime.py` |
+Primary implementation:
 
-Provider names, model names, load counts, and debug fields may remain in
-manifests for auditability, but public summaries should lead with these three
-stages.
+- `contextsafe_hsd/cli.py`
+- `contextsafe_hsd/simple_pipeline.py`
+- `contextsafe_hsd/auto/`
+- `contextsafe_hsd/pipeline.py`
+- `contextsafe_hsd/detectors.py`
+- `contextsafe_hsd/cue_checks.py`
+- `contextsafe_hsd/rationale_checks.py`
+- `contextsafe_hsd/span_providers/`
+- `contextsafe_hsd/models/local_llm_hsd_review_runtime.py`
 
-## Public Entry Point
-
-`protect` is the documented default command:
+## Public Command
 
 ```bash
-contextsafe-hsd protect \
-  --preset exact \
+python -m contextsafe_hsd.cli protect \
   --input INPUT.csv \
   --output OUTPUT.csv \
   --text-col text \
-  --id-col id \
-  --manifest OUTPUT.manifest.json
+  --id-col ID \
+  --preset exact \
+  --llm-review local-llm \
+  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --local-llm-model openai/gpt-oss-20b \
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json
 ```
 
-`--preset exact` calls the current exact `auto` path and preserves the input
-CSV schema. It writes cleaned text only. Local LLM HSD labels, reason tags, and
-validated PII suggestions are Verification signals in sidecars, not appended
-prediction columns.
+`--preset exact` is the hand-in path. `--preset audit` keeps the same CSV
+contract and requests deeper sidecars. `--llm-review off` skips the sidecar
+review and records that skipped status.
 
-`--preset analysis` is the enriched local-analysis path. It may append
-advisory HSD columns after sanitization and is not an exact-format upload path.
+## Stage Contract
 
-`--preset audit` keeps exact CSV shape and requests deeper sidecar/audit
-reporting when the installed runtime supports it.
+Privacy detection:
 
-Compatibility commands remain available:
+- Deterministic direct/quasi identifier masking always runs.
+- Presidio and scrubadub are optional local PII Assist providers.
+- Provider output is fused and filtered before it can affect text.
+- Missing provider dependencies are recorded and fall back to deterministic
+  output.
 
-- `create-submission`: legacy exact-output interface. Use `--replace-text
-  --mode auto` to reach the same routed auto path.
-- `sanitize-classify`: enriched analysis output with optional advisory HSD
-  columns.
-- `anonymize`: deterministic/local transformation helper.
+Meaning protection:
 
-## Internal Auto Flow
+- Candidate selection rejects or warns on target, action, negation, modality,
+  quote, counterspeech, reporting, or rationale cue loss.
+- High-confidence direct identifiers are still removed even when sidecar review
+  later flags classification uncertainty.
+- Author-group masking remains off by default.
 
-```text
-CSV
-  -> schema validation
-  -> AutoPipelineContext
-  -> deterministic privacy baseline for every row
-  -> cheap row risk features
-  -> row routing decisions
-  -> optional local PII Assist batches
-  -> fused candidate spans
-  -> candidate generation, including stricter residual-PII cleanup rungs
-  -> cue/privacy/drift validation
-  -> row-local candidate selection
-  -> residual direct-identifier cleanup
-  -> exact-format CSV
-  -> stage-first manifest
-```
+Verification:
 
-The deterministic baseline always runs. PII Assist is an internal grouping for
-optional local helpers such as Presidio and scrubadub. Presidio and scrubadub
-may run when installed. GLiNER is no longer part of the default public auto
-path; it remains available only for explicit research/debug runs with a
-configured model, and it must not download models during sensitive-data
-processing.
+- Exact CSV shape is validated.
+- Residual identifiers and privacy warnings are summarized.
+- Local LLM HSD review, when selected, receives cleaned text only.
+- LLM labels, reason tags, parse/fallback counts, and PII suggestions go to
+  sidecars only.
+- Normal logs and reports do not print raw row text.
 
-Routing decides when optional helpers are useful. Missing dependencies,
-missing artifacts, model errors, or cue-loss failures must fall back to the
-deterministic candidate and be recorded in the manifest.
+## Manifest Shape
 
-Token-policy candidate generation is disabled by default for the public auto
-path. It remains available only for explicit research/audit ablations and must
-not be presented as token-level classifier causality.
-
-## Candidate Policy
-
-Automatic mode keeps several internal candidate sources while exposing only
-one public pipeline:
-
-- `balanced`: deterministic baseline, always present.
-- `*_strict_pii`: stricter residual cleanup generated from an existing
-  candidate. High-confidence direct identifiers such as emails, phones, URLs,
-  handles, IPs, explicit IDs, and obfuscated emails are eligible by default.
-  Ambiguous person/place/org residuals are not blindly masked; they need strong
-  deterministic private context such as self-identification, contact context,
-  address/place suffixes, or explicit location context.
-- `style_scrubbed`: deterministic plus style normalization when style risk is
-  present.
-- `pii_assist_augmented`: deterministic plus accepted PII Assist spans.
-The selector scores every candidate against the raw original text. Local HSD
-advisory drift can reject optional stronger candidates, but it does not
-override removal of high-confidence direct identifiers. Those hard privacy
-cleanups still record drift and residual-review status in the audit.
-
-`utility`, `balanced`, and `privacy` remain deterministic modes for legacy
-commands and tests. They are not separate public pipeline branches.
-
-Removed rewrite-candidate paths such as token-policy, DPMLM, and local LLM
-generation are not part of the production flow. The retained local LLM path is
-sidecar-only review after cleaning.
-
-Hard rejects:
-
-- candidate loses protected target terms in exact/default mode;
-- candidate loses action, negation, modality, quotation, counterspeech, or
-  reporting/rationale cues;
-- candidate introduces identifier-like strings;
-- candidate has severe length or semantic drift when those checks are enabled;
-- candidate depends on provider/model errors without a deterministic fallback.
-
-High-confidence direct PII removal is a hard privacy rule, not a utility
-preference. If a stricter direct-PII cleanup changes classification evidence,
-the drift is reported in sidecars, but the identifier is still removed.
-
-## Manifest Contract
-
-Manifests should be readable without knowing provider internals:
+The manifest leads with stage summaries plus provider/model diagnostics:
 
 ```json
 {
-  "pipeline": "auto",
+  "pipeline": "final_exact_csv",
   "preset": "exact",
+  "row_count": 3,
   "stages": {
     "privacy_detection": {
       "baseline": "deterministic_balanced",
-      "privacy_ladder": {
-        "order": [
-          "deterministic_baseline",
-          "strict_residual_pii_cleanup",
-          "pii_assist"
-        ]
-      },
       "pii_assist": {
         "components": {
           "presidio": "ready",
@@ -174,54 +95,26 @@ Manifests should be readable without knowing provider internals:
       }
     },
     "meaning_protection": {
-      "protected_cue_policy": "target_action_negation_quote_counterspeech",
       "cue_loss_rejections": 0
     },
     "verification": {
-      "residual_direct_identifier_count": 0,
       "local_llm_hsd_review": {
         "status": "ok",
-        "parse_count": 100,
+        "parse_count": 3,
         "fallback_count": 0
-      },
-      "metadata_leakage_status": "not_run",
-      "author_risk": {
-        "author_column_exists": false,
-        "ran": false,
-        "skipped_reason": "no_author_column"
       }
     }
   }
 }
 ```
 
-Detailed `providers`, `models`, route counts, and load counts can remain for
-debug compatibility. Row-level audit fields should include the chosen
-candidate, why it was chosen, privacy gain, meaning-protection rejections, and
-whether residual review is required.
+Row audit entries record row IDs, chosen candidate metadata, aggregate privacy
+metrics, rejection reasons, residual warnings, and LLM review metadata without
+raw original text.
 
-## Local LLM Review
+## Removed Paths
 
-Local LLM review is a Verification aid. In exact mode, it reads only cleaned
-text and writes HSD labels, reason tags, parse/fallback counts, and validated
-PII suggestions to manifest/audit sidecars. It must not rewrite whole comments
-or append columns to the output CSV.
-
-## Author-Risk Hook
-
-Author doxxing risk belongs under Verification. The manifest should record
-whether an author/user column exists, whether repeated-author evaluation ran,
-and the skipped reason when it did not run. Do not infer author-risk behavior
-from authorless data and do not mutate author metadata in exact submissions.
-
-## Non-Negotiables
-
-- Preserve the exact CSV contract in `docs/reference/data_contract.md`.
-- Do not call external APIs on official data.
-- Do not download models during sensitive-data processing.
-- Do not load heavy models per row.
-- Do not run deep cue/profanity/semantic scans in the default exact path.
-- Do not mask protected HSD cues by default.
-- Do not submit raw provider, research, DPMLM, SanText, or LLM output directly.
-- Do not keep raw text in durable audits or committed docs.
-- Do not treat advisory HSD predictions as legal or moderation truth.
+The package no longer ships reranker modules, HSD advisory model ensembles,
+GLiNER provider code, classifier training/evaluation commands, dataset prep
+commands, or research benchmark CLIs. Reintroduce those as isolated research
+work only if they are needed later.

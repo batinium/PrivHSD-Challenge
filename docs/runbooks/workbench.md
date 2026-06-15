@@ -1,73 +1,42 @@
 # Workbench Runbook
 
 Status: active
-Owner area: workbench
 Last verified: 2026-06-15
-Primary code: `workbench/backend/`, `workbench/frontend/`, `launch.py`
 
-The workbench is a local FastAPI + React dashboard around the CSV auto pipeline.
-It is separate from the pipeline package.
+The workbench is an optional local FastAPI + React demo around the final CSV
+pipeline.
 
-## Run Locally
-
-From the repository root:
+## Run
 
 ```bash
-micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --install
-```
-
-If the `contextsafe-hsd` environment is active, either manually with
-`micromamba activate contextsafe-hsd` or automatically through `direnv`, the
-short form also works:
-
-```bash
+python -m pip install -e '.[workbench]'
 python launch.py --install
-```
-
-After dependencies are installed once:
-
-```bash
-micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py
-```
-
-Backend reload mode is opt-in:
-
-```bash
-micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --reload
 ```
 
 Open `http://127.0.0.1:5173`.
 
-## Expected Behavior
-
-- The dashboard exposes CSV auto mode only.
-- CSV upload mode runs with fast metrics and local-only optional model behavior.
-- CSV upload does not require an ID column. Fingerprint/hash/case-key columns
-  can be used as stable review case IDs when present.
-- Raw author/user identifier columns are not used as review case IDs; the
-  backend generates private HMAC case IDs for those inputs.
-- Exact CSV export is the default: the selected text column is replaced in
-  place and the original schema is preserved.
-- Local LLM HSD review, when selected, is sidecar-only. Labels, reason tags,
-  provider diagnostics, and residual PII suggestions stay in the manifest,
-  audit, and review summaries rather than being appended to exported CSV.
-- Helper-column CSV output is retained only for local audit/debug requests.
-- Run CSV uses a local background job with row/phase progress polling; matching
-  cached uploads load without rerunning the pipeline.
-- Human review saves structured annotations under `workbench/.cache/reviews/`
-  by processed-result cache key. Review records must contain case IDs and
-  labels only, not raw CSV text.
-- Provider/model status is derived from the active auto run. The dashboard does
-  not expose manual provider or mode selection.
-- Platform insight aggregates post-classification hatred labels and target-group
-  statistics without retaining raw text in the report.
-- The app must not call external APIs or write raw text logs.
-
-## Verification
+Backend and frontend can also be run separately:
 
 ```bash
-micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python -m pytest tests/test_workbench_csv.py -q
-micromamba run -n contextsafe-hsd npm --prefix workbench/frontend run build
+python -m uvicorn workbench.backend.app:app --host 127.0.0.1 --port 8000 --reload
+npm install --prefix workbench/frontend
+npm --prefix workbench/frontend run dev
 ```
 
-See also `workbench/README.md` for local app-specific notes.
+## Expected Behavior
+
+- CSV upload defaults to replacing the selected text column in place.
+- Downloaded exact CSV preserves the original schema.
+- Helper-column output is local audit only.
+- Local LLM HSD review is sidecar-only.
+- Platform insight uses explicit CSV labels or local LLM sidecar labels only.
+- The workbench does not fabricate classifier votes.
+- Review cache files contain case IDs and structured labels, not raw CSV text.
+- Raw author/user IDs are not used as review case IDs.
+
+## Verify
+
+```bash
+python -m pytest tests/test_workbench_csv.py -q
+npm --prefix workbench/frontend run build
+```
