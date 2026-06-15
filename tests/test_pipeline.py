@@ -562,6 +562,31 @@ def test_spaced_target_obfuscation_is_detected_near_spaced_hostile_context():
     assert "bla cks are sh i t and should leave" in balanced_result.text
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_text", "category"),
+    [
+        ("b l a c k s should leave.", "b l a c k s", "race_or_ethnicity"),
+        ("b-l-a-c-k-s should leave.", "b-l-a-c-k-s", "race_or_ethnicity"),
+        ("m.u.s.l.i.m.s should leave.", "m.u.s.l.i.m.s", "religion"),
+        ("ref ugees should leave.", "ref ugees", "nationality_or_origin"),
+        ("blakcs should leave.", "blakcs", "race_or_ethnicity"),
+        ("mulsims should leave.", "mulsims", "religion"),
+    ],
+)
+def test_target_split_and_transposed_variants_are_detected(text, expected_text, category):
+    spans = target_group_spans(text)
+    span_values = {(span.text, span.category, span.source) for span in spans}
+    privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert any(
+        span_text == expected_text
+        and span_category == category
+        and span_source in {"target_spaced_variant", "target_variant"}
+        for span_text, span_category, span_source in span_values
+    )
+    assert f"[TARGET_GROUP:{category}]" in privacy_result.text
+
+
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():
     text = "The women from River City organized a public meeting."
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))

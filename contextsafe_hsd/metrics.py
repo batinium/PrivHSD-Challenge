@@ -22,7 +22,6 @@ from .detectors import (
     high_confidence_direct_identifier_spans,
     merge_spans,
     target_group_spans,
-    target_group_term_patterns,
     target_org_preservation_context,
     target_org_privacy_context,
 )
@@ -234,10 +233,17 @@ def target_cue_counts(text: str) -> tuple[Counter[str], Counter[str]]:
 
 
 def target_cue_counts_fast(text: str) -> tuple[Counter[str], Counter[str]]:
-    """Count explicit target cue terms without variant/profanity scans."""
-    term_counts: Counter[str] = Counter()
-    for category, _term, pattern in target_group_term_patterns():
-        term_counts[category] += len(pattern.findall(text))
+    """Count target cue terms with bounded variant detection.
+
+    Auto routing uses fast metrics, so split-letter and one-edit target variants
+    need to be visible here. This still avoids the org-context filtering used by
+    the deeper target scan.
+    """
+    term_counts = Counter(
+        span.category
+        for span in target_group_spans(text)
+        if span.category is not None
+    )
     placeholders, _ = placeholder_counts(text)
     cue_counts = term_counts + target_placeholder_counts(placeholders)
     return term_counts, cue_counts

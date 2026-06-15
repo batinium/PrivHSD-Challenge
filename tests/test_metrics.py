@@ -207,3 +207,29 @@ def test_fast_metric_avoids_deep_target_scan(monkeypatch):
     assert metrics["target_cue_count_before"] == 1
     with pytest.raises(AssertionError, match="deep target scan"):
         row_metric("Muslims should leave.", "Muslims should leave.")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "b l a c k s should leave.",
+        "m.u.s.l.i.m.s should leave.",
+        "refugeez should leave.",
+        "blakcs should leave.",
+    ],
+)
+def test_fast_metric_counts_obfuscated_target_cues(text):
+    metrics = row_metric_fast(text, text)
+
+    assert metrics["target_cue_count_before"] == 1
+    assert metrics["target_cue_count_after"] == 1
+    assert metrics["target_cue_retention"] == 1.0
+
+
+def test_fast_metric_warns_when_obfuscated_target_cue_is_lost():
+    metrics = row_metric_fast("b l a c k s should leave.", "people should leave.")
+
+    assert metrics["target_cue_count_before"] == 1
+    assert metrics["target_cue_count_after"] == 0
+    assert metrics["target_cue_retention"] == 0.0
+    assert "target_cue_loss" in metrics["overmasking_warnings"]

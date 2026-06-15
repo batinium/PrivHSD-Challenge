@@ -1122,8 +1122,19 @@ def edit_distance_at_most_one(left: str, right: str) -> bool:
     if abs(len(left) - len(right)) > 1:
         return False
     if len(left) == len(right):
-        mismatches = sum(1 for a, b in zip(left, right) if a != b)
-        return mismatches <= 1
+        mismatch_positions = [
+            index for index, (a, b) in enumerate(zip(left, right)) if a != b
+        ]
+        if len(mismatch_positions) <= 1:
+            return True
+        if len(mismatch_positions) != 2:
+            return False
+        first, second = mismatch_positions
+        return (
+            second == first + 1
+            and left[first] == right[second]
+            and left[second] == right[first]
+        )
     if len(left) > len(right):
         left, right = right, left
     i = 0
