@@ -457,7 +457,6 @@ class AutoPipelineEngine:
 
         output_rows = [record["row"] for record in selected_records]
         author_group_result = apply_author_group_masking(
-            rows,
             output_rows,
             fieldnames=fieldnames,
             text_col=target_col,

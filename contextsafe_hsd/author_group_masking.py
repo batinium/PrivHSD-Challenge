@@ -13,7 +13,6 @@ import re
 from typing import Any
 
 from .detectors import Span, detect_spans, merge_spans
-from .metrics import row_metric_for_depth
 from .pipeline import PrivatizerConfig, apply_replacements
 
 
@@ -165,7 +164,6 @@ def row_group_spans(
 
 
 def apply_author_group_masking(
-    original_rows: list[dict[str, Any]],
     rows: list[dict[str, Any]],
     *,
     fieldnames: list[str],
@@ -205,7 +203,6 @@ def apply_author_group_masking(
     )
     row_transformations: dict[int, list[dict[str, Any]]] = {}
     counts_by_entity_type: Counter[str] = Counter()
-    skipped_for_meaning = 0
     candidate_rows = 0
     for index, row in enumerate(output_rows):
         spans = row_group_spans(
@@ -218,7 +215,6 @@ def apply_author_group_masking(
         if not spans:
             continue
         candidate_rows += 1
-        original = str(original_rows[index].get(text_col, "") or "")
         current = str(row.get(text_col, "") or "")
         masked, transformations = apply_replacements(
             current,
@@ -226,26 +222,6 @@ def apply_author_group_masking(
             PrivatizerConfig(mode="balanced", generalize_targets=False),
         )
         if masked == current:
-            continue
-        current_metrics = row_metric_for_depth(
-            original,
-            current,
-            metric_depth=config.metric_depth,
-            row_index=index + 1,
-        )
-        masked_metrics = row_metric_for_depth(
-            original,
-            masked,
-            metric_depth=config.metric_depth,
-            row_index=index + 1,
-        )
-        if (
-            float(masked_metrics.get("target_cue_retention", 1.0) or 1.0)
-            < float(current_metrics.get("target_cue_retention", 1.0) or 1.0)
-            or float(masked_metrics.get("utility_cue_retention", 1.0) or 1.0)
-            < float(current_metrics.get("utility_cue_retention", 1.0) or 1.0)
-        ):
-            skipped_for_meaning += 1
             continue
         output_rows[index][text_col] = masked
         materialized = [dict(item) for item in transformations]
@@ -264,7 +240,10 @@ def apply_author_group_masking(
         "changed_rows": len(row_transformations),
         "transformation_count": sum(len(items) for items in row_transformations.values()),
         "counts_by_entity_type": dict(sorted(counts_by_entity_type.items())),
-        "skipped_rows_for_meaning_protection": skipped_for_meaning,
+        "meaning_protection": (
+            "uses detector-backed non-target span eligibility; final row metrics "
+            "verify target and utility cue retention after group masking"
+        ),
         **key_summary,
     }
     return AuthorGroupMaskingResult(

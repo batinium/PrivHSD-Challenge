@@ -94,7 +94,8 @@ and analysis paths. It:
   same author;
 - preserves row order, row count, and schema;
 - writes changes only into the existing text column;
-- rejects group masks that reduce target or utility cue retention;
+- avoids target generalization during group masking and verifies target/utility
+  cue retention in final row metrics after group masking;
 - records raw-text-free counts in the manifest under
   `stages.verification.author_group_masking`.
 
