@@ -1,104 +1,136 @@
-# Final Pipeline Simplification Plan
+# Presentation Cleanup Plan
 
-Status: implementation in progress
-Owner area: final MVP pipeline, workbench alignment, dead-code removal
+Status: ready for next agent
+Owner area: hand-in readability, public CLI cleanup, dead-code deletion
 Last updated: 2026-06-15
 Primary prompt: `docs/planning/final_pipeline_simplification/prompt.md`
 
 ## Decision
 
-The final MVP should be one explainable CSV pipeline:
+The final exact CSV pipeline is complete. The next pass is not product design;
+it is presentation cleanup. The user needs to hand in and explain this repo,
+so the repository should expose one clear pipeline and avoid making old
+experiments look like supported product code.
+
+## Final Pipeline To Preserve
 
 ```text
 input CSV
-  -> PII sanitization with deterministic detectors and PII Assist
-  -> target/HSD cue preservation
-  -> local LLM review for classification and PII suggestions
-  -> exact-format output CSV with only text replaced
+  -> deterministic PII sanitization
+  -> Presidio/scrubadub PII Assist
+  -> span fusion, residual cleanup, and candidate selection
+  -> HSD cue-retention safeguards
+  -> local LLM sidecar review on cleaned text
+  -> exact-format output CSV
   -> manifest/audit sidecars
 ```
 
-`sanitize-classify` is analysis-oriented because it appends helper columns. The
-final upload-shaped command should write the original schema only.
-
-## Keep In The Final Path
-
-- Deterministic PII detectors and placeholders.
-- Presidio and scrubadub as local PII Assist.
-- Candidate selection and residual PII cleanup.
-- Target/action/negation/quote/counterspeech cue preservation.
-- Local LLM HSD classification, reason tags, and validated PII suggestions.
-- Exact CSV validation.
-- Manifest/audit sidecars.
-- Workbench CSV flow aligned with the same backend path.
-
-## Off By Default
-
-- Author-group masking/checking.
-- Deep metric audits.
-- Debug provider/model toggles.
-- Full-dataset sweeps.
-
-## Remove Or Quarantine
-
-The next implementation pass should remove confirmed dead code and hide
-research-only components from the normal runtime:
-
-- DPMLM and LLM rewrite candidate paths.
-- Token-policy experiment/runtime paths if they are not needed by the final
-  command.
-- GLiNER public/default path.
-- HF HSD advisory classifier path once local LLM sidecar review is wired into
-  the final command.
-- Duplicate CLI surfaces and stale workbench controls.
-- Config-search and ablation code from production flow.
-
-Deletion should be incremental. Run focused tests after each deletion group and
-commit/push stable milestones.
-
-## Required Final Behavior
-
-- Output CSV row count and order match input.
-- Output CSV columns match input exactly.
-- Selected text column is replaced with sanitized text.
-- LLM classification and PII suggestion details are recorded in sidecars only.
-- Manifest states which providers/models ran, skipped, or failed.
-- Workbench exports exact-format CSV by default.
-- Logs and reports avoid raw row text.
-
-## Implemented In This Pass
-
-- Added `run_final_csv_pipeline` and `build_final_pipeline_rows` as the shared
-  exact CSV backend for the final path.
-- Wired `protect --preset exact|audit` to the final backend. The output CSV
-  keeps the original columns only; local LLM classification, reason tags, and
-  validated residual PII suggestions are sidecar-only.
-- Added `--llm-review local-llm`, local LLM endpoint/model/batch controls,
-  `--require-llm-review`, and progress reporting to `protect`.
-- Added progress events inside local LLM review batches.
-- Updated the workbench exact CSV endpoint to call the same final backend and
-  default to exact-format export.
-- Added focused tests for exact CSV shape preservation, sidecar-only fake local
-  LLM output, and workbench local LLM review without helper columns.
-- Removed the abandoned DPMLM spike, DPMLM rewrite-candidate, and local LLM
-  rewrite-candidate modules, CLI commands, and legacy tests. This does not
-  affect the local LLM HSD review runtime used by the final sidecar path.
-- Removed token-policy experiment/runtime modules, CLI commands, workbench
-  model controls, training runbook, and legacy tests from the production tree.
-- Removed GLiNER and HF HSD advisory public runtime knobs from the CLI and
-  workbench dashboard. Historical advisory code remains quarantined outside the
-  final exact CSV path.
-
-Focused verification so far:
+Public command:
 
 ```bash
-python -m py_compile contextsafe_hsd/simple_pipeline.py contextsafe_hsd/cli.py contextsafe_hsd/models/local_llm_hsd_review_runtime.py workbench/backend/app.py
-python -m pytest tests/test_simple_pipeline.py tests/test_submission.py tests/test_workbench_csv.py tests/test_local_llm_hsd_review_runtime.py tests/test_local_llm_hsd_suggestions.py -q
+python -m contextsafe_hsd.cli protect \
+  --input INPUT.csv \
+  --output OUTPUT.csv \
+  --text-col text \
+  --preset exact \
+  --llm-review local-llm \
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json
 ```
 
-Result: `45 passed`.
+## Already Done
 
-Final verification:
+- `run_final_csv_pipeline` and `build_final_pipeline_rows` provide the shared
+  exact CSV backend.
+- `protect --preset exact|audit` uses the final backend.
+- Local LLM review is sidecar-only for labels, reason tags, and validated PII
+  suggestions.
+- Workbench CSV export defaults to exact-format output through the same backend.
+- Removed abandoned DPMLM/local-LLM rewrite candidates.
+- Removed token-policy runtime paths, CLI commands, workbench controls, runbook,
+  and legacy tests.
+- Removed GLiNER public knobs from CLI/workbench.
+- Quarantined legacy HF advisory surfaces from the public CLI/workbench story.
+- Final verification passed on 2026-06-15:
+  - `python -m ruff check contextsafe_hsd workbench/backend tests`
+  - `python -m pytest -q`: 266 passed, 1 skipped
+  - `npm --prefix workbench/frontend run build`
+- Live 25-row local LLM smoke passed with exact columns, no helper columns,
+  local LLM status `ok`, parse count 25, and fallback count 0.
+
+## Why Another Pass Is Needed
+
+The code works, but the repo still looks too broad for hand-in. The top-level
+CLI still exposes many commands that are not part of the final story, and there
+are still modules/tests/docs for research and analysis workflows. Reviewers
+will see that as spaghetti unless it is deleted or moved out of the public
+surface.
+
+## Public Surface Target
+
+Keep visible:
+
+- `protect`
+- `validate-submission`
+- optional `profile-dataset`
+
+Remove or hide from `contextsafe_hsd.cli --help`:
+
+- `anonymize`
+- `sanitize-classify`
+- `create-submission`
+- `rerank-candidates`
+- `ablate`
+- `benchmark-utility`
+- `evaluate-author-risk`
+- `semantic-triage-report`
+- `source-regression-report`
+- `benchmark-lm-context`
+- `train-classifier`
+- `evaluate-classifier`
+- `predict-classifier`
+- dataset prep commands
+
+## Strong Deletion Candidates
+
+Delete these if imports/tests confirm the final path does not need them:
+
+- `contextsafe_hsd/ablation.py`
+- `contextsafe_hsd/classifier.py`
+- `contextsafe_hsd/utility_benchmark.py`
+- `contextsafe_hsd/hf_utility.py`
+- `contextsafe_hsd/models/hsd_advisory_runtime.py`
+- `contextsafe_hsd/lm_context_benchmark.py`
+- `contextsafe_hsd/presidio_compare.py`
+- `contextsafe_hsd/presidio_augment.py`
+- `contextsafe_hsd/rerank.py`
+- `contextsafe_hsd/semantic_triage.py`
+- `contextsafe_hsd/source_report.py`
+- `contextsafe_hsd/span_providers/gliner.py`
+- dataset preparation modules if hand-in does not need regeneration
+- synthetic/config-search/experiment scripts not needed for the demo
+
+Delete matching tests when the feature is intentionally removed. Do not keep
+legacy tests just to preserve legacy behavior.
+
+## Docs Cleanup Target
+
+Keep the explanation path short:
+
+- `README.md`
+- `docs/runbooks/quickstart.md`
+- `docs/runbooks/workbench.md` if the workbench stays
+- `docs/reference/data_contract.md`
+- `docs/reference/pipeline.md`
+- `docs/reference/providers_and_models.md`
+- `docs/planning/current_status.md`
+
+Archive or delete old research/planning/challenge docs that make removed
+methods look active.
+
+## Verification
+
+Required checks after final cleanup:
 
 ```bash
 python -m ruff check contextsafe_hsd workbench/backend tests
@@ -106,36 +138,18 @@ python -m pytest -q
 npm --prefix workbench/frontend run build
 ```
 
-Result on 2026-06-15: ruff passed; pytest `266 passed, 1 skipped`; frontend
-build passed. A live 25-row `protect --preset exact --llm-review local-llm`
-smoke preserved row order/count/columns exactly, changed only the `text`
-column, appended no helper columns, and wrote manifest/audit sidecars with
-local LLM status `ok`, parse count 25, fallback count 0, reason tag counts,
-and validated PII suggestion counts.
+Final smoke:
 
-## Small-Batch Verification Policy
-
-Use a 25-100 row local batch for system checks while cleaning. Avoid the full
-train split until the simplified path is stable.
-
-Minimum final checks:
-
-```bash
-python -m ruff check contextsafe_hsd workbench/backend tests
-python -m pytest -q
-npm --prefix workbench/frontend run build
-```
-
-Run a small live local-LLM smoke only when the endpoint is available. If it is
-not available, fake-runtime tests are acceptable, but the blocker must be
-recorded.
+- sample 25-100 rows without printing raw text;
+- run `protect --preset exact --llm-review local-llm`;
+- verify exact CSV shape, selected text replacement only, sidecar LLM status,
+  parse/fallback counts, reason tag counts, PII suggestion counts, and no
+  appended helper columns.
 
 ## Handoff Notes
 
-- Current local LLM endpoint: `http://100.120.207.64:1234/v1/chat/completions`.
-- Current local LLM model: `openai/gpt-oss-20b`.
-- The last full train split local-LLM sweep succeeded and is summarized in
-  `docs/planning/current_status.md`.
-- Do not commit generated `data/` outputs.
-- Keep commits small enough that a broken cleanup can be reverted without
-  losing unrelated work.
+- Current local LLM endpoint: `http://100.120.207.64:1234/v1/chat/completions`
+- Current local LLM model: `openai/gpt-oss-20b`
+- Do not commit `.vscode/` or generated `data/` outputs.
+- Prefer deletion over preserving unused research paths. The user is willing
+  to let future agents reimplement old tools if they are ever needed.
