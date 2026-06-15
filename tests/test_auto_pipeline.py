@@ -9,6 +9,7 @@ from contextsafe_hsd.auto.engine import (
     cleanup_direct_residuals,
     cleanup_strict_residuals,
 )
+from contextsafe_hsd.detectors import Span
 from contextsafe_hsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
@@ -40,6 +41,8 @@ def test_local_llm_backend_enables_lazy_local_model_status():
     )
 
     assert context.config.hsd_classification_backend == "local_llm"
+    assert "hsd_advisory" in context.config.disabled_models
+    assert context.model_status["hsd_advisory"]["status"] == "disabled"
     assert context.model_status["local_llm"]["status"] == "available"
     assert context.model_load_counts["local_llm"] == 0
 
@@ -141,6 +144,84 @@ def test_create_submission_auto_preserves_exact_four_column_shape(tmp_path):
         "author_risk_evaluation_ran": False,
         "skipped_reason": "not_run_manifest_hook_only",
     }
+
+
+def test_create_submission_auto_can_mask_repeated_author_group_residuals(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "author_group.csv"
+    output = tmp_path / "author_group.out.csv"
+    rows = [
+        {
+            "ID": "r1",
+            "author": "7",
+            "text": "sharedtrail should stay private and Muslims should leave.",
+            "hs": "1",
+        },
+        {
+            "ID": "r2",
+            "author": "7",
+            "text": "sharedtrail shows up again without changing target cues.",
+            "hs": "0",
+        },
+        {
+            "ID": "r3",
+            "author": "8",
+            "text": "sharedtrail is not repeated for this author.",
+            "hs": "0",
+        },
+    ]
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["ID", "author", "text", "hs"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    def fake_candidate_spans(text):
+        start = text.find("sharedtrail")
+        if start < 0:
+            return []
+        return [
+            Span(
+                start=start,
+                end=start + len("sharedtrail"),
+                entity_type="LOCATION",
+                text="sharedtrail",
+                score=0.91,
+                source="unit_author_group",
+            )
+        ]
+
+    monkeypatch.setattr(
+        "contextsafe_hsd.author_group_masking.candidate_spans",
+        fake_candidate_spans,
+    )
+
+    manifest = create_submission(
+        source,
+        output,
+        text_cols=["text"],
+        id_col="ID",
+        replace_text=True,
+        mode="auto",
+        disabled_providers=["presidio", "scrubadub", "gliner"],
+        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        author_group_masking=True,
+        author_group_col="author",
+    )
+
+    output_rows = read_rows(output)
+    assert list(output_rows[0]) == ["ID", "author", "text", "hs"]
+    assert output_rows[0]["text"].startswith("[LOCATION] should stay private")
+    assert output_rows[1]["text"].startswith("[LOCATION] shows up again")
+    assert output_rows[2]["text"] == rows[2]["text"]
+    assert "Muslims should leave" in output_rows[0]["text"]
+    assert manifest["validation"]["valid"] is True
+    group_summary = manifest["stages"]["verification"]["author_group_masking"]
+    assert group_summary["status"] == "ok"
+    assert group_summary["author_col"] == "author"
+    assert group_summary["changed_rows"] == 2
+    assert group_summary["counts_by_entity_type"] == {"LOCATION": 2}
 
 
 def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(

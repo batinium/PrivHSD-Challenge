@@ -154,10 +154,12 @@ def test_sanitize_classify_command_maps_local_llm_backend():
             "output.csv",
             "--hsd-classification-backend",
             "local-llm",
+            "--progress",
         ]
     )
 
     assert args.hsd_classification_backend.replace("-", "_") == "local_llm"
+    assert args.progress is True
 
 
 def test_sanitize_classify_replaces_text_and_appends_predictions(tmp_path):

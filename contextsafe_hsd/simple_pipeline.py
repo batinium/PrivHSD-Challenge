@@ -7,7 +7,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 from .csv_pipeline import read_csv, write_csv, write_json
@@ -468,6 +468,10 @@ def run_sanitize_classify(
     local_llm_timeout_seconds: float = 120.0,
     local_llm_batch_size: int = 10,
     local_llm_enable_pii_suggestions: bool = True,
+    author_group_masking: bool = False,
+    author_group_col: str | None = None,
+    author_group_min_repetitions: int = 2,
+    author_group_min_author_rows: int = 2,
     generalize_targets: bool | None = False,
     style_scrub: bool = False,
     hate_label_col: str = DEFAULT_HATE_LABEL_COL,
@@ -477,6 +481,7 @@ def run_sanitize_classify(
     require_hate_classification: bool = False,
     provider_factories: Mapping[str, Any] | None = None,
     model_factories: Mapping[str, Any] | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
     if text_col not in fieldnames:
@@ -502,6 +507,10 @@ def run_sanitize_classify(
         "local_llm_timeout_seconds": local_llm_timeout_seconds,
         "local_llm_batch_size": local_llm_batch_size,
         "local_llm_enable_pii_suggestions": local_llm_enable_pii_suggestions,
+        "author_group_masking": author_group_masking,
+        "author_group_col": author_group_col,
+        "author_group_min_repetitions": author_group_min_repetitions,
+        "author_group_min_author_rows": author_group_min_author_rows,
         "generalize_targets": generalize_targets,
         "style_scrub": style_scrub,
         "official_mode": False,
@@ -521,6 +530,7 @@ def run_sanitize_classify(
         id_col=id_col,
         output_col=text_col,
         replace_text=True,
+        progress_callback=progress_callback,
     )
     output_rows = [dict(row) for row in engine_result.rows]
     output_fieldnames, classification_columns = classification_fieldnames(

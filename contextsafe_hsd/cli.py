@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from .ablation import AblationError, run_ablation
@@ -221,6 +222,55 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_author_group_masking_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--enable-author-group-masking",
+        action="store_true",
+        help=(
+            "Mask detector-backed factual spans repeated across rows from the "
+            "same author/user group after row-level sanitization."
+        ),
+    )
+    parser.add_argument(
+        "--author-group-col",
+        help=(
+            "Author/user grouping column for --enable-author-group-masking. "
+            "Defaults to the first author/user-like column when omitted."
+        ),
+    )
+    parser.add_argument("--author-group-min-repetitions", type=int, default=2)
+    parser.add_argument("--author-group-min-author-rows", type=int, default=2)
+
+
+def make_progress_printer():
+    last_event = {"stage": None, "processed": -1, "timestamp": 0.0}
+
+    def print_progress(event: dict[str, object]) -> None:
+        stage = str(event.get("stage") or "unknown")
+        processed = int(event.get("processed") or 0)
+        total = int(event.get("total") or 0)
+        now = time.monotonic()
+        should_print = (
+            stage != last_event["stage"]
+            or processed == total
+            or processed - int(last_event["processed"]) >= 50
+            or now - float(last_event["timestamp"]) >= 10.0
+        )
+        if not should_print:
+            return
+        detail = str(event.get("detail") or "")
+        suffix = f" {detail}" if detail else ""
+        print(
+            f"[progress] {stage} {processed}/{total}{suffix}",
+            file=sys.stderr,
+            flush=True,
+        )
+        last_event.update(stage=stage, processed=processed, timestamp=now)
+
+    return print_progress
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="contextsafe-hsd")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -282,6 +332,11 @@ def build_parser() -> argparse.ArgumentParser:
     sanitize_classify.add_argument("--id-col")
     sanitize_classify.add_argument("--manifest", type=Path)
     sanitize_classify.add_argument("--audit", type=Path)
+    sanitize_classify.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print coarse pipeline progress to stderr.",
+    )
     sanitize_classify.add_argument("--style-scrub", action="store_true")
     sanitize_classify.add_argument("--hate-label-col", default="is_hate_speech")
     sanitize_classify.add_argument("--hate-score-col", default="hate_speech_score")
@@ -333,6 +388,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable advisory residual PII suggestions from the local LLM backend.",
     )
+    add_author_group_masking_arguments(sanitize_classify)
     add_auto_runtime_arguments(sanitize_classify)
     sanitize_targets = sanitize_classify.add_mutually_exclusive_group()
     sanitize_targets.add_argument("--generalize-targets", action="store_true")
@@ -367,6 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
             "columns; audit preserves the schema and writes deeper manifest/audit data."
         ),
     )
+    add_author_group_masking_arguments(protect)
 
     bound = subparsers.add_parser(
         "bound-contributions",
@@ -620,6 +677,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["auto", "utility", "balanced", "privacy"],
         default="balanced",
     )
+    add_author_group_masking_arguments(create_submission_parser)
     add_auto_runtime_arguments(create_submission_parser)
     create_submission_parser.add_argument("--style-scrub", action="store_true")
     create_submission_parser.add_argument(
@@ -1253,6 +1311,10 @@ def main(argv: list[str] | None = None) -> int:
                 local_llm_enable_pii_suggestions=(
                     not args.disable_local_llm_pii_suggestions
                 ),
+                author_group_masking=args.enable_author_group_masking,
+                author_group_col=args.author_group_col,
+                author_group_min_repetitions=args.author_group_min_repetitions,
+                author_group_min_author_rows=args.author_group_min_author_rows,
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
                 hate_label_col=args.hate_label_col,
@@ -1260,6 +1322,9 @@ def main(argv: list[str] | None = None) -> int:
                 hate_model_count_col=args.hate_model_count_col,
                 overwrite_existing_hate_cols=args.overwrite_hate_columns,
                 require_hate_classification=args.require_hate_classification,
+                progress_callback=make_progress_printer()
+                if args.progress
+                else None,
             )
         elif args.command == "protect":
             if args.preset == "analysis":
@@ -1275,6 +1340,10 @@ def main(argv: list[str] | None = None) -> int:
                     allow_model_download=False,
                     audit_level="summary",
                     gliner_profile="pii",
+                    author_group_masking=args.enable_author_group_masking,
+                    author_group_col=args.author_group_col,
+                    author_group_min_repetitions=args.author_group_min_repetitions,
+                    author_group_min_author_rows=args.author_group_min_author_rows,
                     generalize_targets=False,
                     style_scrub=False,
                     require_hate_classification=False,
@@ -1299,6 +1368,10 @@ def main(argv: list[str] | None = None) -> int:
                     allow_model_download=False,
                     audit_level="row" if args.preset == "audit" else "summary",
                     gliner_profile="pii",
+                    author_group_masking=args.enable_author_group_masking,
+                    author_group_col=args.author_group_col,
+                    author_group_min_repetitions=args.author_group_min_repetitions,
+                    author_group_min_author_rows=args.author_group_min_author_rows,
                 )
                 result["preset"] = args.preset
                 if args.manifest:
@@ -1473,6 +1546,10 @@ def main(argv: list[str] | None = None) -> int:
                 gliner_profile=args.gliner_profile,
                 enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
+                author_group_masking=args.enable_author_group_masking,
+                author_group_col=args.author_group_col,
+                author_group_min_repetitions=args.author_group_min_repetitions,
+                author_group_min_author_rows=args.author_group_min_author_rows,
             )
         elif args.command == "validate-submission":
             result = validate_submission(

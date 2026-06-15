@@ -59,6 +59,49 @@ PII findings:
 
 Conclusion: use the LLM for opt-in HSD classification and review cues. Do not use it as an automatic PII scrubber.
 
+## Real Train Split And Author Group Follow-Up
+
+The real train split run completed on `data/train/train_split.csv` with
+`local_llm` classification enabled. The file contained 1,154 rows, not 1,400.
+All 1,154 rows were processed and parsed by the local LLM backend.
+
+Sanitization evidence from the completed run:
+
+- Output validation was true.
+- Direct identifiers were reduced from 215 to 0.
+- All detected identifiers were reduced from 434 to 3.
+- Remaining residual identifiers were 3 quasi-identifier `LOCATION` spans.
+- Target cue retention was 0.9982.
+- Utility cue retention was 0.9991.
+- Character utility retention was 0.9469.
+
+The `author` column is numeric/pseudonymous, but it is still useful as a
+grouping key. A local author-risk sidecar found substantial residual authorship
+signal after row-level sanitization:
+
+- Original author accuracy: 0.4291.
+- Sanitized author accuracy: 0.4187.
+- Chance is about 0.04 for 25 authors.
+
+This means row-wise PII removal is not the same as author unlinkability. For
+MVP submission, do not claim author anonymity or broad stylometric removal.
+
+An optional conservative author-group masking pass now exists for exact-format
+and analysis paths. It:
+
+- uses the author/user column only as a grouping key;
+- masks detector-backed factual spans repeated across multiple rows from the
+  same author;
+- preserves row order, row count, and schema;
+- writes changes only into the existing text column;
+- rejects group masks that reduce target or utility cue retention;
+- records raw-text-free counts in the manifest under
+  `stages.verification.author_group_masking`.
+
+Use it as a targeted privacy hardening option, not as general style rewriting.
+Full LLM batch rewriting of all comments from one author remains out of scope
+for MVP because it can change HSD semantics and overfit to model behavior.
+
 ## 800-Row Live Pipeline Validation
 
 The local LLM backend was exercised end-to-end on

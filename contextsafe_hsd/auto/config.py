@@ -64,6 +64,10 @@ class AutoPipelineConfig:
     local_llm_batch_size: int = 10
     local_llm_enable_pii_suggestions: bool = True
     local_llm_require_structured_output: bool = True
+    author_group_masking: bool = False
+    author_group_col: str | None = None
+    author_group_min_repetitions: int = 2
+    author_group_min_author_rows: int = 2
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -73,6 +77,14 @@ class AutoPipelineConfig:
         )
         backend = self.hsd_classification_backend.strip().lower().replace("-", "_")
         object.__setattr__(self, "hsd_classification_backend", backend)
+        disabled_models = frozenset(
+            model.strip()
+            for model in self.disabled_models
+            if model and model.strip()
+        )
+        if backend == "local_llm":
+            disabled_models = disabled_models | {"hsd_advisory"}
+        object.__setattr__(self, "disabled_models", disabled_models)
         object.__setattr__(
             self,
             "local_llm_endpoint",
@@ -89,6 +101,12 @@ class AutoPipelineConfig:
             "local_llm_enabled",
             bool(self.local_llm_enabled or backend == "local_llm"),
         )
+        if self.author_group_col is not None:
+            object.__setattr__(
+                self,
+                "author_group_col",
+                self.author_group_col.strip() or None,
+            )
         normalized_hsd_models = tuple(
             dict.fromkeys(
                 model.strip()
@@ -128,3 +146,7 @@ class AutoPipelineConfig:
             raise ValueError("local_llm_timeout_seconds must be positive")
         if self.local_llm_batch_size < 1:
             raise ValueError("local_llm_batch_size must be positive")
+        if self.author_group_min_repetitions < 2:
+            raise ValueError("author_group_min_repetitions must be at least 2")
+        if self.author_group_min_author_rows < 2:
+            raise ValueError("author_group_min_author_rows must be at least 2")

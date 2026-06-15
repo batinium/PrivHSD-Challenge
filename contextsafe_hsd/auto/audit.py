@@ -187,6 +187,7 @@ def build_stage_summary(
     hsd_advisory_comparison_count: int,
     residual_review_required_count: int,
     residual_direct_cleanup_count: int,
+    author_group_masking: dict[str, Any],
     author_risk: dict[str, Any],
 ) -> dict[str, Any]:
     meaning_rejection_counts = Counter(
@@ -280,6 +281,7 @@ def build_stage_summary(
             "overmasking_warning_counts": metrics.get("overmasking_warning_counts", {}),
             "hsd_advisory_status": hsd_summary["status"],
             "hsd_advisory": hsd_summary,
+            "author_group_masking": author_group_masking,
             "metadata_leakage_status": "not_run",
             "metadata_leakage": {
                 "status": "not_run",

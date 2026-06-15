@@ -343,6 +343,18 @@ Live prompt-tuning artifacts:
 The selected default is `v1_endorsement_rule`, not `v2_context_first`, because
 the latter won on accuracy but gave up too much HSD recall.
 
+Author-group follow-up:
+
+- Treat numeric `author` values as grouping keys, not direct names.
+- Row-level masking remains the default privacy authority.
+- Optional `--enable-author-group-masking` can be used on `protect`,
+  `create-submission`, and `sanitize-classify`.
+- The group pass should only mask detector-backed factual spans repeated across
+  multiple rows from the same author and should preserve exact CSV shape.
+- Do not use broad LLM batch rewriting for author style removal in MVP.
+- If LLM author-batch review is explored later, keep it advisory: exact
+  substrings only, deterministic validation, no automatic rewrite.
+
 ## Done Means
 
 - Default runs are unchanged.
@@ -354,6 +366,8 @@ the latter won on accuracy but gave up too much HSD recall.
 - Python dead-code and unused-code tools have been run; confirmed dead code has been removed.
 - Tests pass without live LLM access.
 - The manifest makes it clear which backend was used and whether parsing/fallback happened.
+- The manifest records whether author-group masking was disabled, skipped, or
+  applied when repeated author/user data exists.
 - The integration commit has been created and pushed, or the push blocker is reported with exact next steps.
 - The live endpoint compatibility fix and selected prompt are committed and
   pushed after the 800-row validation and failure-subset prompt tuning.

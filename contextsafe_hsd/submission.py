@@ -214,6 +214,10 @@ def create_submission(
     gliner_profile: str = "general",
     enable_token_policy: bool = False,
     hsd_advisory_models: list[str] | None = None,
+    author_group_masking: bool = False,
+    author_group_col: str | None = None,
+    author_group_min_repetitions: int = 2,
+    author_group_min_author_rows: int = 2,
 ) -> dict[str, Any]:
     if not replace_text:
         raise SubmissionError("create-submission requires --replace-text")
@@ -241,6 +245,10 @@ def create_submission(
             "generalize_targets": generalize_targets if generalize_targets is not None else False,
             "style_scrub": style_scrub,
             "official_mode": True,
+            "author_group_masking": author_group_masking,
+            "author_group_col": author_group_col,
+            "author_group_min_repetitions": author_group_min_repetitions,
+            "author_group_min_author_rows": author_group_min_author_rows,
         }
         if hsd_advisory_models is not None:
             config_kwargs["hsd_advisory_models"] = tuple(hsd_advisory_models)

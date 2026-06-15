@@ -6,6 +6,10 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from contextsafe_hsd.author_group_masking import (
+    AuthorGroupMaskingConfig,
+    apply_author_group_masking,
+)
 from contextsafe_hsd.detectors import (
     HIGH_CONFIDENCE_DIRECT_TYPES,
     Span,
@@ -18,6 +22,7 @@ from contextsafe_hsd.rerank import length_drift, style_risk_count
 from contextsafe_hsd.span_providers.base import SpanCandidate
 
 from .audit import (
+    AUTHOR_COLUMN_NAMES,
     MEANING_PROTECTION_REJECTION_REASONS,
     author_risk_hook,
     build_stage_summary,
@@ -393,18 +398,14 @@ class AutoPipelineEngine:
             progress_callback=progress_callback,
         )
 
-        output_rows: list[dict[str, Any]] = []
-        audit_rows: list[dict[str, Any]] = []
-        metric_rows: list[dict[str, Any]] = []
+        selected_records: list[dict[str, Any]] = []
         chosen_counts: Counter[str] = Counter()
         fallback_counts: Counter[str] = Counter()
         rejection_counts: Counter[str] = Counter()
-        changed_count = 0
         candidate_count = 0
         rejected_candidate_count = 0
         candidate_name_counts: Counter[str] = Counter()
         hsd_advisory_comparison_count = 0
-        residual_review_required_count = 0
         residual_direct_cleanup_count = 0
         self._emit_progress(
             progress_callback,
@@ -435,12 +436,56 @@ class AutoPipelineEngine:
             residual_direct_cleanup_count += len(residual_cleanup)
             output_row = dict(state.row)
             output_row[target_col] = chosen_text
-            output_rows.append(output_row)
-            if state.original != chosen_text:
+            selected_records.append(
+                {
+                    "state": state,
+                    "chosen": chosen,
+                    "scored": scored,
+                    "selection_reason": reason,
+                    "row": output_row,
+                    "residual_cleanup": residual_cleanup,
+                }
+            )
+            self._emit_progress(
+                progress_callback,
+                stage="selection",
+                processed=row_number,
+                total=total_rows,
+                detail="Selected row-level masked output.",
+                row_id=state.row_id,
+            )
+
+        output_rows = [record["row"] for record in selected_records]
+        author_group_result = apply_author_group_masking(
+            rows,
+            output_rows,
+            fieldnames=fieldnames,
+            text_col=target_col,
+            config=AuthorGroupMaskingConfig(
+                enabled=config.author_group_masking,
+                author_col=config.author_group_col,
+                min_repetitions=config.author_group_min_repetitions,
+                min_author_rows=config.author_group_min_author_rows,
+                metric_depth=config.metric_depth,
+            ),
+            known_author_names=set(AUTHOR_COLUMN_NAMES),
+        )
+        output_rows = author_group_result.rows
+        for record, output_row in zip(selected_records, output_rows):
+            record["row"] = output_row
+
+        audit_rows: list[dict[str, Any]] = []
+        metric_rows: list[dict[str, Any]] = []
+        changed_count = 0
+        residual_review_required_count = 0
+        for record in selected_records:
+            state = record["state"]
+            final_text = str(record["row"].get(target_col, "") or "")
+            if state.original != final_text:
                 changed_count += 1
             metrics = row_metric_for_depth(
                 state.original,
-                chosen_text,
+                final_text,
                 metric_depth=self.context.config.metric_depth,
                 row_index=state.row_index,
             )
@@ -453,22 +498,18 @@ class AutoPipelineEngine:
             audit_rows.append(
                 self._row_audit(
                     state,
-                    chosen=chosen,
-                    scored=scored,
-                    selection_reason=reason,
+                    chosen=record["chosen"],
+                    scored=record["scored"],
+                    selection_reason=record["selection_reason"],
                     metrics=metrics,
                     residual_review_required=residual_review_required,
-                    chosen_text=chosen_text,
-                    residual_cleanup=residual_cleanup,
+                    chosen_text=final_text,
+                    residual_cleanup=record["residual_cleanup"],
+                    author_group_masking=author_group_result.row_transformations.get(
+                        state.row_index - 1,
+                        [],
+                    ),
                 )
-            )
-            self._emit_progress(
-                progress_callback,
-                stage="selection",
-                processed=row_number,
-                total=total_rows,
-                detail="Selected final masked output and computed row metrics.",
-                row_id=state.row_id,
             )
 
         self._emit_progress(
@@ -506,6 +547,7 @@ class AutoPipelineEngine:
             hsd_advisory_comparison_count=hsd_advisory_comparison_count,
             residual_review_required_count=residual_review_required_count,
             residual_direct_cleanup_count=residual_direct_cleanup_count,
+            author_group_masking=author_group_result.summary,
             author_risk=author_risk_hook(
                 fieldnames,
                 rows,
@@ -1102,6 +1144,7 @@ class AutoPipelineEngine:
         residual_review_required: bool,
         chosen_text: str,
         residual_cleanup: list[dict[str, Any]],
+        author_group_masking: list[dict[str, Any]],
     ) -> dict[str, Any]:
         accepted_provider_counts = Counter(
             output.provider
@@ -1139,6 +1182,8 @@ class AutoPipelineEngine:
             "residual_review_required": residual_review_required,
             "residual_direct_cleanup_count": len(residual_cleanup),
             "residual_direct_cleanup": residual_cleanup,
+            "author_group_masking_count": len(author_group_masking),
+            "author_group_masking": author_group_masking,
             "residual_identifier_count": metrics.get("residual_identifier_count", 0),
             "residual_direct_identifier_count": metrics.get(
                 "residual_direct_identifier_count",
