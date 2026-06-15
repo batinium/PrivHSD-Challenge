@@ -10,6 +10,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_csv, write_json
 from .metrics import aggregate_metrics, row_metric
 from .pipeline import PrivatizerConfig, privatize_text
+from .row_ids import report_row_id
 from .utility_benchmark import (
     BenchmarkError,
     INSTALL_HINT,
@@ -158,7 +159,7 @@ def run_variant(
 
         row_report: dict[str, Any] = {
             "row_index": row_index,
-            "row_id": row.get(id_col) if id_col else str(row_index),
+            "row_id": report_row_id(row, row_index=row_index, id_col=id_col),
             "changed": metrics["changed"],
             "metrics": metrics,
             "transformations": transformations,

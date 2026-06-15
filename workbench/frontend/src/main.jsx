@@ -917,9 +917,9 @@ function DataIntakePanel({
           </select>
         </label>
         <label>
-          <span>ID Column</span>
+          <span>Case Key</span>
           <select value={idCol} onChange={(event) => onIdCol(event.target.value)}>
-            <option value="">None</option>
+            <option value="">None - generate private case IDs</option>
             {headers.map((header) => <option key={header} value={header}>{header}</option>)}
           </select>
         </label>
@@ -1101,6 +1101,22 @@ function preferredColumn(headers, names, fallback) {
   }
   return fallback !== undefined ? fallback : headers[0] || "";
 }
+
+const PRIVACY_SAFE_CASE_KEY_COLUMNS = [
+  "case_fingerprint",
+  "comment_fingerprint",
+  "row_fingerprint",
+  "fingerprint",
+  "case_hash",
+  "comment_hash",
+  "row_hash",
+  "hash",
+  "digest",
+  "case_key",
+  "comment_key",
+  "row_key",
+  "review_key"
+];
 
 function downloadTextFile(name, text, type) {
   const blob = new Blob([text], { type });
@@ -1302,7 +1318,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
     event.target.value = "";
     const detected = detectCsvHeaders(text);
     const nextTextCol = preferredColumn(detected, ["text", "tweet", "content", "comment"]);
-    const nextIdCol = preferredColumn(detected, ["id", "case_id", "row_id", "source_id"], "");
+    const nextIdCol = preferredColumn(detected, PRIVACY_SAFE_CASE_KEY_COLUMNS, "");
     setCsvText(text);
     setCsvName(file.name || "contextsafe-hsd.csv");
     setHeaders(detected);

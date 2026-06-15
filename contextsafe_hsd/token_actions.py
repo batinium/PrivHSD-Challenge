@@ -14,6 +14,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_json
 from .detectors import Span, detect_spans, target_group_spans
 from .metrics import DIRECT_IDENTIFIER_TYPES, QUASI_IDENTIFIER_TYPES, UTILITY_CUES
+from .row_ids import report_row_id
 from .style import (
     ACTION_TERMS,
     HASHTAG_PATTERN,
@@ -233,7 +234,7 @@ def collect_examples(
     limit = len(rows) if sample_size <= 0 else min(sample_size, len(rows))
     examples: list[TokenExample] = []
     for row_index, row in enumerate(rows[:limit], start=1):
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         examples.extend(
             weak_label_text(
                 str(row.get(text_col, "") or ""),

@@ -16,6 +16,7 @@ from .context import analyze_context
 from .csv_pipeline import read_csv, write_csv, write_json
 from .cue_checks import DEFAULT_RETENTION_THRESHOLD, cue_terms, row_cue_report
 from .metrics import row_metric
+from .row_ids import report_row_id
 
 
 DEFAULT_LOW_CONFIDENCE = 0.65
@@ -432,7 +433,7 @@ def run_semantic_triage_report(
         original = original_texts[selected_offset]
         privatized = privatized_texts[selected_offset]
         changed = original != privatized
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         label = str(row.get(label_col, "") or "") if label_col else None
         source = str(row.get(source_col, "") or "") if source_col else None
 

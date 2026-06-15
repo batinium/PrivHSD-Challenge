@@ -42,6 +42,10 @@ Open `http://127.0.0.1:5173`.
 
 - The dashboard exposes CSV auto mode only.
 - CSV upload mode runs with fast metrics and local-only optional model behavior.
+- CSV upload does not require an ID column. Fingerprint/hash/case-key columns
+  can be used as stable review case IDs when present.
+- Raw author/user identifier columns are not used as review case IDs; the
+  backend generates private HMAC case IDs for those inputs.
 - Replace-text CSV output preserves the original schema.
 - Helper-column CSV output adds `privatized_text` for local audit only.
 - Run CSV uses a local background job with row/phase progress polling; matching

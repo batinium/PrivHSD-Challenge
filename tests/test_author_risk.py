@@ -6,6 +6,7 @@ import pytest
 
 from contextsafe_hsd.author_risk import run_author_risk_evaluation
 from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.row_ids import safe_label_counts
 
 
 HAS_SKLEARN = importlib.util.find_spec("sklearn") is not None
@@ -116,11 +117,14 @@ def test_author_risk_reports_drop_on_synthetic_style_fixture(tmp_path):
 
     assert output.exists()
     assert result["status"] == "ok"
-    assert result["split"]["author_counts"] == {
-        "author_a": 6,
-        "author_b": 6,
-        "author_c": 6,
-    }
+    assert result["split"]["author_counts"] == safe_label_counts(
+        ["author_a"] * 6 + ["author_b"] * 6 + ["author_c"] * 6,
+        prefix="author",
+    )
+    serialized = json.dumps(result)
+    assert '"author_a"' not in serialized
+    assert '"author_b"' not in serialized
+    assert '"author_c"' not in serialized
     assert result["original"]["macro_f1"] > result["privatized"]["macro_f1"]
     assert result["comparison"]["privacy_gain_macro_f1"] > 0
     assert result["hsd_proxy"]["metrics"]["utility_cue_retention_mean"] == 1.0

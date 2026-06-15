@@ -12,6 +12,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_json
 from .detectors import TARGET_GROUP_TERMS
 from .metrics import UTILITY_CUES
+from .row_ids import report_row_id
 from .style import ACTION_TERMS, NEGATION_MODALITY_TERMS
 
 
@@ -168,7 +169,7 @@ def run_cue_checks(
     row_reports = [
         row_cue_report(
             row_index=index,
-            row_id=str(row.get(id_col, "") or index) if id_col else str(index),
+            row_id=report_row_id(row, row_index=index, id_col=id_col),
             original=str(row.get(text_col, "") or ""),
             privatized=str(row.get(privatized_col, "") or ""),
             threshold=retention_threshold,

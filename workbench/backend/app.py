@@ -11,6 +11,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import secrets
 import threading
 import time
@@ -37,7 +38,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v3"
+CSV_CACHE_VERSION = "workbench_csv_result_v4"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -77,6 +78,16 @@ SENSITIVE_REVIEW_ID_TOKENS = frozenset(
         "username",
     }
 )
+PRIVACY_SAFE_REVIEW_ID_TOKENS = frozenset({"digest", "fingerprint", "hash"})
+PRIVACY_SAFE_REVIEW_ID_NAMES = frozenset(
+    {
+        "case_key",
+        "comment_key",
+        "review_key",
+        "row_key",
+    }
+)
+REVIEW_ID_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{5,127}$")
 REVIEW_CASE_ID_COLUMN = "__contextsafe_review_case_id"
 
 
@@ -254,7 +265,7 @@ def validate_csv_request(
     if request.id_col and request.id_col not in fieldnames:
         raise HTTPException(
             status_code=400,
-            detail=f"Missing ID column: {request.id_col}",
+            detail=f"Missing case key column: {request.id_col}",
         )
     if request.mode != "auto":
         raise HTTPException(
@@ -269,6 +280,35 @@ def is_sensitive_review_id_col(id_col: str | None) -> bool:
         return False
     parts = {part for part in normalized.replace("-", "_").split("_") if part}
     return bool(parts & SENSITIVE_REVIEW_ID_TOKENS)
+
+
+def is_privacy_safe_case_key_col(id_col: str | None) -> bool:
+    normalized = str(id_col or "").strip().lower()
+    if not normalized or is_sensitive_review_id_col(id_col):
+        return False
+    parts = {part for part in normalized.replace("-", "_").split("_") if part}
+    return (
+        normalized in PRIVACY_SAFE_REVIEW_ID_NAMES
+        or bool(parts & PRIVACY_SAFE_REVIEW_ID_TOKENS)
+    )
+
+
+def is_review_id_value_safe(value: str) -> bool:
+    return REVIEW_ID_VALUE_PATTERN.fullmatch(value) is not None
+
+
+def has_usable_privacy_safe_case_keys(
+    rows: list[dict[str, str]],
+    *,
+    id_col: str | None,
+) -> bool:
+    if not id_col or not is_privacy_safe_case_key_col(id_col):
+        return False
+    values = [str(row.get(id_col, "") or "").strip() for row in rows]
+    return (
+        all(is_review_id_value_safe(value) for value in values)
+        and len(set(values)) == len(values)
+    )
 
 
 def review_safe_id_col(id_col: str | None) -> str | None:
@@ -295,7 +335,6 @@ def hashed_review_case_id(
     row: dict[str, Any],
     *,
     row_index: int,
-    id_col: str | None,
     text_col: str,
     secret: bytes,
 ) -> str:
@@ -305,8 +344,6 @@ def hashed_review_case_id(
     payload = json.dumps(
         {
             "row_index": row_index,
-            "id_col": id_col or "",
-            "id_value": str(row.get(id_col, "") or "") if id_col else "",
             "text_sha256": text_sha256,
         },
         ensure_ascii=False,
@@ -323,6 +360,9 @@ def review_id_processing_rows(
     id_col: str | None,
     text_col: str,
 ) -> tuple[list[dict[str, str]], str | None, bool, str]:
+    if has_usable_privacy_safe_case_keys(rows, id_col=id_col):
+        return rows, id_col, False, "input_privacy_safe_case_key"
+
     secret = secrets.token_bytes(32)
     processed_rows = []
     for index, row in enumerate(rows, start=1):
@@ -330,7 +370,6 @@ def review_id_processing_rows(
         next_row[REVIEW_CASE_ID_COLUMN] = hashed_review_case_id(
             row,
             row_index=index,
-            id_col=id_col,
             text_col=text_col,
             secret=secret,
         )
@@ -339,7 +378,7 @@ def review_id_processing_rows(
         processed_rows,
         REVIEW_CASE_ID_COLUMN,
         True,
-        "hmac_sha256_id_text_row",
+        "hmac_sha256_row_text",
     )
 
 
@@ -2164,6 +2203,7 @@ def build_csv_privatize_response(
         "validation": validation,
     }
     summary["id_col"] = request.id_col
+    summary["case_key_col"] = request.id_col
     summary["review_id_col"] = (
         None if processing_id_col == REVIEW_CASE_ID_COLUMN else processing_id_col
     )
@@ -2183,6 +2223,7 @@ def build_csv_privatize_response(
         "columns": {
             "text_col": request.text_col,
             "id_col": request.id_col,
+            "case_key_col": request.id_col,
             "review_id_col": None
             if processing_id_col == REVIEW_CASE_ID_COLUMN
             else processing_id_col,

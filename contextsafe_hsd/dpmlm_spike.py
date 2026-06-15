@@ -18,6 +18,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_json
 from .detectors import TARGET_GROUP_TERMS
 from .metrics import UTILITY_CUES, aggregate_metrics, row_metric
+from .row_ids import report_row_id
 from .style import ACTION_TERMS, NEGATION_MODALITY_TERMS
 
 
@@ -141,7 +142,7 @@ def collect_sample_rows(
         sampled.append(
             {
                 "row_index": row_index,
-                "row_id": str(row.get(id_col, "") or row_index) if id_col else str(row_index),
+                "row_id": report_row_id(row, row_index=row_index, id_col=id_col),
                 "text_length": len(str(row.get(text_col, "") or "")),
             }
         )

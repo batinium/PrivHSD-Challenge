@@ -7,6 +7,7 @@ from typing import Any
 
 from contextsafe_hsd.metrics import row_metric_fast
 from contextsafe_hsd.rerank import style_risk_count
+from contextsafe_hsd.row_ids import report_row_id
 
 from .row_state import RowRiskProfile, RowRoutingDecision
 
@@ -28,9 +29,7 @@ def row_id_for(
     row_index: int,
     id_col: str | None,
 ) -> str:
-    if id_col:
-        return str(row.get(id_col, "") or row_index)
-    return str(row_index)
+    return report_row_id(row, row_index=row_index, id_col=id_col)
 
 
 def cheap_profile(

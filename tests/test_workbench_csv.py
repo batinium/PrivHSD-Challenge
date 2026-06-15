@@ -210,6 +210,92 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
     assert insights["ngo_review"]["auto_moderation"] is False
 
 
+def test_workbench_csv_endpoint_does_not_require_case_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+    client = TestClient(workbench_app.app)
+    response = client.post(
+        "/api/csv/privatize",
+        json={
+            "csv_text": (
+                "text,predicted_is_hate_speech\n"
+                "Email alex@example.test because Muslims should leave.,1\n"
+            ),
+            "text_col": "text",
+            "mode": "auto",
+            "replace_text": True,
+            "disabled_providers": ["presidio", "scrubadub", "gliner"],
+            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    rows = list(csv.DictReader(io.StringIO(body["output_csv"])))
+    assert list(rows[0]) == ["text", "predicted_is_hate_speech"]
+    assert body["manifest"]["columns"]["id_col"] is None
+    assert body["manifest"]["columns"]["review_id_col"] is None
+    assert body["manifest"]["columns"]["review_id_synthetic"] is True
+    assert re.fullmatch(r"case-[0-9a-f]{24}", body["preview_rows"][0]["row_id"])
+
+
+def test_workbench_csv_uses_safe_fingerprint_as_review_case_key(tmp_path, monkeypatch):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+    client = TestClient(workbench_app.app)
+    fingerprint = "fp_" + ("a" * 32)
+    response = client.post(
+        "/api/csv/privatize",
+        json={
+            "csv_text": (
+                "case_fingerprint,text,predicted_is_hate_speech\n"
+                f"{fingerprint},Email alex@example.test because Muslims should leave.,1\n"
+            ),
+            "text_col": "text",
+            "id_col": "case_fingerprint",
+            "mode": "auto",
+            "replace_text": True,
+            "disabled_providers": ["presidio", "scrubadub", "gliner"],
+            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["manifest"]["columns"]["id_col"] == "case_fingerprint"
+    assert body["manifest"]["columns"]["review_id_col"] == "case_fingerprint"
+    assert body["manifest"]["columns"]["review_id_synthetic"] is False
+    assert (
+        body["manifest"]["columns"]["review_id_strategy"]
+        == "input_privacy_safe_case_key"
+    )
+    assert body["preview_rows"][0]["row_id"] == fingerprint
+    assert body["audit"]["rows"][0]["row_id"] == fingerprint
+    review_item = body["platform_insights"]["ngo_review"]["queue_items"][0]
+    assert review_item["row_id"] == fingerprint
+    review_rows = list(csv.DictReader(io.StringIO(body["review_csv"])))
+    assert review_rows[0]["case_id"] == fingerprint
+
+
+def test_workbench_rejects_duplicate_fingerprints_for_review_case_keys():
+    fingerprint = "fp_" + ("b" * 32)
+    rows = [
+        {"case_fingerprint": fingerprint, "text": "First comment"},
+        {"case_fingerprint": fingerprint, "text": "Second comment"},
+    ]
+
+    processed_rows, processing_id_col, synthetic, strategy = (
+        workbench_app.review_id_processing_rows(
+            rows,
+            id_col="case_fingerprint",
+            text_col="text",
+        )
+    )
+
+    assert processing_id_col == workbench_app.REVIEW_CASE_ID_COLUMN
+    assert synthetic is True
+    assert strategy == "hmac_sha256_row_text"
+    assert processed_rows[0][processing_id_col] != processed_rows[1][processing_id_col]
+
+
 def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, monkeypatch):
     monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
     client = TestClient(workbench_app.app)
@@ -238,7 +324,7 @@ def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, mo
     assert body["manifest"]["columns"]["review_id_synthetic"] is True
     assert (
         body["manifest"]["columns"]["review_id_strategy"]
-        == "hmac_sha256_id_text_row"
+        == "hmac_sha256_row_text"
     )
     assert re.fullmatch(r"case-[0-9a-f]{24}", body["preview_rows"][0]["row_id"])
     review_item = body["platform_insights"]["ngo_review"]["queue_items"][0]

@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from .csv_pipeline import read_csv, write_json
+from .row_ids import report_row_id
 
 
 DEFAULT_METADATA_COLUMNS = ("id", "author")
@@ -100,7 +101,7 @@ def scan_metadata_leakage(
     eligible_values: Counter[str] = Counter()
     skipped_short_values: Counter[str] = Counter()
     for row_index, row in enumerate(rows, start=1):
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         for metadata_col in metadata_cols:
             value = str(row.get(metadata_col, "") or "").strip()
             if len(value) < min_value_length:

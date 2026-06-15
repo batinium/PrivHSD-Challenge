@@ -91,6 +91,32 @@ def test_scan_metadata_leakage_reports_exact_and_normalized_hits(tmp_path):
     assert "Author_A" not in json.dumps(result)
 
 
+def test_scan_metadata_leakage_uses_row_index_for_sensitive_id_column(tmp_path):
+    source = tmp_path / "rows.csv"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["author_id", "text"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "author_id": "author-secret-1",
+                "text": "author-secret-1 appears here.",
+            }
+        )
+
+    result = scan_metadata_leakage(
+        source,
+        text_cols=["text"],
+        metadata_cols=["author_id"],
+        id_col="author_id",
+    )
+
+    assert result["examples"][0]["row_id"] == "1"
+    assert "author-secret-1" not in json.dumps(result)
+
+
 def test_scan_metadata_leakage_requires_metadata_columns(tmp_path):
     source = tmp_path / "rows.csv"
     with source.open("w", encoding="utf-8", newline="") as handle:

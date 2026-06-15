@@ -11,6 +11,7 @@ from statistics import mean
 from typing import Any
 
 from .csv_pipeline import read_csv, write_csv, write_json
+from .row_ids import report_row_id
 
 
 INSTALL_HINT = (
@@ -131,7 +132,7 @@ def collect_labeled_samples(
             raise ClassifierError(
                 f"row {row_index}: missing label in column {label_col!r}"
             )
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         samples.append(
             LabeledSample(
                 row_index=row_index,

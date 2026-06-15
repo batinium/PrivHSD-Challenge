@@ -11,6 +11,7 @@ from typing import Any
 
 from .csv_pipeline import read_csv, write_json
 from .metrics import aggregate_metrics, row_metric
+from .row_ids import report_row_id, safe_label, safe_label_counts
 
 
 INSTALL_HINT = (
@@ -92,10 +93,6 @@ def safe_ratio(numerator: float, denominator: float, *, default: float = 0.0) ->
     return numerator / denominator if denominator else default
 
 
-def sorted_counts(values: list[str]) -> dict[str, int]:
-    return dict(sorted(Counter(str(value) for value in values).items()))
-
-
 def skipped_result(
     input_path: Path,
     *,
@@ -162,7 +159,7 @@ def collect_samples(
         author = str(row.get(author_col, "") or "")
         if not author:
             continue
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         samples.append(
             AuthorRiskSample(
                 row_index=row_index,
@@ -244,7 +241,7 @@ def score_author_predictions(
                 zero_division=0,
             )
         ),
-        "prediction_counts": sorted_counts(predictions),
+        "prediction_counts": safe_label_counts(predictions, prefix="author"),
         "true_author_confidence_mean": rounded(mean(true_confidences)),
         "max_confidence_mean": rounded(mean(max_confidences)),
     }
@@ -460,8 +457,8 @@ def run_author_risk_evaluation(
             "row_count": len(samples),
             "train_count": len(train_samples),
             "dev_count": len(dev_samples),
-            "author_counts": dict(sorted(Counter(authors).items())),
-            "classes": classes,
+            "author_counts": safe_label_counts(authors, prefix="author"),
+            "classes": [safe_label(label, prefix="author") for label in classes],
         },
         "original": original_scores,
         "privatized": privatized_scores,

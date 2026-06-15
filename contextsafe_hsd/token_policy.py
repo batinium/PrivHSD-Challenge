@@ -25,6 +25,7 @@ from .detectors import Span, detect_spans, target_group_spans
 from .metrics import DIRECT_IDENTIFIER_TYPES, QUASI_IDENTIFIER_TYPES, UTILITY_CUES, row_metric
 from .rationale_checks import parse_rationale_spans
 from .resource_config import load_expected_source_labels
+from .row_ids import report_row_id
 from .style import ACTION_TERMS, NEGATION_MODALITY_TERMS, scrub_style
 from .token_actions import (
     ACTION_GENERALIZE,
@@ -470,9 +471,9 @@ def token_examples_for_row(
     target_col: str | None = None,
     target_categories_col: str | None = None,
     rationale_col: str | None = None,
-) -> list[TokenPolicyExample]:
+    ) -> list[TokenPolicyExample]:
     text = str(row.get(text_col, "") or "")
-    row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+    row_id = report_row_id(row, row_index=row_index, id_col=id_col)
     spans = weak_action_spans_for_row(
         row,
         text_col=text_col,
@@ -623,7 +624,7 @@ def row_profile(
         reason_counts.update(example.reasons)
     return RowProfile(
         index=index,
-        row_id=str(row.get(id_col, "") or index + 1) if id_col else str(index + 1),
+        row_id=report_row_id(row, row_index=index + 1, id_col=id_col),
         source=str(row.get(source_col, "") or "") if source_col else "",
         label=str(row.get(label_col, "") or "") if label_col else "",
         text_key=normalized_text_key(str(row.get(text_col, "") or "")),
@@ -2224,7 +2225,7 @@ def predict_token_policy_ensemble(
         prediction_rows.append(
             {
                 "row_index": index + 1,
-                "row_id": str(row.get(id_col, "") or index + 1) if id_col else str(index + 1),
+                "row_id": report_row_id(row, row_index=index + 1, id_col=id_col),
                 "source": str(row.get(source_col, "") or "") if source_col else None,
                 "label": str(row.get(label_col, "") or "") if label_col else None,
                 "action_counts": dict(sorted(action_counts.items())),
@@ -2388,7 +2389,7 @@ def predict_token_policy(
         prediction_rows.append(
             {
                 "row_index": index + 1,
-                "row_id": str(row.get(id_col, "") or index + 1) if id_col else str(index + 1),
+                "row_id": report_row_id(row, row_index=index + 1, id_col=id_col),
                 "source": str(row.get(source_col, "") or "") if source_col else None,
                 "label": str(row.get(label_col, "") or "") if label_col else None,
                 "action_counts": row_prediction["action_counts"],
@@ -2553,7 +2554,7 @@ def apply_token_policy_candidates(
     accepted = 0
     changed = 0
     for row_index, row in enumerate(rows, start=1):
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         text = str(row.get(text_col, "") or "")
         row_predictions = predictions.get(row_id)
         if row_predictions is None:

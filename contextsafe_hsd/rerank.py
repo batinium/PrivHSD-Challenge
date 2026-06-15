@@ -13,6 +13,7 @@ from .csv_pipeline import read_csv, write_csv, write_json
 from .metrics import aggregate_metrics, row_metric, row_metric_for_depth
 from .pipeline import PrivatizerConfig, privatize_text
 from .presidio_augment import load_presidio_analyzer
+from .row_ids import report_row_id, safe_label, safe_label_counts
 from .span_providers.base import SpanProvider, SpanProviderOutput
 from .span_providers.presidio import PresidioSpanProvider
 from .span_providers.registry import load_span_providers
@@ -486,7 +487,7 @@ def build_author_scorer(
         return None, {
             "status": "skipped",
             "skip_reason": "insufficient_author_rows",
-            "author_counts": dict(sorted(counts.items())),
+            "author_counts": safe_label_counts(list(counts.elements()), prefix="author"),
         }
     try:
         sklearn = load_sklearn()
@@ -509,8 +510,8 @@ def build_author_scorer(
         "status": "ok",
         "model_type": "tfidf_logistic_regression",
         "trained_on": "all_original_rows_for_candidate_scoring",
-        "author_counts": dict(sorted(counts.items())),
-        "classes": classes,
+        "author_counts": safe_label_counts(list(counts.elements()), prefix="author"),
+        "classes": [safe_label(label, prefix="author") for label in classes],
     }
 
 
@@ -662,7 +663,7 @@ def run_candidate_reranking(
         else:
             output_row[output_col] = chosen.text
         output_rows.append(output_row)
-        row_id = row.get(id_col) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         audit_rows.append(
             {
                 "row_id": row_id,

@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from .csv_pipeline import read_csv, write_json
+from .row_ids import report_row_id
 
 
 INSTALL_HINT = (
@@ -223,7 +224,7 @@ def collect_samples(
     limit = len(rows) if sample_size is None or sample_size <= 0 else sample_size
     samples: list[HfUtilitySample] = []
     for row_index, row in enumerate(rows[:limit], start=1):
-        row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(row, row_index=row_index, id_col=id_col)
         samples.append(
             HfUtilitySample(
                 row_index=row_index,

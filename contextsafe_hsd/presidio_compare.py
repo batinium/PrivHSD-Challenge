@@ -10,6 +10,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_json
 from .detectors import Span, detect_spans, target_group_spans
 from .metrics import UTILITY_CUES
+from .row_ids import report_row_id
 
 
 INSTALL_HINT = (
@@ -200,7 +201,7 @@ def run_presidio_comparison(
         row_report.update(
             {
                 "row_index": row_index,
-                "row_id": str(row.get(id_col, "") or row_index) if id_col else str(row_index),
+                "row_id": report_row_id(row, row_index=row_index, id_col=id_col),
             }
         )
         row_reports.append(row_report)

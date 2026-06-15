@@ -15,6 +15,9 @@ must check this file.
 The official path must satisfy all of these rules before upload:
 
 - Input is a CSV with at least one text column.
+- A row ID column is optional. When a stable review key is needed, use a
+  precomputed privacy-safe fingerprint/hash column rather than a raw author or
+  user identifier.
 - Output has the same row count and row order.
 - Output preserves every non-text column exactly.
 - Exact-format output replaces the selected text column or columns in place.
@@ -54,9 +57,11 @@ contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission OUTPUT.csv \
   --text-col text \
-  --id-col id \
   --output data/outputs/OUTPUT.validation.json
 ```
+
+Add `--id-col case_fingerprint` only when the source and submission both have a
+privacy-safe stable key. Omit it when there is no such column.
 
 Validation failure blocks upload, even if local privacy or utility metrics look
 good.

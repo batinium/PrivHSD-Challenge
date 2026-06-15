@@ -68,6 +68,34 @@ def test_process_csv_writes_privatized_text_and_audit(tmp_path):
     assert audit_data["rows"][0]["transformations"]
 
 
+def test_process_csv_uses_row_index_for_sensitive_id_column(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    audit = tmp_path / "audit.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["author_id", "text", "label"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "author_id": "author-secret-1",
+                "text": "@user emailed user@example.test about a threat.",
+                "label": "hate",
+            }
+        )
+
+    process_csv(
+        source,
+        output,
+        text_col="text",
+        id_col="author_id",
+        audit_path=audit,
+    )
+
+    audit_data = json.loads(audit.read_text(encoding="utf-8"))
+    assert audit_data["rows"][0]["row_id"] == "1"
+    assert "author-secret-1" not in json.dumps(audit_data)
+
+
 def test_process_csv_can_use_filtered_presidio_augmentation(monkeypatch, tmp_path):
     source = tmp_path / "input.csv"
     output = tmp_path / "output.csv"

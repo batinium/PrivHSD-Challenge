@@ -174,3 +174,39 @@ def test_bound_contributions_can_drop_missing_author_rows(tmp_path):
     assert [row["id"] for row in rows] == ["2"]
     assert result["row_counts"]["dropped_missing_author"] == 1
     assert result["row_counts"]["unbounded_missing_author_rows"] == 0
+
+
+def test_bound_contributions_dropped_examples_use_row_index_for_author_id(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "bounded.csv"
+    write_rows(
+        source,
+        [
+            {
+                "id": "1",
+                "author_id": "author-secret-1",
+                "text": "one",
+                "label": "hate",
+                "source": "x",
+            },
+            {
+                "id": "2",
+                "author_id": "author-secret-1",
+                "text": "two",
+                "label": "hate",
+                "source": "x",
+            },
+        ],
+    )
+
+    result = bound_contributions(
+        source,
+        output,
+        author_col="author_id",
+        max_records_per_author=1,
+        id_col="author_id",
+        strategy="first",
+    )
+
+    assert result["dropped_row_examples"] == [{"row_index": 2, "row_id": "2"}]
+    assert "author-secret-1" not in json.dumps(result)

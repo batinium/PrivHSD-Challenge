@@ -11,6 +11,7 @@ from urllib import error, request
 from .csv_pipeline import read_csv, write_csv, write_json
 from .metrics import UTILITY_CUES, target_cue_counts
 from .rerank import validate_rewrite_candidate
+from .row_ids import report_row_id
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions"
@@ -331,7 +332,7 @@ def run_local_llm_candidates(
             audit_rows.append(
                 {
                     "row_index": row_index,
-                    "row_id": str(row.get(id_col, "") or row_index) if id_col else str(row_index),
+                    "row_id": report_row_id(row, row_index=row_index, id_col=id_col),
                     "status": row_status,
                     "checks": checks,
                     "detail": detail,

@@ -9,6 +9,7 @@ from statistics import mean
 from typing import Any
 
 from .csv_pipeline import read_csv, write_csv, write_json
+from .row_ids import report_row_id
 
 
 BOUNDING_STRATEGIES = {
@@ -311,7 +312,11 @@ def bound_contributions(
         report["dropped_row_examples"] = [
             {
                 "row_index": index + 1,
-                "row_id": rows[index].get(id_col, ""),
+                "row_id": report_row_id(
+                    rows[index],
+                    row_index=index + 1,
+                    id_col=id_col,
+                ),
             }
             for index in dropped_indices[:50]
         ]

@@ -13,6 +13,7 @@ from .csv_pipeline import read_csv, write_csv, write_json
 from .metrics import aggregate_metrics, row_metric_for_depth
 from .pipeline import PrivatizerConfig, privatize_text
 from .presidio_augment import filtered_presidio_spans, load_presidio_analyzer
+from .row_ids import report_row_id, safe_value_summary
 
 
 class SubmissionError(ValueError):
@@ -106,8 +107,8 @@ def validation_report(
             id_mismatches.append(
                 {
                     "row_index": index + 1,
-                    "source_id": source_row.get(id_col),
-                    "submission_id": submission_row.get(id_col),
+                    "source_id": safe_value_summary(source_row.get(id_col)),
+                    "submission_id": safe_value_summary(submission_row.get(id_col)),
                 }
             )
         for column in metadata_cols:
@@ -115,7 +116,11 @@ def validation_report(
                 metadata_mismatches.append(
                     {
                         "row_index": index + 1,
-                        "row_id": source_row.get(id_col) if id_col else str(index + 1),
+                        "row_id": report_row_id(
+                            source_row,
+                            row_index=index + 1,
+                            id_col=id_col,
+                        ),
                         "column": column,
                     }
                 )

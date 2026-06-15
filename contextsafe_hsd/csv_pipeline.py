@@ -11,6 +11,7 @@ from typing import Any
 from .metrics import aggregate_metrics, row_metric, row_metric_for_depth
 from .pipeline import PrivatizerConfig, privatize_text
 from .presidio_augment import filtered_presidio_spans, load_presidio_analyzer
+from .row_ids import report_row_id
 
 
 class CsvPipelineError(ValueError):
@@ -158,7 +159,7 @@ def process_csv(
             out_row[output_col] = result.text
         output_rows.append(out_row)
 
-        row_id = row.get(id_col) if id_col else str(index)
+        row_id = report_row_id(row, row_index=index, id_col=id_col)
         row_metrics = row_metric_for_depth(
             str(original),
             result.text,

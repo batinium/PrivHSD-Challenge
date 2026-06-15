@@ -30,12 +30,13 @@ contextsafe-hsd protect \
   --input INPUT.csv \
   --output data/outputs/INPUT.protected.csv \
   --text-col text \
-  --id-col id \
   --manifest data/outputs/INPUT.protected.manifest.json
 ```
 
 Default behavior is `--preset exact`: the output has the same columns, order,
-row count, IDs, and non-text values as the source CSV. HSD advisory checks, if
+row count, and non-text values as the source CSV. If you need a stable row key
+for review, pass a privacy-safe fingerprint such as `--id-col case_fingerprint`
+rather than a raw author/user identifier. HSD advisory checks, if
 available, are verification checks only; exact output does not append HSD
 prediction columns.
 
@@ -106,9 +107,11 @@ contextsafe-hsd validate-submission \
   --source INPUT.csv \
   --submission data/outputs/INPUT.protected.csv \
   --text-col text \
-  --id-col id \
   --output data/outputs/INPUT.validation.json
 ```
+
+Add `--id-col case_fingerprint` only when both files contain the same
+privacy-safe stable key.
 
 The manifest and validation report are sidecars. They should not contain raw
 row text and should be stored under ignored `data/` paths with generated CSVs,
@@ -148,7 +151,7 @@ hsd.create_submission(
     Path("INPUT.csv"),
     Path("SUBMISSION.csv"),
     text_cols=["text"],
-    id_col="id",
+    id_col="case_fingerprint",
     manifest_path=Path("SUBMISSION.manifest.json"),
     replace_text=True,
     mode="auto",

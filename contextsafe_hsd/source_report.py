@@ -12,6 +12,7 @@ from .csv_pipeline import read_csv, write_json
 from .cue_checks import counts_for_terms
 from .metrics import row_metric
 from .rationale_checks import aggregate_rationale_reports, rationale_row_report
+from .row_ids import report_row_id, safe_value_summary
 from .style import ACTION_TERMS, NEGATION_MODALITY_TERMS
 
 
@@ -322,13 +323,13 @@ def run_source_regression_report(
         zip(original_rows, protected_rows),
         start=1,
     ):
-        row_id = str(original_row.get(id_col, "") or row_index) if id_col else str(row_index)
+        row_id = report_row_id(original_row, row_index=row_index, id_col=id_col)
         if id_col and original_row.get(id_col) != protected_row.get(id_col):
             id_mismatches.append(
                 {
                     "row_index": row_index,
-                    "original_id": original_row.get(id_col),
-                    "protected_id": protected_row.get(id_col),
+                    "original_id": safe_value_summary(original_row.get(id_col)),
+                    "protected_id": safe_value_summary(protected_row.get(id_col)),
                 }
             )
             continue

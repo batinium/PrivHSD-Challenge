@@ -15,6 +15,7 @@ from typing import Any
 from .csv_pipeline import read_csv, write_csv, write_json
 from .cue_checks import DEFAULT_RETENTION_THRESHOLD, row_cue_report
 from .dpmlm_spike import DPMLM_WARNING, protected_cue_manifest
+from .row_ids import report_row_id
 from .rerank import validate_rewrite_candidate
 from .style import PLACEHOLDER_PATTERN
 
@@ -545,7 +546,7 @@ def run_dpmlm_candidates(
         rewrite_summary: dict[str, int] | None = None
         detail = None
         if row_index <= limit:
-            row_id = str(row.get(id_col, "") or row_index) if id_col else str(row_index)
+            row_id = report_row_id(row, row_index=row_index, id_col=id_col)
             original = str(row.get(text_col, "") or "")
             row_seed = stable_row_seed(random_seed, row_index, original)
             try:
