@@ -143,3 +143,35 @@ def test_runtime_sends_cleaned_text_only_to_request_callable():
     )
 
     assert seen_payloads
+
+
+def test_runtime_uses_required_tool_choice_and_json_schema_fallback():
+    seen_payloads = []
+
+    def fake_request(payload, _timeout):
+        seen_payloads.append(payload)
+        if len(seen_payloads) == 1:
+            return {"choices": [{"message": {"content": "not json"}}]}
+        assert "tools" not in payload
+        return content_response([review_item("row-1", hate=False)])
+
+    runtime = LocalLlmHsdReviewRuntime(
+        endpoint="http://local.test/v1/chat/completions",
+        model_id="fake-model",
+        request_callable=fake_request,
+        require_structured_output=False,
+    )
+
+    result = runtime.review_texts(
+        [{"id": "row-1", "text": "Everyone deserves respect."}],
+        batch_size=1,
+    )
+
+    assert result.status == "ok"
+    assert seen_payloads[0]["tool_choice"] == "required"
+    assert seen_payloads[1]["response_format"]["type"] == "json_schema"
+    assert seen_payloads[1]["response_format"]["json_schema"]["name"] == "hsd_review"
+    assert (
+        seen_payloads[1]["response_format"]["json_schema"]["schema"]["required"]
+        == ["items"]
+    )

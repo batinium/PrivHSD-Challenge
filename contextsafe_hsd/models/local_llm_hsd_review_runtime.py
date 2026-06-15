@@ -320,6 +320,46 @@ def post_chat_completion(
         raise LocalLlmHsdReviewError(f"local LLM request failed: {exc}") from exc
 
 
+def review_payload_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "hate": {"type": "boolean"},
+                        "hsd_reasons": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": sorted(ALLOWED_HSD_REASON_TAGS),
+                            },
+                        },
+                        "pii_leftover": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "review_needed": {"type": "boolean"},
+                    },
+                    "required": [
+                        "id",
+                        "hate",
+                        "hsd_reasons",
+                        "pii_leftover",
+                        "review_needed",
+                    ],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    }
+
+
 def parse_json_object(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -576,7 +616,14 @@ class LocalLlmHsdReviewRuntime:
             "temperature": 0,
         }
         if not with_tools:
-            payload["response_format"] = {"type": "json_object"}
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "hsd_review",
+                    "strict": True,
+                    "schema": review_payload_schema(),
+                },
+            }
             return payload
         payload["tools"] = [
             {
@@ -586,50 +633,11 @@ class LocalLlmHsdReviewRuntime:
                     "description": (
                         "Record structured HSD review items for cleaned rows."
                     ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "items": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "string"},
-                                        "hate": {"type": "boolean"},
-                                        "hsd_reasons": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "string",
-                                                "enum": sorted(ALLOWED_HSD_REASON_TAGS),
-                                            },
-                                        },
-                                        "pii_leftover": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                        },
-                                        "review_needed": {"type": "boolean"},
-                                    },
-                                    "required": [
-                                        "id",
-                                        "hate",
-                                        "hsd_reasons",
-                                        "pii_leftover",
-                                        "review_needed",
-                                    ],
-                                    "additionalProperties": False,
-                                },
-                            }
-                        },
-                        "required": ["items"],
-                        "additionalProperties": False,
-                    },
+                    "parameters": review_payload_schema(),
                 },
             }
         ]
-        payload["tool_choice"] = {
-            "type": "function",
-            "function": {"name": REQUEST_FUNCTION_NAME},
-        }
+        payload["tool_choice"] = "required"
         return payload
 
 
