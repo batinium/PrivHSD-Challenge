@@ -134,6 +134,8 @@ Cleanup follow-up:
 - Do not remove the intact MVP path: exact CSV protection/submission,
   deterministic masking, PII Assist, local LLM classification metadata, author
   group masking, validation, and manifest/audit generation.
+- Final cleanup handoff for the next unattended agent:
+  `docs/planning/final_pipeline_simplification/prompt.md`.
 
 Simplification implementation verification:
 
