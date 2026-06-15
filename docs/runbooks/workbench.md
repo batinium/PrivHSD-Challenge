@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: workbench
-Last verified: 2026-06-14
+Last verified: 2026-06-15
 Primary code: `workbench/backend/`, `workbench/frontend/`, `launch.py`
 
 The workbench is a local FastAPI + React dashboard around the CSV auto pipeline.
@@ -46,8 +46,12 @@ Open `http://127.0.0.1:5173`.
   can be used as stable review case IDs when present.
 - Raw author/user identifier columns are not used as review case IDs; the
   backend generates private HMAC case IDs for those inputs.
-- Replace-text CSV output preserves the original schema.
-- Helper-column CSV output adds `privatized_text` for local audit only.
+- Exact CSV export is the default: the selected text column is replaced in
+  place and the original schema is preserved.
+- Local LLM HSD review, when selected, is sidecar-only. Labels, reason tags,
+  provider diagnostics, and residual PII suggestions stay in the manifest,
+  audit, and review summaries rather than being appended to exported CSV.
+- Helper-column CSV output is retained only for local audit/debug requests.
 - Run CSV uses a local background job with row/phase progress polling; matching
   cached uploads load without rerunning the pipeline.
 - Human review saves structured annotations under `workbench/.cache/reviews/`

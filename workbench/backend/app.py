@@ -27,7 +27,10 @@ from contextsafe_hsd.cue_checks import row_cue_report
 from contextsafe_hsd.detectors import Span, target_group_spans
 from contextsafe_hsd.metrics import row_metric
 from contextsafe_hsd.pipeline import MODES, PrivatizerConfig, privatize_text
-from contextsafe_hsd.simple_pipeline import append_hate_classification
+from contextsafe_hsd.simple_pipeline import (
+    append_hate_classification,
+    build_final_pipeline_rows,
+)
 from contextsafe_hsd.span_providers.base import SpanProvider
 from contextsafe_hsd.span_providers.registry import (
     SUPPORTED_PROVIDER_NAMES,
@@ -39,7 +42,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v5"
+CSV_CACHE_VERSION = "workbench_csv_result_v6"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -65,6 +68,7 @@ CSV_PROGRESS_PHASES = {
     "token_policy": (40, 52, "Token-policy candidates"),
     "candidates": (52, 64, "Candidate generation"),
     "hsd_advisory": (64, 82, "HSD preservation"),
+    "local_llm_review": (64, 82, "Local LLM review"),
     "selection": (82, 96, "Final row audit"),
     "summary": (96, 98, "Aggregating report"),
     "packaging": (98, 100, "Preparing dashboard"),
@@ -129,7 +133,7 @@ class CsvPrivatizeRequest(BaseModel):
     text_col: str
     id_col: str | None = None
     output_col: str = "privatized_text"
-    replace_text: bool = False
+    replace_text: bool = True
     mode: Literal["auto"] = "auto"
     style_scrub: bool = False
     generalize_targets: bool | None = None
@@ -2302,45 +2306,85 @@ def build_csv_privatize_response(
             text_col=request.text_col,
         )
     )
-    engine_result = AutoPipelineEngine(context).process_rows(
-        processing_rows,
-        fieldnames,
-        text_col=request.text_col,
-        id_col=processing_id_col,
-        output_col=request.output_col,
-        replace_text=request.replace_text,
-        progress_callback=progress_callback,
-    )
     insight_output_col = request.text_col if request.replace_text else request.output_col
-    classification: dict[str, Any] = {
-        "backend": request.hsd_classification_backend,
-        "status": "using_pipeline_hsd_advisory",
-        "source": "pipeline_hsd_advisory",
-        "pii_suggestions_applied": False,
-    }
-    if request.hsd_classification_backend == "local_llm":
-        if progress_callback is not None:
-            progress_callback(
-                {
-                    "stage": "hsd_advisory",
-                    "processed": 0,
-                    "total": len(engine_result.rows),
-                    "detail": "Running local LLM HSD review on protected text.",
-                }
-            )
-        classification = append_hate_classification(
-            context=context,
-            original_rows=processing_rows,
-            output_rows=engine_result.rows,
-            text_col=insight_output_col,
-            columns={
-                "label": "__contextsafe_hsd_label",
-                "score": "__contextsafe_hsd_score",
-                "model_count": "__contextsafe_hsd_model_count",
-            },
-            require_hate_classification=False,
+    if request.replace_text:
+        final_result = build_final_pipeline_rows(
+            processing_rows,
+            fieldnames,
+            text_col=request.text_col,
             id_col=processing_id_col,
+            metric_depth=request.metric_depth,
+            disabled_providers=request.disabled_providers,
+            disabled_models=list(disabled_models),
+            audit_level="row",
+            llm_review=(
+                "local_llm"
+                if request.hsd_classification_backend == "local_llm"
+                else "off"
+            ),
+            local_llm_endpoint=request.local_llm_endpoint,
+            local_llm_model=request.local_llm_model,
+            local_llm_timeout_seconds=request.local_llm_timeout_seconds,
+            local_llm_batch_size=request.local_llm_batch_size,
+            local_llm_enable_pii_suggestions=(
+                request.local_llm_enable_pii_suggestions
+            ),
+            generalize_targets=(
+                request.generalize_targets
+                if request.generalize_targets is not None
+                else False
+            ),
+            style_scrub=request.style_scrub,
+            progress_callback=progress_callback,
         )
+        engine_rows = final_result["rows"]
+        engine_fieldnames = final_result["fieldnames"]
+        engine_summary = final_result["sanitization"]
+        engine_audit_rows = final_result["audit_rows"]
+        provider_status = final_result["providers"]
+        model_status = final_result["models"]
+        load_counts = final_result["load_counts"]
+        classification = final_result["classification"]
+    else:
+        engine_result = AutoPipelineEngine(context).process_rows(
+            processing_rows,
+            fieldnames,
+            text_col=request.text_col,
+            id_col=processing_id_col,
+            output_col=request.output_col,
+            replace_text=request.replace_text,
+            progress_callback=progress_callback,
+        )
+        engine_rows = engine_result.rows
+        engine_fieldnames = engine_result.fieldnames
+        engine_summary = engine_result.summary
+        engine_audit_rows = engine_result.audit_rows
+        provider_status = context.provider_status
+        model_status = context.model_status
+        load_counts = {
+            "providers": dict(sorted(context.provider_load_counts.items())),
+            "models": dict(sorted(context.model_load_counts.items())),
+        }
+        classification = {
+            "backend": request.hsd_classification_backend,
+            "status": "using_pipeline_hsd_advisory",
+            "source": "pipeline_hsd_advisory",
+            "pii_suggestions_applied": False,
+        }
+        if request.hsd_classification_backend == "local_llm":
+            classification = append_hate_classification(
+                context=context,
+                original_rows=processing_rows,
+                output_rows=engine_rows,
+                text_col=insight_output_col,
+                columns={
+                    "label": "__contextsafe_hsd_label",
+                    "score": "__contextsafe_hsd_score",
+                    "model_count": "__contextsafe_hsd_model_count",
+                },
+                require_hate_classification=False,
+                id_col=processing_id_col,
+            )
     if progress_callback is not None:
         progress_callback(
             {
@@ -2351,30 +2395,30 @@ def build_csv_privatize_response(
             }
         )
     csv_rows = strip_internal_workbench_columns(
-        engine_result.rows,
-        engine_result.fieldnames,
+        engine_rows,
+        engine_fieldnames,
     )
-    output_csv = write_csv_text(csv_rows, engine_result.fieldnames)
+    output_csv = write_csv_text(csv_rows, engine_fieldnames)
     helper_columns = [
-        column for column in engine_result.fieldnames if column not in fieldnames
+        column for column in engine_fieldnames if column not in fieldnames
     ]
     validation = {
         "valid": (
-            len(engine_result.rows) == len(rows)
+            len(engine_rows) == len(rows)
             and (
                 not request.replace_text
-                or engine_result.fieldnames == fieldnames
+                or engine_fieldnames == fieldnames
             )
         ),
         "source_row_count": len(rows),
-        "output_row_count": len(engine_result.rows),
+        "output_row_count": len(engine_rows),
         "source_columns": fieldnames,
-        "output_columns": engine_result.fieldnames,
+        "output_columns": engine_fieldnames,
         "replace_text": request.replace_text,
         "helper_columns": helper_columns,
     }
     summary = {
-        **engine_result.summary,
+        **engine_summary,
         "artifact_type": "workbench_csv_audit",
         "validation": validation,
         "classification": classification,
@@ -2391,12 +2435,9 @@ def build_csv_privatize_response(
         "row_count": len(rows),
         "mode": "auto",
         "metric_depth": request.metric_depth,
-        "providers": context.provider_status,
-        "models": context.model_status,
-        "load_counts": {
-            "providers": dict(sorted(context.provider_load_counts.items())),
-            "models": dict(sorted(context.model_load_counts.items())),
-        },
+        "providers": provider_status,
+        "models": model_status,
+        "load_counts": load_counts,
         "columns": {
             "text_col": request.text_col,
             "id_col": request.id_col,
@@ -2417,17 +2458,17 @@ def build_csv_privatize_response(
         ),
     }
     review_csv = build_review_csv(
-        engine_result.rows,
+        engine_rows,
         output_col=insight_output_col,
         id_col=processing_id_col,
     )
     platform_insights = platform_insight_report(
         original_rows=rows,
-        output_rows=engine_result.rows,
+        output_rows=engine_rows,
         text_col=request.text_col,
         output_col=insight_output_col,
         aggregate=summary["metrics"],
-        audit_rows=engine_result.audit_rows,
+        audit_rows=engine_audit_rows,
         id_col=processing_id_col,
         classification_reviews=local_llm_reviews_by_id(classification),
         classification_summary=classification,
@@ -2439,12 +2480,12 @@ def build_csv_privatize_response(
             text_col=request.text_col,
             output_col=insight_output_col,
         )
-        for index, row in enumerate(engine_result.rows[:MAX_PREVIEW_ROWS])
+        for index, row in enumerate(engine_rows[:MAX_PREVIEW_ROWS])
     ]
     response = {
         "output_csv": output_csv,
         "review_csv": review_csv,
-        "audit": {"summary": summary, "rows": engine_result.audit_rows},
+        "audit": {"summary": summary, "rows": engine_audit_rows},
         "manifest": manifest,
         "platform_insights": platform_insights,
         "preview_rows": preview_rows,

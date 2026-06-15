@@ -95,7 +95,11 @@ from .semantic_triage import (
     SemanticTriageError,
     run_semantic_triage_report,
 )
-from .simple_pipeline import SimplifiedPipelineError, run_sanitize_classify
+from .simple_pipeline import (
+    SimplifiedPipelineError,
+    run_final_csv_pipeline,
+    run_sanitize_classify,
+)
 from .source_report import SourceReportError, run_source_regression_report
 from .submission import SubmissionError, create_submission, validate_submission
 from .token_actions import (
@@ -422,6 +426,50 @@ def build_parser() -> argparse.ArgumentParser:
             "exact preserves the CSV schema; analysis appends local HSD advisory "
             "columns; audit preserves the schema and writes deeper manifest/audit data."
         ),
+    )
+    protect.add_argument(
+        "--llm-review",
+        choices=["off", "local-llm"],
+        default="off",
+        help=(
+            "Run sidecar-only local LLM HSD review after sanitization. "
+            "Use local-llm for the final review pipeline."
+        ),
+    )
+    protect.add_argument(
+        "--local-llm-endpoint",
+        default="http://localhost:1234/v1/chat/completions",
+        help="OpenAI-compatible local chat completions URL for --llm-review local-llm.",
+    )
+    protect.add_argument(
+        "--local-llm-model",
+        default="openai/gpt-oss-20b",
+        help="Local LLM model identifier for sidecar-only HSD review.",
+    )
+    protect.add_argument(
+        "--local-llm-timeout-seconds",
+        type=float,
+        default=120.0,
+    )
+    protect.add_argument(
+        "--local-llm-batch-size",
+        type=int,
+        default=10,
+    )
+    protect.add_argument(
+        "--disable-local-llm-pii-suggestions",
+        action="store_true",
+        help="Disable advisory residual PII suggestions from local LLM review.",
+    )
+    protect.add_argument(
+        "--require-llm-review",
+        action="store_true",
+        help="Fail if selected local LLM review cannot parse every row.",
+    )
+    protect.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print coarse pipeline progress to stderr.",
     )
     add_author_group_masking_arguments(protect)
 
@@ -1344,46 +1392,58 @@ def main(argv: list[str] | None = None) -> int:
                     author_group_col=args.author_group_col,
                     author_group_min_repetitions=args.author_group_min_repetitions,
                     author_group_min_author_rows=args.author_group_min_author_rows,
+                    hsd_classification_backend=args.llm_review.replace("-", "_")
+                    if args.llm_review == "local-llm"
+                    else "ml",
+                    local_llm_endpoint=args.local_llm_endpoint,
+                    local_llm_model=args.local_llm_model,
+                    local_llm_timeout_seconds=args.local_llm_timeout_seconds,
+                    local_llm_batch_size=args.local_llm_batch_size,
+                    local_llm_enable_pii_suggestions=(
+                        not args.disable_local_llm_pii_suggestions
+                    ),
                     generalize_targets=False,
                     style_scrub=False,
-                    require_hate_classification=False,
+                    require_hate_classification=args.require_llm_review,
+                    progress_callback=make_progress_printer()
+                    if args.progress
+                    else None,
                 )
                 result["preset"] = "analysis"
                 if args.manifest:
                     write_json(args.manifest, result)
             else:
-                result = create_submission(
+                result = run_final_csv_pipeline(
                     args.input,
                     args.output,
-                    text_cols=[args.text_col],
+                    text_col=args.text_col,
                     id_col=args.id_col,
                     manifest_path=args.manifest,
+                    audit_path=args.audit,
                     command=["contextsafe-hsd", *raw_argv],
-                    mode="auto",
-                    generalize_targets=False,
-                    style_scrub=False,
-                    replace_text=True,
-                    presidio_augment=False,
+                    preset=args.preset,
                     metric_depth="deep" if args.preset == "audit" else "fast",
                     allow_model_download=False,
                     audit_level="row" if args.preset == "audit" else "summary",
-                    gliner_profile="pii",
+                    llm_review=args.llm_review.replace("-", "_"),
+                    local_llm_endpoint=args.local_llm_endpoint,
+                    local_llm_model=args.local_llm_model,
+                    local_llm_timeout_seconds=args.local_llm_timeout_seconds,
+                    local_llm_batch_size=args.local_llm_batch_size,
+                    local_llm_enable_pii_suggestions=(
+                        not args.disable_local_llm_pii_suggestions
+                    ),
+                    require_hate_classification=args.require_llm_review,
                     author_group_masking=args.enable_author_group_masking,
                     author_group_col=args.author_group_col,
                     author_group_min_repetitions=args.author_group_min_repetitions,
                     author_group_min_author_rows=args.author_group_min_author_rows,
+                    generalize_targets=False,
+                    style_scrub=False,
+                    progress_callback=make_progress_printer()
+                    if args.progress
+                    else None,
                 )
-                result["preset"] = args.preset
-                if args.manifest:
-                    write_json(args.manifest, result)
-                if args.audit:
-                    write_json(
-                        args.audit,
-                        {
-                            "summary": result,
-                            "rows": result.get("row_audits", []),
-                        },
-                    )
         elif args.command == "bound-contributions":
             result = bound_contributions(
                 args.input,

@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: common local workflow
-Last verified: 2026-06-14
+Last verified: 2026-06-15
 Primary code: `contextsafe_hsd/cli.py`, package metadata, tests
 
 Use this for first-run setup and the shortest local privacy-protection path.
@@ -58,6 +58,9 @@ contextsafe-hsd protect \
   --output data/outputs/INPUT.protected.csv \
   --text-col text \
   --id-col id \
+  --llm-review local-llm \
+  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --local-llm-model openai/gpt-oss-20b \
   --manifest data/outputs/INPUT.protected.manifest.json
 ```
 
@@ -66,13 +69,19 @@ text column and preserves the source schema: columns, column order, row count,
 row order, IDs, labels, and non-text metadata values. It does not append HSD
 prediction columns.
 
+`--llm-review local-llm` adds sidecar-only HSD classification, reason tags, and
+validated residual PII suggestions. The LLM sees cleaned text only and does not
+rewrite comments. Omit `--llm-review local-llm` for a fast/offline exact run;
+the manifest records that LLM review was skipped.
+
 The manifest leads with three stages:
 
 - `privacy_detection`: deterministic baseline plus any ready local PII Assist.
 - `meaning_protection`: checks that target/action/negation/reporting cues are
   not erased by masking.
-- `verification`: residual identifier checks, exact-shape checks, optional HSD
-  advisory drift status, metadata leakage status, and author-risk hook status.
+- `verification`: residual identifier checks, exact-shape checks, local LLM
+  review status/counts when selected, metadata leakage status, and author-risk
+  hook status.
 
 Missing optional local components should be recorded as skipped or unavailable,
 not treated as a failure for exact output.
@@ -85,10 +94,12 @@ contextsafe-hsd protect --preset exact \
   --output data/outputs/INPUT.protected.csv \
   --text-col text \
   --id-col id \
+  --llm-review local-llm \
   --manifest data/outputs/INPUT.protected.manifest.json
 ```
 
-Use `exact` for the default cleaned CSV plus manifest.
+Use `exact` for the final upload-shaped cleaned CSV plus manifest/audit
+sidecars. LLM labels and suggestions stay in JSON sidecars, not the CSV.
 
 ```bash
 contextsafe-hsd protect --preset analysis \

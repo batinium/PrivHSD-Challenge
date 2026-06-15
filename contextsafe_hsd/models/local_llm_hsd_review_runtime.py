@@ -169,12 +169,14 @@ class LocalLlmReviewResult:
         )
         reason_counts: Counter[str] = Counter()
         suggestion_counts: Counter[str] = Counter()
+        suggestion_count = 0
         for row in self.rows:
             if row.parse_status == "ok":
                 reason_counts.update(row.hsd_reasons)
             suggestion_counts.update(
                 suggestion.validator_status for suggestion in row.pii_suggestions
             )
+            suggestion_count += len(row.pii_suggestions)
         return {
             "backend": "local_llm",
             "status": self.status,
@@ -188,6 +190,18 @@ class LocalLlmReviewResult:
             "skipped_count": self.skipped_count,
             "prediction_counts": dict(sorted(prediction_counts.items())),
             "reason_tag_counts": dict(sorted(reason_counts.items())),
+            "pii_suggestion_count": suggestion_count,
+            "accepted_pii_suggestion_count": int(
+                suggestion_counts.get("accepted_for_review", 0)
+            ),
+            "validated_pii_suggestion_counts": {
+                "total": suggestion_count,
+                "accepted_for_review": int(
+                    suggestion_counts.get("accepted_for_review", 0)
+                ),
+                "rejected": suggestion_count
+                - int(suggestion_counts.get("accepted_for_review", 0)),
+            },
             "pii_suggestion_status_counts": dict(sorted(suggestion_counts.items())),
             "row_reviews": [
                 row.to_metadata(include_suggestion_text=include_suggestion_text)
@@ -528,13 +542,25 @@ class LocalLlmHsdReviewRuntime:
         rows: list[dict[str, str]],
         *,
         batch_size: int,
+        progress_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> LocalLlmReviewResult:
         started = time.perf_counter()
         all_reviews: list[LocalLlmRowReview] = []
         request_count = 0
         fallback_count = 0
-        for start in range(0, len(rows), max(1, batch_size)):
-            batch = rows[start : start + max(1, batch_size)]
+        total_rows = len(rows)
+        chunk_size = max(1, batch_size)
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "stage": "local_llm_review",
+                    "processed": 0,
+                    "total": total_rows,
+                    "detail": "Running local LLM HSD review on cleaned text.",
+                }
+            )
+        for start in range(0, total_rows, chunk_size):
+            batch = rows[start : start + chunk_size]
             try:
                 reviews = self._review_batch(batch)
                 request_count += 1
@@ -550,6 +576,17 @@ class LocalLlmHsdReviewRuntime:
                     except Exception as row_exc:
                         request_count += 1
                         all_reviews.append(skipped_review(row, row_exc))
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "stage": "local_llm_review",
+                        "processed": min(start + len(batch), total_rows),
+                        "total": total_rows,
+                        "detail": "Reviewed cleaned rows with local LLM.",
+                        "request_count": request_count,
+                        "fallback_count": fallback_count,
+                    }
+                )
         return LocalLlmReviewResult(
             rows=tuple(all_reviews),
             model_id=self.model_id,

@@ -138,6 +138,7 @@ def test_protect_help_is_short_public_surface():
     )
 
     assert "--preset" in result.stdout
+    assert "--llm-review" in result.stdout
     assert "exact" in result.stdout
     assert "preserves the input schema" in result.stdout
     assert "--disable-provider" not in result.stdout
@@ -189,15 +190,126 @@ def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_pat
     assert list(rows[0]) == ["id", "text", "label"]
     assert not any(column.startswith("hate_speech") for column in rows[0])
     assert not any(column.startswith("predicted_") for column in rows[0])
-    assert manifest["pipeline"] == "auto"
+    assert manifest["pipeline"] == "final_exact"
     assert manifest["preset"] == "exact"
+    assert manifest["exact_format_submission"] is True
+    assert manifest["llm_review"] == "off"
     assert set(manifest["stages"]) == {
         "privacy_detection",
         "meaning_protection",
         "verification",
     }
     assert manifest["stages"]["verification"]["hsd_advisory_status"] == "skipped"
+    assert manifest["stages"]["verification"]["local_llm_hsd_review"][
+        "status"
+    ] == "skipped"
     assert manifest["validation"]["valid"] is True
+
+
+def test_protect_exact_local_llm_review_stays_in_sidecar(monkeypatch, tmp_path):
+    def fake_post_chat_completion(*, endpoint, payload, timeout):
+        rows = json.loads(payload["messages"][1]["content"])["items"]
+        assert "mara@example.test" not in payload["messages"][1]["content"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "record_hsd_review",
+                                    "arguments": json.dumps(
+                                        {
+                                            "items": [
+                                                {
+                                                    "id": rows[0]["id"],
+                                                    "hate": True,
+                                                    "hsd_reasons": [
+                                                        "protected_target",
+                                                        "exclusion",
+                                                    ],
+                                                    "pii_leftover": ["[EMAIL]"],
+                                                    "review_needed": True,
+                                                }
+                                            ]
+                                        }
+                                    ),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "contextsafe_hsd.models.local_llm_hsd_review_runtime.post_chat_completion",
+        fake_post_chat_completion,
+    )
+    source = tmp_path / "source.csv"
+    output = tmp_path / "protected.csv"
+    manifest_path = tmp_path / "manifest.json"
+    audit_path = tmp_path / "audit.json"
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
+        writer.writeheader()
+        writer.writerow(
+            {
+                "id": "1",
+                "text": "Email mara@example.test because Muslims should leave.",
+                "label": "hate",
+            }
+        )
+
+    exit_code = main(
+        [
+            "protect",
+            "--input",
+            str(source),
+            "--output",
+            str(output),
+            "--text-col",
+            "text",
+            "--id-col",
+            "id",
+            "--manifest",
+            str(manifest_path),
+            "--audit",
+            str(audit_path),
+            "--preset",
+            "exact",
+            "--llm-review",
+            "local-llm",
+            "--local-llm-endpoint",
+            "http://local.test/v1/chat/completions",
+            "--local-llm-model",
+            "fake-local-llm",
+        ]
+    )
+
+    rows = read_rows(output)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert list(rows[0]) == ["id", "text", "label"]
+    assert rows[0]["text"] == "Email [EMAIL] because Muslims should leave."
+    assert "is_hate_speech" not in rows[0]
+    classification = manifest["classification"]
+    assert classification["backend"] == "local_llm"
+    assert classification["status"] == "ok"
+    assert classification["parse_count"] == 1
+    assert classification["fallback_count"] == 0
+    assert classification["reason_tag_counts"] == {
+        "exclusion": 1,
+        "protected_target": 1,
+    }
+    assert classification["validated_pii_suggestion_counts"] == {
+        "total": 1,
+        "accepted_for_review": 0,
+        "rejected": 1,
+    }
+    assert audit["classification_reviews"][0]["label"] == "1"
+    assert "[EMAIL]" not in json.dumps(classification)
 
 
 def test_protect_analysis_appends_hsd_advisory_columns(monkeypatch, tmp_path, capsys):

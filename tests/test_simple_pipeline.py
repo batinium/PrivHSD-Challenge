@@ -8,7 +8,11 @@ from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
     LocalLlmReviewResult,
     LocalLlmRowReview,
 )
-from contextsafe_hsd.simple_pipeline import SimplifiedPipelineError, run_sanitize_classify
+from contextsafe_hsd.simple_pipeline import (
+    SimplifiedPipelineError,
+    run_final_csv_pipeline,
+    run_sanitize_classify,
+)
 
 
 def read_rows(path):
@@ -73,7 +77,7 @@ class FakeLocalLlmReview:
             "endpoint": "http://local.test/v1/chat/completions",
         }
 
-    def review_texts(self, rows, *, batch_size):
+    def review_texts(self, rows, *, batch_size, progress_callback=None):
         self.calls.append({"rows": rows, "batch_size": batch_size})
         reviews = []
         for row in rows:
@@ -111,6 +115,67 @@ class FakeLocalLlmReview:
             request_count=1,
             fallback_count=0,
         )
+
+
+def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    manifest_path = tmp_path / "manifest.json"
+    audit_path = tmp_path / "audit.json"
+    fake_runtime = FakeLocalLlmReview()
+    write_rows(source, include_label=True)
+
+    manifest = run_final_csv_pipeline(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        manifest_path=manifest_path,
+        audit_path=audit_path,
+        disabled_providers=["presidio", "scrubadub", "gliner"],
+        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        llm_review="local_llm",
+        local_llm_batch_size=4,
+        model_factories={"local_llm": lambda _context: fake_runtime},
+    )
+
+    rows = read_rows(output)
+    written_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert manifest == written_manifest
+    assert list(rows[0]) == ["id", "text", "is_hate_speech"]
+    assert [row["id"] for row in rows] == ["1", "2"]
+    assert [row["is_hate_speech"] for row in rows] == [
+        "gold-positive",
+        "gold-negative",
+    ]
+    assert "[USER]" in rows[0]["text"]
+    assert "[EMAIL]" in rows[0]["text"]
+    assert "Muslims should leave" in rows[0]["text"]
+    assert "mara@example.test" not in rows[0]["text"]
+    assert manifest["artifact_type"] == "final_exact_csv"
+    assert manifest["exact_format_submission"] is True
+    assert manifest["columns"]["output_columns"] == ["id", "text", "is_hate_speech"]
+    assert manifest["columns"]["classification_columns"] == []
+    assert manifest["validation"]["valid"] is True
+    classification = manifest["classification"]
+    assert classification["backend"] == "local_llm"
+    assert classification["status"] == "ok"
+    assert classification["parse_count"] == 2
+    assert classification["fallback_count"] == 0
+    assert classification["prediction_counts"] == {"0": 1, "1": 1}
+    assert classification["reason_tag_counts"] == {"none": 1, "protected_target": 1}
+    assert classification["validated_pii_suggestion_counts"] == {
+        "total": 0,
+        "accepted_for_review": 0,
+        "rejected": 0,
+    }
+    verification = manifest["stages"]["verification"]
+    assert verification["local_llm_hsd_review"]["status"] == "ok"
+    assert audit["summary"]["artifact_type"] == "final_exact_csv"
+    assert audit["classification_reviews"][0]["label"] == "1"
+    serialized = json.dumps(manifest)
+    assert "mara@example.test" not in serialized
 
 
 def test_sanitize_classify_command_is_registered():

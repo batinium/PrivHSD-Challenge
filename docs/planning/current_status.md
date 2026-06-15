@@ -10,19 +10,38 @@ reports remain under ignored `data/outputs/`.
 
 ## Readiness
 
-Current readiness: simplified public pipeline ready for local verification with
-caveats.
+Current readiness: final exact CSV path is implemented and ready for small-batch
+local verification.
 
-`protect` is now the short public command. Its default exact preset calls the
-existing exact `auto` path, preserves schema, writes cleaned text only, and
-records a stage-first manifest. The public story is:
+`protect` is the short public command. Its exact/audit presets now call the
+final exact pipeline wrapper, preserve schema, write cleaned text only, and
+record stage-first manifest/audit sidecars. The documented final path adds
+sidecar-only local LLM review:
+
+```bash
+python -m contextsafe_hsd.cli protect \
+  --input INPUT.csv \
+  --output OUTPUT.csv \
+  --text-col text \
+  --id-col id \
+  --preset exact \
+  --llm-review local-llm \
+  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --local-llm-model openai/gpt-oss-20b \
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json
+```
+
+The public story is:
 
 ```text
 Input CSV -> Privacy Detection -> Meaning Protection -> Verification
 ```
 
 It is not a guarantee that every identifier is removed; residual risk is
-reduced, checked, and reported.
+reduced, checked, and reported. LLM labels, reason tags, provider diagnostics,
+and validated PII suggestions stay in JSON sidecars and are not appended to the
+output CSV.
 
 The enriched `sanitize-classify` workflow is available for local unseen-data
 triage. It preserves original rows and metadata, replaces the selected text
@@ -32,10 +51,12 @@ exact-format upload path.
 
 ## Current CLI Contract
 
-- `protect` is the public default. `--preset exact` preserves schema and
-  writes cleaned text only; `--preset analysis` appends advisory HSD columns
-  for local review; `--preset audit` preserves exact output and requests deeper
-  sidecar/audit reporting.
+- `protect` is the public default. `--preset exact` preserves schema and writes
+  cleaned text only; `--llm-review local-llm` adds sidecar-only HSD labels,
+  reason tags, and validated residual PII suggestions. `--preset analysis`
+  remains a developer/local-review path that may append advisory HSD columns.
+  `--preset audit` preserves exact output and requests deeper sidecar/audit
+  reporting.
 - `create-submission` remains the legacy exact-format path. It requires
   `--replace-text`, preserves row count/order/columns, and rejects helper
   columns during validation.
@@ -60,10 +81,10 @@ exact-format upload path.
 Travel handoff on 2026-06-15:
 
 - No pipeline or LLM experiment process is intentionally left running.
-- The main deterministic pipeline is intact. Use `protect --preset exact` or
-  `create-submission --replace-text` for an upload-shaped CSV that keeps the
-  original columns and replaces `text` 1:1. Use `sanitize-classify` only for
-  local analysis because it appends HSD helper columns.
+- The main deterministic pipeline is intact. Use `protect --preset exact
+  --llm-review local-llm` for the final upload-shaped CSV plus LLM sidecars.
+  Use `sanitize-classify` only for local analysis because it appends HSD helper
+  columns.
 - Local LLM classification is functional through the OpenAI-compatible endpoint
   `http://100.120.207.64:1234/v1/chat/completions` with model
   `openai/gpt-oss-20b`.

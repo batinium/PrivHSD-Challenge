@@ -1,6 +1,6 @@
 # Final Pipeline Simplification Plan
 
-Status: ready for next-agent implementation
+Status: implementation in progress
 Owner area: final MVP pipeline, workbench alignment, dead-code removal
 Last updated: 2026-06-15
 Primary prompt: `docs/planning/final_pipeline_simplification/prompt.md`
@@ -65,6 +65,30 @@ commit/push stable milestones.
 - Manifest states which providers/models ran, skipped, or failed.
 - Workbench exports exact-format CSV by default.
 - Logs and reports avoid raw row text.
+
+## Implemented In This Pass
+
+- Added `run_final_csv_pipeline` and `build_final_pipeline_rows` as the shared
+  exact CSV backend for the final path.
+- Wired `protect --preset exact|audit` to the final backend. The output CSV
+  keeps the original columns only; local LLM classification, reason tags, and
+  validated residual PII suggestions are sidecar-only.
+- Added `--llm-review local-llm`, local LLM endpoint/model/batch controls,
+  `--require-llm-review`, and progress reporting to `protect`.
+- Added progress events inside local LLM review batches.
+- Updated the workbench exact CSV endpoint to call the same final backend and
+  default to exact-format export.
+- Added focused tests for exact CSV shape preservation, sidecar-only fake local
+  LLM output, and workbench local LLM review without helper columns.
+
+Focused verification so far:
+
+```bash
+python -m py_compile contextsafe_hsd/simple_pipeline.py contextsafe_hsd/cli.py contextsafe_hsd/models/local_llm_hsd_review_runtime.py workbench/backend/app.py
+python -m pytest tests/test_simple_pipeline.py tests/test_submission.py tests/test_workbench_csv.py tests/test_local_llm_hsd_review_runtime.py tests/test_local_llm_hsd_suggestions.py -q
+```
+
+Result: `45 passed`.
 
 ## Small-Batch Verification Policy
 

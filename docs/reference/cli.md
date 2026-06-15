@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: CLI and public command contracts
-Last verified: 2026-06-14
+Last verified: 2026-06-15
 Primary code: `pyproject.toml`, `contextsafe_hsd/cli.py`
 
 This file maps command ownership. Full recipes belong in `docs/runbooks/`.
@@ -24,16 +24,20 @@ contextsafe-hsd protect \
   --output OUTPUT.csv \
   --text-col text \
   --id-col id \
+  --llm-review local-llm \
+  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --local-llm-model openai/gpt-oss-20b \
   --manifest OUTPUT.manifest.json
 ```
 
-`protect` defaults to `--preset exact`, uses the current exact `auto` path, and
-does not expose provider/model/debug knobs. It is local-first and preserves
-the source CSV schema in exact mode.
+`protect` defaults to `--preset exact` and uses the final exact CSV path. It is
+local-first and preserves the source CSV schema in exact mode. `--llm-review
+local-llm` runs sidecar-only HSD classification, reason tags, and validated PII
+suggestions after sanitization; the LLM never rewrites the output CSV.
 
 | Preset | Contract |
 | --- | --- |
-| `--preset exact` | Default. Cleaned text only, original schema preserved, manifest written when requested. |
+| `--preset exact` | Default. Cleaned text only, original schema preserved, sidecar LLM review when requested. |
 | `--preset analysis` | Enriched local output. May append advisory HSD columns; not exact-format. |
 | `--preset audit` | Exact output plus deeper sidecar/audit reporting when supported. |
 
@@ -45,7 +49,13 @@ Common public flags:
 --text-col COLUMN
 --id-col COLUMN
 --manifest PATH
+--audit PATH
 --preset exact|analysis|audit
+--llm-review off|local-llm
+--local-llm-endpoint URL
+--local-llm-model MODEL
+--local-llm-batch-size N
+--require-llm-review
 ```
 
 ## Compatibility Commands
@@ -55,7 +65,7 @@ workflows.
 
 | Command | Owner workstream | Notes |
 | --- | --- | --- |
-| `create-submission` | CSV contract and auto orchestration | Legacy exact-output interface. `--replace-text --mode auto` reaches the same exact auto path used by `protect --preset exact`. |
+| `create-submission` | CSV contract and auto orchestration | Legacy exact-output interface without sidecar LLM review. Prefer `protect --preset exact --llm-review local-llm` for the final path. |
 | `sanitize-classify` | Auto orchestration and HSD advisory | Enriched local output: text replaced in place plus appended advisory HSD prediction columns. Not exact-format. |
 | `anonymize` | CSV contract and deterministic masking | Local deterministic output path; may add helper columns unless replace-text behavior is requested. |
 | `validate-submission` | CSV contract and submission | Required exact-shape gate. |
