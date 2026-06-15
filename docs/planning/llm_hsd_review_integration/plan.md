@@ -128,6 +128,11 @@ Failure artifacts committed for tuning:
   - Failure-subset prompt comparison.
 - `docs/planning/llm_hsd_review_integration/prompt_tuning_full_results.json`
   - Full 800-row prompt comparison for the best candidates.
+- `docs/planning/llm_hsd_review_integration/qwen35_4b_results.json`
+  - Follow-up `qwen3.5-4b` subset and full-run comparison using the selected
+    prompt.
+- `docs/planning/llm_hsd_review_integration/qwen35_4b_full_predictions.csv`
+  - Cleaned-text-only per-row Qwen predictions for the 800-row run.
 
 ## Selected Prompt Version
 
@@ -168,6 +173,40 @@ Reasoning:
   endorsing the hateful content.
 - The final CLI run with the selected prompt parsed 800/800 rows, skipped 0,
   and reached 0.9186 accuracy on the 86 manual edge rows.
+
+## Qwen 3.5 4B Follow-Up
+
+The Unsloth Qwen 3.5 4B checkpoint was loaded in LM Studio under model id
+`qwen3.5-4b` and tested with the selected endorsement prompt. The LM Studio
+context length was set to 8k; runtime temperature remained `0`.
+
+The 99-row failure-focused subset looked promising:
+
+| Model | Rows | Accuracy On Prior Failures | Fixed Prior Failures | Still Wrong | Fallback Rows |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `qwen3.5-4b` | 99 | 0.4949 | 49 | 50 | 0 |
+
+On the full 800-row `sanitize-classify` run:
+
+| Model | Accuracy | Precision | Recall | F1 | FP | FN | Parse | Fallback Rows | Time |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `openai/gpt-oss-20b` selected-prompt CLI run | 0.7225 | 0.4711 | 0.7635 | 0.5827 | 174 | 48 | 800/800 | 40 | 265.58s |
+| `qwen3.5-4b` selected-prompt CLI run | 0.7538 | 0.5116 | 0.6502 | 0.5727 | 126 | 71 | 800/800 | 10 | 286.94s |
+
+Manual-edge subset:
+
+| Model | Accuracy | Precision | Recall | F1 | FP | FN |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `openai/gpt-oss-20b` selected-prompt CLI run | 0.9186 | 0.6818 | 1.0000 | 0.8108 | 7 | 0 |
+| `qwen3.5-4b` selected-prompt CLI run | 0.9302 | 0.9091 | 0.6667 | 0.7692 | 1 | 5 |
+
+Recommendation: do not switch the default from `openai/gpt-oss-20b` yet.
+`qwen3.5-4b` is cleaner structurally, with fewer fallback rows and fewer false
+positives, but it loses recall and slightly loses full-set F1. It also emitted
+many more residual PII suggestions: 49 accepted for review, 10 duplicate
+rejects, 4 non-substring rejects, 101 placeholder rejects, and 6 protected/HSD
+cue rejects. That suggestion volume needs a separate prompt or validator pass
+before using Qwen as the default review backend.
 
 ## Non-Goals
 
@@ -652,7 +691,8 @@ After implementation and verification:
 
 ## Open Follow-Ups
 
-- Decide whether `qwen/qwen3-4b` should be the quality-oriented local LLM option after a larger benchmark.
+- Tune a Qwen-specific prompt or disable Qwen PII suggestions before considering
+  `qwen3.5-4b` as a quality-oriented local LLM option.
 - Add a larger multilingual/protected-group benchmark with local minority names.
 - Re-evaluate the selected `v1_endorsement_rule` prompt on a larger holdout,
   especially false-negative-sensitive hate rows.

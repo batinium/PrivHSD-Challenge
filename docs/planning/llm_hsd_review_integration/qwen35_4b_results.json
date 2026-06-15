@@ -1,0 +1,98 @@
+{
+  "failure_subset": {
+    "model": "qwen3.5-4b",
+    "scope": "99-row failure-focused subset using selected endorsement prompt",
+    "rows": 99,
+    "parse_count": 99,
+    "skipped_count": 0,
+    "fallback_count": 0,
+    "request_count": 10,
+    "elapsed_seconds": 39.1378,
+    "accuracy_on_failure_subset": 0.4949,
+    "fixed_previous_failures": 49,
+    "still_wrong": 50,
+    "false_positives_remaining": 30,
+    "false_negatives_remaining": 20,
+    "precision_on_subset": 0.2308,
+    "recall_on_subset": 0.3103,
+    "f1_on_subset": 0.2647,
+    "prediction_counts": {
+      "0": 60,
+      "1": 39
+    },
+    "parse_status_counts": {
+      "ok": 99
+    }
+  },
+  "full_800_row_run": {
+    "model": "qwen3.5-4b",
+    "scope": "800-row sanitize-classify run using selected endorsement prompt",
+    "input": "workbench/demo/curated_hsd_training.csv",
+    "output": "data/outputs/llm_hsd_review_integration/curated_hsd_training.local_llm.qwen35_4b.csv",
+    "manifest": "data/outputs/llm_hsd_review_integration/curated_hsd_training.local_llm.qwen35_4b.manifest.json",
+    "prediction_artifact": "docs/planning/llm_hsd_review_integration/qwen35_4b_full_predictions.csv",
+    "parse_count": 800,
+    "skipped_count": 0,
+    "fallback_count": 10,
+    "request_count": 90,
+    "elapsed_seconds": 286.9393,
+    "prediction_counts": {
+      "0": 542,
+      "1": 258
+    },
+    "reason_tag_counts": {
+      "ambiguous_context": 3,
+      "counterspeech": 16,
+      "dehumanization": 51,
+      "exclusion": 101,
+      "identity_attack": 121,
+      "inferiority_claim": 163,
+      "none": 472,
+      "protected_target": 171,
+      "quote_or_report": 59,
+      "threat": 47
+    },
+    "pii_suggestion_status_counts": {
+      "accepted_for_review": 49,
+      "rejected_duplicate": 10,
+      "rejected_not_substring": 4,
+      "rejected_placeholder": 101,
+      "rejected_protected_or_hsd_cue": 6
+    },
+    "overall_metrics_against_hsd_answer": {
+      "rows": 800,
+      "accuracy": 0.7538,
+      "precision": 0.5116,
+      "recall": 0.6502,
+      "f1": 0.5727,
+      "tp": 132,
+      "tn": 471,
+      "fp": 126,
+      "fn": 71
+    },
+    "manual_edge_metrics_against_hsd_answer": {
+      "rows": 86,
+      "accuracy": 0.9302,
+      "precision": 0.9091,
+      "recall": 0.6667,
+      "f1": 0.7692,
+      "tp": 10,
+      "tn": 70,
+      "fp": 1,
+      "fn": 5
+    },
+    "comparison_to_gpt_oss_v1_final_cli_run": {
+      "gpt_oss_v1_f1": 0.5827,
+      "qwen35_4b_f1": 0.5727,
+      "gpt_oss_v1_recall": 0.7635,
+      "qwen35_4b_recall": 0.6502,
+      "gpt_oss_v1_precision": 0.4711,
+      "qwen35_4b_precision": 0.5116,
+      "gpt_oss_v1_false_positives": 174,
+      "qwen35_4b_false_positives": 126,
+      "gpt_oss_v1_false_negatives": 48,
+      "qwen35_4b_false_negatives": 71
+    },
+    "recommendation": "Do not switch the default from openai/gpt-oss-20b yet. qwen3.5-4b is more precise and parses cleanly, but it loses recall/F1 on the full run and emits many more accepted PII suggestions."
+  }
+}

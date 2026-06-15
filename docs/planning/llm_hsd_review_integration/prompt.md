@@ -45,6 +45,16 @@ context-first prompt in the isolated prompt sweep. After wiring it into the CLI
 runtime, the final live `sanitize-classify` run reached F1 0.5827 with 174
 false positives, 48 false negatives, 800/800 parsed rows, and 0 skipped rows.
 
+Follow-up testing with the Unsloth Qwen 3.5 4B checkpoint, exposed by LM Studio
+as `qwen3.5-4b`, used the same prompt, 8k context, and temperature `0`. It
+parsed 800/800 rows with only 10 fallback rows and improved accuracy/precision
+over the GPT-OSS selected-prompt run, but full-set F1 was slightly lower
+because recall dropped: accuracy 0.7538, precision 0.5116, recall 0.6502,
+F1 0.5727, 126 false positives, 71 false negatives. Keep GPT-OSS as the
+default until Qwen gets a prompt or validator pass, especially because Qwen
+emitted 49 accepted residual PII suggestions versus 1 for the GPT-OSS final
+run.
+
 ```text
 Classify cleaned text for a hate-speech dataset. Hate speech means the text
 itself endorses, advocates, commands, or asserts abuse, inferiority, exclusion,
@@ -316,6 +326,10 @@ Live prompt-tuning artifacts:
   records prompt results on the failure subset.
 - `docs/planning/llm_hsd_review_integration/prompt_tuning_full_results.json`
   records the complete 800-row comparison for the best prompt candidates.
+- `docs/planning/llm_hsd_review_integration/qwen35_4b_results.json`
+  records the `qwen3.5-4b` failure-subset and full-run comparison.
+- `docs/planning/llm_hsd_review_integration/qwen35_4b_full_predictions.csv`
+  records the cleaned-text-only full-run Qwen predictions.
 
 The selected default is `v1_endorsement_rule`, not `v2_context_first`, because
 the latter won on accuracy but gave up too much HSD recall.
