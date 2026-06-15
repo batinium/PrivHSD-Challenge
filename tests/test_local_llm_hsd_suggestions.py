@@ -44,6 +44,21 @@ def test_suggestion_validator_rejects_protected_targets_and_hsd_cues():
     ]
 
 
+def test_suggestion_validator_rejects_external_hsd_cues(monkeypatch):
+    monkeypatch.setattr(
+        "contextsafe_hsd.models.local_llm_hsd_review_runtime.contains_external_profanity",
+        lambda value: value == "external-cue",
+    )
+
+    records = validate_pii_suggestions(
+        "The protected text still contains external-cue.",
+        ["external-cue"],
+        model_id="fake-model",
+    )
+
+    assert statuses(records) == ["rejected_protected_or_hsd_cue"]
+
+
 def test_suggestion_validator_deduplicates_per_row():
     records = validate_pii_suggestions(
         "Reach Alex. Alex is visible.",

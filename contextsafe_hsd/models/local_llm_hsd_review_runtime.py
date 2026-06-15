@@ -17,7 +17,11 @@ import time
 from typing import Any
 from urllib import error, request
 
-from contextsafe_hsd.detectors import TARGET_GROUP_TERMS, target_group_spans
+from contextsafe_hsd.detectors import (
+    TARGET_GROUP_TERMS,
+    contains_external_profanity,
+    target_group_spans,
+)
 from contextsafe_hsd.metrics import UTILITY_CUES
 from contextsafe_hsd.resource_config import load_utility_cue_terms
 
@@ -238,6 +242,8 @@ def contains_protected_or_hsd_cue(value: str) -> bool:
     phrase = normalized_phrase(value)
     if not phrase:
         return False
+    if contains_external_profanity(value):
+        return True
     if phrase in PROTECTED_OR_HSD_TERMS:
         return True
     words = set(WORD_PATTERN.findall(phrase))
