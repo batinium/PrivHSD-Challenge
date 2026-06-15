@@ -3,7 +3,7 @@
 
 The generator is intentionally resumable and append-only. It asks for one row
 per model request, stores the exact prompt and raw response, validates/parses
-labels, and enriches the row with local weak token-action labels.
+labels, and enriches the row with deterministic privacy/cue metadata.
 
 Generated rows are stress-test and augmentation candidates. They are not
 trusted training data until reviewed, deduplicated, and balanced.
@@ -29,10 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from contextsafe_hsd.context import analyze_context
-from contextsafe_hsd.detectors import detect_spans, target_group_spans
-from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
-from contextsafe_hsd.token_policy import token_examples_for_row, weak_action_spans_for_row
+from contextsafe_hsd.context import analyze_context  # noqa: E402
+from contextsafe_hsd.detectors import detect_spans, target_group_spans  # noqa: E402
+from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text  # noqa: E402
 
 
 DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions"
@@ -222,9 +221,6 @@ FIELDNAMES = [
     "privacy_spans_json",
     "target_spans_json",
     "context_tags_json",
-    "token_actions_json",
-    "token_action_counts",
-    "action_spans_json",
     "balanced_text",
     "privacy_text",
     "text_hash",
@@ -834,35 +830,6 @@ def local_enrichment(row: dict[str, str]) -> dict[str, Any]:
             "target_categories": row.get("target_categories", ""),
         },
     )
-    action_spans = weak_action_spans_for_row(
-        row,
-        text_col="text",
-        source_col="source",
-        target_col="target",
-        target_categories_col="target_categories",
-        rationale_col="rationale_spans",
-    )
-    token_examples = token_examples_for_row(
-        row,
-        row_index=int(row["request_index"]) + 1,
-        text_col="text",
-        id_col="id",
-        source_col="source",
-        target_col="target",
-        target_categories_col="target_categories",
-        rationale_col="rationale_spans",
-    )
-    token_actions = [
-        {
-            "token_index": item.token_index,
-            "token": item.token,
-            "start": item.start,
-            "end": item.end,
-            "action": item.action,
-            "reasons": list(item.reasons),
-        }
-        for item in token_examples
-    ]
     return {
         "privacy_spans": [
             {
@@ -886,18 +853,6 @@ def local_enrichment(row: dict[str, str]) -> dict[str, Any]:
             for span in target_spans
         ],
         "context_tags": context,
-        "action_spans": [
-            {
-                "start": span.start,
-                "end": span.end,
-                "action": span.action,
-                "reason": span.reason,
-                "score": span.score,
-            }
-            for span in action_spans
-        ],
-        "token_actions": token_actions,
-        "token_action_counts": dict(sorted(Counter(item["action"] for item in token_actions).items())),
         "balanced_text": balanced.text,
         "privacy_text": privacy.text,
     }
@@ -1001,9 +956,6 @@ def build_row(
     row["privacy_spans_json"] = json_dumps(enrichment["privacy_spans"])
     row["target_spans_json"] = json_dumps(enrichment["target_spans"])
     row["context_tags_json"] = json_dumps(enrichment["context_tags"])
-    row["token_actions_json"] = json_dumps(enrichment["token_actions"])
-    row["token_action_counts"] = json_dumps(enrichment["token_action_counts"])
-    row["action_spans_json"] = json_dumps(enrichment["action_spans"])
     row["balanced_text"] = enrichment["balanced_text"]
     row["privacy_text"] = enrichment["privacy_text"]
     return row, errors

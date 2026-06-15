@@ -98,6 +98,21 @@ python -m pytest tests/test_simple_pipeline.py tests/test_submission.py tests/te
 
 Result: `45 passed`.
 
+Final verification:
+
+```bash
+python -m ruff check contextsafe_hsd workbench/backend tests
+python -m pytest -q
+npm --prefix workbench/frontend run build
+```
+
+Result on 2026-06-15: ruff passed; pytest `266 passed, 1 skipped`; frontend
+build passed. A live 25-row `protect --preset exact --llm-review local-llm`
+smoke preserved row order/count/columns exactly, changed only the `text`
+column, appended no helper columns, and wrote manifest/audit sidecars with
+local LLM status `ok`, parse count 25, fallback count 0, reason tag counts,
+and validated PII suggestion counts.
+
 ## Small-Batch Verification Policy
 
 Use a 25-100 row local batch for system checks while cleaning. Avoid the full
@@ -107,8 +122,7 @@ Minimum final checks:
 
 ```bash
 python -m ruff check contextsafe_hsd workbench/backend tests
-python -m pytest tests/test_pipeline.py tests/test_metrics.py tests/test_auto_pipeline.py tests/test_submission.py tests/test_simple_pipeline.py -q
-python -m pytest tests/test_workbench_csv.py -q
+python -m pytest -q
 npm --prefix workbench/frontend run build
 ```
 

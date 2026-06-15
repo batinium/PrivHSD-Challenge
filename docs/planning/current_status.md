@@ -94,6 +94,27 @@ Travel handoff on 2026-06-15:
   values as grouping keys only and masks only repeated detector-backed factual
   spans, not style.
 
+Final MVP verification on 2026-06-15:
+
+- Required checks passed:
+  - `python -m ruff check contextsafe_hsd workbench/backend tests`
+  - `python -m pytest -q`: 266 passed, 1 skipped
+  - `npm --prefix workbench/frontend run build`
+- Live 25-row smoke used `data/train/train_split.csv` sampled to
+  `data/outputs/final_pipeline_smoke/train_25.csv` without printing raw text.
+- Command shape: `protect --preset exact --llm-review local-llm --text-col text
+  --id-col ID`.
+- Output CSV validation passed: 25 rows in, 25 rows out; row order matched;
+  columns matched exactly: `ID`, `author`, `text`, `hs`.
+- Only `text` was allowed to change; all non-text columns were preserved.
+- No helper classification columns were appended.
+- Manifest/audit sidecars recorded local LLM review status `ok`, parse count
+  25, fallback count 0, reason tag counts `dehumanization=3`,
+  `identity_attack=8`, `none=16`, and validated PII suggestion counts
+  `total=0`, `accepted_for_review=0`, `rejected=0`.
+- PII Assist provider statuses in the manifest: deterministic ready, Presidio
+  ready, scrubadub ready; GLiNER disabled.
+
 Real train split full sweep:
 
 ```bash
@@ -221,7 +242,7 @@ Focused regression after detector tuning:
 Most recent local verification before this final cleanup:
 
 - `python -m compileall privhsd contextsafe_hsd workbench/backend`: passed.
-- `python -m pytest tests/test_simple_pipeline.py tests/test_auto_pipeline.py tests/test_hf_utility.py tests/test_submission.py tests/test_csv_pipeline.py -q`: 29 passed.
+- `python -m pytest tests/test_simple_pipeline.py tests/test_auto_pipeline.py tests/test_submission.py tests/test_csv_pipeline.py -q`: 29 passed.
 - `python -m pytest -q`: 184 passed, 1 skipped.
 - `cd workbench/frontend && npm run build`: passed.
 - CLI smoke passed on cached local advisory models:
