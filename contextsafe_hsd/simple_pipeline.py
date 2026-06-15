@@ -571,7 +571,6 @@ def build_final_pipeline_rows(
 
     disabled_model_set = set(disabled_models or [])
     disabled_model_set.add("semantic")
-    disabled_model_set.add("token_policy_ensemble")
     if normalized_llm_review == "off":
         disabled_model_set.update({"hsd_advisory", "local_llm"})
     config = AutoPipelineConfig(
@@ -585,7 +584,6 @@ def build_final_pipeline_rows(
         audit_level=audit_level,
         gliner_model=None,
         gliner_profile="pii",
-        enable_token_policy=False,
         hsd_classification_backend=(
             "local_llm" if normalized_llm_review == "local_llm" else "ml"
         ),
@@ -810,7 +808,6 @@ def run_sanitize_classify(
     audit_level: str = "summary",
     gliner_model: str | None = None,
     gliner_profile: str = "pii",
-    enable_token_policy: bool = False,
     hsd_advisory_models: list[str] | None = None,
     hsd_classification_backend: str = "ml",
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions",
@@ -850,7 +847,6 @@ def run_sanitize_classify(
         "audit_level": audit_level,
         "gliner_model": gliner_model,
         "gliner_profile": gliner_profile,
-        "enable_token_policy": enable_token_policy,
         "hsd_classification_backend": hsd_classification_backend,
         "local_llm_endpoint": local_llm_endpoint,
         "local_llm_model": local_llm_model,

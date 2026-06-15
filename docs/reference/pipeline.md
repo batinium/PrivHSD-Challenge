@@ -122,9 +122,6 @@ one public pipeline:
 - `style_scrubbed`: deterministic plus style normalization when style risk is
   present.
 - `pii_assist_augmented`: deterministic plus accepted PII Assist spans.
-- `token_policy_candidate`: research/audit-only token-action candidate when
-  explicitly enabled.
-
 The selector scores every candidate against the raw original text. Local HSD
 advisory drift can reject optional stronger candidates, but it does not
 override removal of high-confidence direct identifiers. Those hard privacy
@@ -133,10 +130,9 @@ cleanups still record drift and residual-review status in the audit.
 `utility`, `balanced`, and `privacy` remain deterministic modes for legacy
 commands and tests. They are not separate public pipeline branches.
 
-Research/debug candidate paths, including token-policy, DPMLM, and local LLM
-generation, must go through reranking, cue checks, residual checks, and
-exact-format validation before any output can be considered for sharing. They
-are not the public default path.
+Removed rewrite-candidate paths such as token-policy, DPMLM, and local LLM
+generation are not part of the production flow. The retained local LLM path is
+sidecar-only review after cleaning.
 
 Hard rejects:
 

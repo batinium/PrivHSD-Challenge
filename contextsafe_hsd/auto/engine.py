@@ -356,7 +356,6 @@ class AutoPipelineEngine:
                     profile=profile,
                     decision=route_row(
                         profile,
-                        enable_token_policy=config.enable_token_policy,
                     ),
                 )
             )
@@ -370,11 +369,6 @@ class AutoPipelineEngine:
             )
 
         self._run_provider_batches(states, progress_callback=progress_callback)
-        self._run_token_policy_batch(
-            states,
-            text_col=text_col,
-            progress_callback=progress_callback,
-        )
         candidate_groups = []
         self._emit_progress(
             progress_callback,
@@ -522,9 +516,6 @@ class AutoPipelineEngine:
         provider_rows_considered = sum(1 for state in states if state.decision.use_providers)
         if config.max_provider_rows is not None:
             provider_rows_considered = min(provider_rows_considered, config.max_provider_rows)
-        token_policy_rows_considered = sum(
-            1 for state in states if state.decision.use_token_policy
-        )
         stage_summary = build_stage_summary(
             config=config,
             row_count=len(rows),
@@ -538,7 +529,6 @@ class AutoPipelineEngine:
             audit_counters=self.context.audit_counters,
             metrics=metrics,
             provider_rows_considered=provider_rows_considered,
-            token_policy_rows_considered=token_policy_rows_considered,
             candidate_count=candidate_count,
             candidate_name_counts=candidate_name_counts,
             rejected_candidate_count=rejected_candidate_count,
@@ -722,97 +712,6 @@ class AutoPipelineEngine:
                     continue
                 state.provider_outputs.append(output)
                 state.provider_candidates.extend(output.spans)
-
-    def _run_token_policy_batch(
-        self,
-        states: list[AutoRowState],
-        *,
-        text_col: str,
-        progress_callback: ProgressCallback | None = None,
-    ) -> None:
-        model_rows = [state for state in states if state.decision.use_token_policy]
-        self._emit_progress(
-            progress_callback,
-            stage="token_policy",
-            processed=0,
-            total=len(model_rows),
-            detail="Checking token-policy model candidates.",
-        )
-        if not model_rows:
-            self._emit_progress(
-                progress_callback,
-                stage="token_policy",
-                processed=0,
-                total=0,
-                detail="No rows needed token-policy model candidates.",
-            )
-            return
-        token_provider = self.context.ensure_token_policy_provider()
-        if token_provider is None:
-            for state in model_rows:
-                state.model_errors.append(
-                    {
-                        "model": "token_policy_ensemble",
-                        "error_class": "UnavailableModel",
-                    }
-                )
-            self._emit_progress(
-                progress_callback,
-                stage="token_policy",
-                processed=len(model_rows),
-                total=len(model_rows),
-                detail="Token-policy model was unavailable.",
-            )
-            return
-        chunk_size = (
-            self.context.config.max_model_batch_size
-            if progress_callback is not None
-            else len(model_rows)
-        )
-        processed_rows = 0
-        for start in range(0, len(model_rows), max(1, chunk_size)):
-            chunk = model_rows[start : start + max(1, chunk_size)]
-            rows = [
-                {**state.row, text_col: state.original}
-                for state in chunk
-            ]
-            try:
-                outputs = token_provider.propose_many(
-                    rows,
-                    text_col=text_col,
-                    batch_size=self.context.config.max_model_batch_size,
-                )
-            except Exception as exc:
-                self.context.audit_counters[
-                    f"model_runtime_error:token_policy_ensemble:{type(exc).__name__}"
-                ] += 1
-                for state in chunk:
-                    state.model_errors.append(
-                        {
-                            "model": "token_policy_ensemble",
-                            "error_class": type(exc).__name__,
-                        }
-                    )
-                processed_rows += len(chunk)
-                self._emit_progress(
-                    progress_callback,
-                    stage="token_policy",
-                    processed=processed_rows,
-                    total=len(model_rows),
-                    detail="Token-policy model candidate check encountered an error.",
-                )
-                continue
-            for state, output in zip(chunk, outputs):
-                state.model_outputs.append(output)
-                state.model_candidates.extend(output.spans)
-            processed_rows += len(chunk)
-            self._emit_progress(
-                progress_callback,
-                stage="token_policy",
-                processed=processed_rows,
-                total=len(model_rows),
-                detail="Checked token-policy model candidates.",
-            )
 
     def _run_hsd_advisory_batch(
         self,
@@ -1058,15 +957,6 @@ class AutoPipelineEngine:
                     spans=state.provider_candidates,
                 )
             )
-        if state.model_candidates:
-            candidates.append(
-                self._candidate_from_spans(
-                    state,
-                    name="token_policy_candidate",
-                    source="token_policy_ensemble",
-                    spans=state.model_candidates,
-                )
-            )
         return self._with_strict_residual_cleanup_candidates(candidates)
 
     def _with_strict_residual_cleanup_candidates(
@@ -1150,11 +1040,6 @@ class AutoPipelineEngine:
             for output in state.provider_outputs
             if output.spans
         )
-        accepted_model_counts = Counter(
-            output.provider
-            for output in state.model_outputs
-            if output.spans
-        )
         meaning_protection_rejections = [
             {
                 "candidate": str(score.get("name", "unknown")),
@@ -1199,7 +1084,6 @@ class AutoPipelineEngine:
             "accepted_provider_spans_by_provider": dict(
                 sorted(accepted_provider_counts.items())
             ),
-            "accepted_model_spans_by_provider": dict(sorted(accepted_model_counts.items())),
             "provider_errors": state.provider_errors,
             "model_errors": state.model_errors,
             "scores": scored,

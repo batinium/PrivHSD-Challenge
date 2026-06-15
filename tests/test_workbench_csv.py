@@ -190,7 +190,7 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
             "mode": "auto",
             "replace_text": True,
             "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+            "disabled_models": ["semantic", "hsd_advisory"],
         },
     )
 
@@ -224,7 +224,7 @@ def test_workbench_csv_endpoint_does_not_require_case_key(tmp_path, monkeypatch)
             "mode": "auto",
             "replace_text": True,
             "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+            "disabled_models": ["semantic", "hsd_advisory"],
         },
     )
 
@@ -254,7 +254,7 @@ def test_workbench_csv_uses_safe_fingerprint_as_review_case_key(tmp_path, monkey
             "mode": "auto",
             "replace_text": True,
             "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+            "disabled_models": ["semantic", "hsd_advisory"],
         },
     )
 
@@ -311,7 +311,7 @@ def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, mo
             "mode": "auto",
             "replace_text": True,
             "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+            "disabled_models": ["semantic", "hsd_advisory"],
         },
     )
 
@@ -347,7 +347,7 @@ def test_workbench_csv_endpoint_persists_and_reuses_cached_result(tmp_path, monk
         "mode": "auto",
         "replace_text": True,
         "disabled_providers": ["presidio", "scrubadub", "gliner"],
-        "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+        "disabled_models": ["semantic", "hsd_advisory"],
     }
 
     first = client.post("/api/csv/privatize", json=payload)
@@ -383,7 +383,7 @@ def test_workbench_csv_job_reports_progress_and_result(tmp_path, monkeypatch):
         "mode": "auto",
         "replace_text": True,
         "disabled_providers": ["presidio", "scrubadub", "gliner"],
-        "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+        "disabled_models": ["semantic", "hsd_advisory"],
     }
 
     start = client.post("/api/csv/jobs", json=payload)
@@ -426,7 +426,7 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
         "mode": "auto",
         "replace_text": True,
         "disabled_providers": ["presidio", "scrubadub", "gliner"],
-        "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+        "disabled_models": ["semantic", "hsd_advisory"],
     }
     processed = client.post("/api/csv/privatize", json=payload)
     assert processed.status_code == 200
@@ -552,13 +552,13 @@ def test_workbench_csv_cache_key_includes_hsd_backend_options():
         csv_text="id,text\n1,hello\n",
         text_col="text",
         id_col="id",
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
     )
     local = workbench_app.CsvPrivatizeRequest(
         csv_text="id,text\n1,hello\n",
         text_col="text",
         id_col="id",
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
         hsd_classification_backend="local_llm",
         local_llm_model="fake-local-llm",
     )
@@ -643,7 +643,7 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
             "mode": "auto",
             "replace_text": True,
             "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+            "disabled_models": ["semantic", "hsd_advisory"],
             "hsd_classification_backend": "local_llm",
             "local_llm_endpoint": "http://local.test/v1/chat/completions",
             "local_llm_model": "fake-local-llm",

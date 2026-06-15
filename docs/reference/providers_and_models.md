@@ -1,8 +1,8 @@
 # Providers And Models Reference
 
 Status: active
-Owner area: auto orchestration, span providers, token-policy runtime
-Last verified: 2026-06-14
+Owner area: auto orchestration, span providers, local LLM review
+Last verified: 2026-06-15
 Primary code: `contextsafe_hsd/auto/context.py`, `contextsafe_hsd/auto/model_registry.py`,
 `contextsafe_hsd/span_providers/`, `contextsafe_hsd/models/`
 
@@ -88,41 +88,18 @@ The default advisory ensemble may use approved OSS Hugging Face classifiers
 when they are available locally or explicitly allowed for a non-sensitive
 debug/research run.
 
-## Token-Policy Role
+## Removed Model Paths
 
-The token-policy model is trained on weak token-action labels, not private
-identity gold labels. Current actions are:
-
-```text
-KEEP
-MASK_IDENTIFIER
-GENERALIZE_CONTEXT
-PROTECT_TARGET
-PROTECT_HSD
-NORMALIZE_STYLE
-REVIEW
-```
-
-Runtime mapping:
-
-- `MASK_IDENTIFIER` and `GENERALIZE_CONTEXT` become span evidence for fusion.
-- `PROTECT_TARGET` and `PROTECT_HSD` protect HSD evidence from overmasking.
-- `NORMALIZE_STYLE` is style-candidate evidence.
-- `REVIEW` is routing/audit evidence.
-
-Token-policy output is disabled by default in the public auto/protect path and
-should be enabled only for explicit research or audit ablations. It never
-directly overwrites final text. When enabled, it must pass fusion, candidate
-scoring, cue checks, residual checks, and exact-format validation before
-influencing an output candidate. Public quickstart and official runbooks should
-not ask users to choose token-policy settings.
+Token-policy candidate generation and training/evaluation commands were removed
+from the production code path. The final pipeline keeps deterministic span
+detection, Presidio/scrubadub PII Assist, candidate selection with cue
+preservation, and sidecar-only local LLM review.
 
 ## Other Research Model Paths
 
-Semantic models, DPMLM candidates, and local LLM reviewers are research or
-debug aids unless promoted by a later planning decision. They must not become
-additional public pipeline branches. Any candidate they produce needs the same
-Meaning Protection and Verification checks as the default exact path.
+Semantic models and other rewrite candidates are not production branches.
+Local LLM usage is limited to post-cleaning HSD classification, reason tags,
+and validated residual PII suggestions in sidecars.
 
 ## Trusted Enriched Analysis
 

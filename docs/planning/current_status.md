@@ -238,8 +238,8 @@ python -m privhsd.cli sanitize-classify \
   --disable-provider presidio \
   --disable-provider scrubadub \
   --disable-provider gliner \
-  --disable-model token_policy_ensemble \
   --disable-model semantic \
+  --disable-model hsd_advisory \
   --max-model-batch-size 4
 ```
 
@@ -253,8 +253,7 @@ Previous recorded verification from the pre-cleanup planning notes:
 - `python -m compileall privhsd workbench/backend`: passed.
 - `python -m pytest -q`: 164 passed, 1 skipped.
 - `cd workbench/frontend && npm run build`: passed.
-- Local environment had Presidio, torch, transformers, CUDA, and local
-  RoBERTa/HateBERT token-policy artifacts.
+- Local environment had Presidio, torch, transformers, and CUDA.
 - Local environment was missing scrubadub, GLiNER, sentence-transformers, and
   Detoxify.
 
@@ -269,14 +268,14 @@ Re-run these commands before treating this status as current.
 | `balanced` exact-format | Merged public bundle: 159,668 rows, validation passed, identifier detections 40,304 -> 5, target and utility cue retention 0.9999. | Deterministic compatibility fallback. |
 | Source-aware regression | Reports by source/label/split/platform/type and row ID without raw text. | Required before tuning or pitching. |
 | Filtered Presidio reranking | Full Dynahate run selected filtered Presidio candidate for 6,085 rows with utility-cue retention 1.0 and target retention 0.9974. | Strong alternate after baseline validation. |
-| RoBERTa token policy | 30k action-balanced weak labels, CUDA, one epoch, dev macro F1 0.9061. | Advisory model and presentation evidence. |
+| Removed token-policy experiments | 30k action-balanced weak labels, CUDA, one epoch, dev macro F1 0.9061. | Historical research evidence only; runtime path removed from final MVP. |
 | RoBERTa grouped K-fold | Five grouped folds, macro F1 mean 0.8977, zero duplicate text overlap across folds. | Anti-overfit evidence. |
-| RoBERTa + HateBERT ensemble | External TweetEval macro F1 0.8837, `PROTECT_TARGET` F1 0.8143. | Best current token-policy evidence. |
-| Local LLM and DPMLM candidates | Generated and validated candidates, but reranking selected few or none. | Candidate-only research paths. |
+| Removed RoBERTa + HateBERT ensemble | External TweetEval macro F1 0.8837, `PROTECT_TARGET` F1 0.8143. | Historical token-policy evidence only. |
+| Removed local LLM rewrite and DPMLM candidates | Generated and validated candidates, but reranking selected few or none. | Candidate-only research paths removed from runtime. |
 
 ## Current Submission Rule
 
-Create `auto` first and validate exact shape. Use `balanced` as the deterministic
-fallback and compare alternates only after the baseline exists. Use
-token-policy outputs as advisory evidence or reranker support until an audited
-candidate path improves official scores.
+Create the final exact `protect --preset exact --llm-review local-llm` output
+first and validate exact shape. Use the deterministic row-level sanitizer as
+the privacy authority and keep local LLM classification, reason tags, and
+validated PII suggestions in sidecars only.

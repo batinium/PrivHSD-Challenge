@@ -96,18 +96,12 @@ def cheap_profile(
     return profile, metrics
 
 
-def route_row(
-    profile: RowRiskProfile,
-    *,
-    enable_token_policy: bool = True,
-) -> RowRoutingDecision:
+def route_row(profile: RowRiskProfile) -> RowRoutingDecision:
     use_providers = bool(profile.provider_needed_reasons)
     use_style_candidate = profile.style_risk_count >= 2
-    use_token_policy = enable_token_policy and bool(profile.model_needed_reasons)
     review_recommended = bool(profile.review_reasons)
     return RowRoutingDecision(
         use_providers=use_providers,
-        use_token_policy=use_token_policy,
         use_style_candidate=use_style_candidate,
         review_recommended=review_recommended,
     )

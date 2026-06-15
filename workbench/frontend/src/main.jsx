@@ -66,7 +66,7 @@ const CATEGORY_LABELS = {
 };
 const AUTO_DASHBOARD_DISABLED_MODELS = ["semantic", "local_llm"];
 const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub", "gliner"];
-const AUTO_MODEL_ORDER = ["token_policy_ensemble", "hsd_advisory", "local_llm"];
+const AUTO_MODEL_ORDER = ["hsd_advisory", "local_llm"];
 const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
 const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
 const RISK_FILTERS = [
@@ -1094,15 +1094,8 @@ function orderedStatusItems(items, order, options = {}) {
 
 function modelStatusFromSummary(modelStatus) {
   const hsd = modelStatus?.hsd_advisory;
-  const tokenPolicy = modelStatus?.token_policy_ensemble;
   const localLlm = modelStatus?.local_llm;
   return {
-    token_policy_ensemble: tokenPolicy
-      ? {
-          status: tokenPolicy.available ? "available" : "missing_artifact",
-          ...tokenPolicy
-        }
-      : undefined,
     hsd_advisory: hsd
       ? {
           status: hsd.available ? "available" : "missing_dependency",

@@ -106,15 +106,7 @@ Important legacy exact-output flags:
 | `train-classifier` | Classifier baseline | Train a local TF-IDF/logistic baseline. |
 | `evaluate-classifier` | Classifier baseline | Evaluate the local baseline on labeled CSV rows. |
 | `predict-classifier` | Classifier baseline | Write row-preserving baseline predictions. |
-| `train-token-action-tagger` | Token-policy training and runtime | Weakly supervised non-neural token-action tagger. |
-| `label-feature-report` | Token-policy training and runtime | Source-aware weak-label feature/action report. |
 | `rerank-candidates` | Candidate generation and reranking | Checked alternate path, never raw provider output. |
-| `train-token-policy` | Token-policy training and runtime | Weak token-action model training. |
-| `evaluate-token-policy` | Token-policy training and runtime | Single model evaluation. |
-| `evaluate-token-policy-ensemble` | Token-policy training and runtime | Ensemble evaluation. |
-| `predict-token-policy` | Token-policy training and runtime | Single-model advisory token-action spans. |
-| `predict-token-policy-ensemble` | Token-policy training and runtime | Advisory predictions. |
-| `apply-token-policy-candidates` | Candidate generation and reranking | Candidate helper; still requires audit. |
 
 ## Dataset Prep Commands
 
@@ -139,7 +131,6 @@ exact parser contract. These are intentionally not part of `protect`:
 --max-provider-rows N
 --disable-provider NAME
 --disable-model NAME
---enable-token-policy
 --audit-level summary|row|debug
 --style-scrub
 --presidio-augment
@@ -151,9 +142,10 @@ path do not use GLiNER unless a command explicitly configures a model; model
 downloads remain opt-in and should not be used during sensitive-data
 processing.
 
-Token-policy ensemble candidate generation is also disabled by default. Use
-`--enable-token-policy` only for research or audit ablations where token-action
-candidate behavior is being measured explicitly.
+Token-policy candidate generation and its training/evaluation commands were
+removed from the production CLI. The final path relies on deterministic
+detectors, PII Assist providers, cue-preserving candidate selection, and
+sidecar-only local LLM review.
 
 Important `sanitize-classify` prediction flags:
 

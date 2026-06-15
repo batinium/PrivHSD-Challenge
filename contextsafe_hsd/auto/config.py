@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from contextsafe_hsd.metrics import METRIC_DEPTHS
 
@@ -14,10 +13,6 @@ DEVICE_POLICIES = frozenset({"auto", "cpu", "cuda"})
 AUDIT_LEVELS = frozenset({"summary", "row", "debug"})
 GLINER_PROFILES = frozenset({"general", "pii"})
 HSD_CLASSIFICATION_BACKENDS = frozenset({"ml", "local_llm"})
-DEFAULT_TOKEN_POLICY_MODEL_DIRS = (
-    Path("data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda"),
-    Path("data/outputs/token_policy_hatebert.action_balanced_train30000.cuda"),
-)
 DEFAULT_HSD_ADVISORY_MODEL = "facebook/roberta-hate-speech-dynabench-r4-target"
 DEFAULT_HSD_ADVISORY_MODELS = (
     DEFAULT_HSD_ADVISORY_MODEL,
@@ -45,9 +40,6 @@ class AutoPipelineConfig:
     provider_language: str = "en"
     gliner_model: str | None = None
     gliner_profile: str = "general"
-    token_policy_model_dirs: tuple[Path, ...] = DEFAULT_TOKEN_POLICY_MODEL_DIRS
-    token_policy_mode: str = "mean_prob"
-    enable_token_policy: bool = False
     hsd_advisory_model: str = DEFAULT_HSD_ADVISORY_MODEL
     hsd_advisory_models: tuple[str, ...] = DEFAULT_HSD_ADVISORY_MODELS
     hsd_advisory_decision_threshold: float = 0.5

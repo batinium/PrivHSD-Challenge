@@ -133,7 +133,7 @@ def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
         manifest_path=manifest_path,
         audit_path=audit_path,
         disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
         llm_review="local_llm",
         local_llm_batch_size=4,
         model_factories={"local_llm": lambda _context: fake_runtime},
@@ -243,7 +243,7 @@ def test_sanitize_classify_replaces_text_and_appends_predictions(tmp_path):
         manifest_path=manifest_path,
         audit_path=audit_path,
         disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["token_policy_ensemble", "semantic"],
+        disabled_models=["semantic"],
         max_model_batch_size=4,
         model_factories={"hsd_advisory": lambda _context: fake_runtime},
     )
@@ -310,7 +310,7 @@ def test_sanitize_classify_adds_default_label_col_when_missing(tmp_path):
         text_col="text",
         id_col="id",
         disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["token_policy_ensemble", "semantic"],
+        disabled_models=["semantic"],
         model_factories={"hsd_advisory": lambda _context: fake_runtime},
     )
 
@@ -331,7 +331,7 @@ def test_sanitize_classify_local_llm_receives_sanitized_text_only(tmp_path):
         text_col="text",
         id_col="id",
         disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
         hsd_classification_backend="local_llm",
         local_llm_batch_size=3,
         model_factories={"local_llm": lambda _context: fake_runtime},
@@ -367,7 +367,7 @@ def test_sanitize_classify_local_llm_required_fails_on_parse_skip(tmp_path):
             id_col="id",
             require_hate_classification=True,
             disabled_providers=["presidio", "scrubadub", "gliner"],
-            disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+            disabled_models=["semantic", "hsd_advisory"],
             hsd_classification_backend="local_llm",
             model_factories={
                 "local_llm": lambda _context: FakeLocalLlmReview(skip_all=True)
@@ -388,7 +388,6 @@ def test_sanitize_classify_can_require_classifier(tmp_path):
             require_hate_classification=True,
             disabled_providers=["presidio", "scrubadub", "gliner"],
             disabled_models=[
-                "token_policy_ensemble",
                 "semantic",
                 "hsd_advisory",
             ],

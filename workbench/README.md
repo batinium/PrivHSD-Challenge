@@ -93,16 +93,12 @@ into the selected text column. When it is disabled, the backend adds a
 
 - Deterministic rules and small lexicons run for every CSV row.
 - Auto mode reports the active dashboard path: deterministic baseline,
-  Presidio/scrubadub PII assist, token-policy candidate evidence when local
-  artifacts are present, and HSD advisory preservation checks.
+  Presidio/scrubadub PII assist, candidate selection, exact-format export, and
+  optional sidecar-only local LLM review.
 - GLiNER is not shown in the dashboard unless an explicit local GLiNER model is
   configured for a research run.
 - Filtered Presidio adds broader NER spans for likely names, locations, and
   durable dates, then rejects protected HSD cues and noisy spans.
-- RoBERTa + HateBERT token-policy ensemble is advisory guidance. It predicts
-  token actions such as `MASK_IDENTIFIER`, `PROTECT_TARGET`, and `PROTECT_HSD`;
-  auto mode batches model rows and never uses token-policy output as a direct
-  rewrite.
 - HSD advisory uses the registered hate-speech classifiers to score the
   original and chosen protected candidate for each row, then rejects candidate
   rewrites that lose too much hatred-detection signal. Platform insight uses

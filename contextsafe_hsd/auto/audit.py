@@ -179,7 +179,6 @@ def build_stage_summary(
     audit_counters: Counter[str],
     metrics: dict[str, Any],
     provider_rows_considered: int,
-    token_policy_rows_considered: int,
     candidate_count: int,
     candidate_name_counts: Counter[str],
     rejected_candidate_count: int,
@@ -224,11 +223,6 @@ def build_stage_summary(
             "character_utility_retention_mean"
         ),
     }
-    if config.enable_token_policy:
-        privacy_ladder_order.append("token_policy_internal")
-        meaning_protection["rows_considered_for_token_policy_internal"] = (
-            token_policy_rows_considered
-        )
     return {
         "privacy_detection": {
             "baseline": f"deterministic_{config.baseline_mode}",

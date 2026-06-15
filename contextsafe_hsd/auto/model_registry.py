@@ -11,12 +11,6 @@ from contextsafe_hsd.hf_utility import approved_model_ids
 from .config import AutoPipelineConfig
 
 
-TOKEN_POLICY_WEIGHT_FILES = (
-    "model.safetensors",
-    "pytorch_model.bin",
-)
-
-
 def module_available(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
@@ -38,55 +32,6 @@ def dependency_status(
             "missing": missing,
         }
     return None
-
-
-def token_policy_artifact_status(model_dir: Path) -> dict[str, Any]:
-    metadata = model_dir / "token_policy_metadata.json"
-    weight_files = [model_dir / name for name in TOKEN_POLICY_WEIGHT_FILES]
-    existing_weights = [path for path in weight_files if path.exists()]
-    return {
-        "path": str(model_dir),
-        "exists": model_dir.exists(),
-        "metadata_exists": metadata.exists(),
-        "weight_exists": bool(existing_weights),
-        "weight_files": [str(path) for path in existing_weights],
-        "ready": model_dir.exists() and metadata.exists() and bool(existing_weights),
-    }
-
-
-def discover_token_policy(config: AutoPipelineConfig) -> dict[str, Any]:
-    if "token_policy_ensemble" in config.disabled_models or "token-policy" in config.disabled_models:
-        return disabled_status("model")
-    if not config.enable_token_policy:
-        return {
-            "status": "disabled",
-            "kind": "model",
-            "detail": (
-                "Token-policy candidate generation is disabled by default; "
-                "use --enable-token-policy only for research/audit ablations."
-            ),
-        }
-    dependency = dependency_status(("torch", "transformers"), kind="model")
-    if dependency:
-        return dependency
-    artifacts = [
-        token_policy_artifact_status(path)
-        for path in config.token_policy_model_dirs
-    ]
-    ready = [item for item in artifacts if item["ready"]]
-    if not ready:
-        return {
-            "status": "missing_artifact",
-            "kind": "model",
-            "artifacts": artifacts,
-        }
-    return {
-        "status": "available",
-        "kind": "model",
-        "load": "lazy",
-        "artifacts": artifacts,
-        "ready_model_dirs": [item["path"] for item in ready],
-    }
 
 
 def discover_gliner(config: AutoPipelineConfig) -> dict[str, Any]:

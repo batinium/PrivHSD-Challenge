@@ -79,33 +79,32 @@ For meaningful pipeline changes, check:
 - candidate selection counts;
 - runtime and provider/model load counts;
 - author-risk metrics when repeated author IDs exist;
-- external/unseen token-policy results when token-policy behavior changes.
+- local LLM review parse/fallback counts, reason tags, and validated PII
+  suggestion counts.
 
 ## Configuration Search Protocol
 
 Use this sequence when choosing the trusted single CSV pipeline:
 
 1. Establish the deterministic `balanced` baseline.
-2. Compare routed auto variants with providers disabled, providers only,
-   token-policy only, full auto without HSD selection, and full auto with HSD
-   selection.
-3. Score every saved output with the same HSD advisory ensemble.
-4. Choose on privacy first, then HSD decision stability, then overmasking and
+2. Compare final exact pipeline variants with PII Assist disabled, PII Assist
+   enabled, and local LLM sidecar review enabled.
+3. Score every saved exact output with the same sidecar metrics.
+4. Choose on privacy first, then HSD cue stability, then overmasking and
    character utility. Do not choose a lower-residual config if it destroys HSD
-   decisions.
+   target/action/negation/quote/counterspeech cues.
 5. Run the selected official command end to end through
-   `create-submission --replace-text`, then validate row count, column contract,
-   manifest validity, provider/model load counts where auto ran, identifier
-   residuals, and cue retention.
+   `protect --preset exact`, then validate row count, column contract, manifest
+   validity, provider status, local LLM review status, identifier residuals,
+   and cue retention.
 6. Optionally mirror the same configuration through `sanitize-classify` for
    local enriched analysis of HSD advisory score drift. Do not upload that CSV,
    because it appends prediction columns.
 
-Latest recorded local 3,830-row TweetEval unseen enriched-analysis run used
-the default `sanitize-classify` path: deterministic baseline, Presidio,
-scrubadub, token-policy ensemble, and two-model RoBERTa HSD advisory
-selection. This was not an exact-format upload because `sanitize-classify`
-appends prediction columns. Final manifest summary:
+Latest recorded local 3,830-row TweetEval unseen enriched-analysis run predates
+the final simplification and used `sanitize-classify`. It remains historical
+comparison data only; the final upload path is exact-format `protect` with
+sidecar review. Historical manifest summary:
 
 - validation: passed, 3,830 input rows -> 3,830 output rows;
 - residual direct identifiers: 1 detector hit after 4,205 before;

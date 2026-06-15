@@ -21,7 +21,6 @@ from .model_registry import (
     discover_hsd_advisory,
     discover_local_llm,
     discover_semantic_models,
-    discover_token_policy,
 )
 
 
@@ -79,7 +78,6 @@ class AutoPipelineContext:
         self._discover_provider("presidio", "presidio_analyzer")
         self._discover_provider("scrubadub", "scrubadub")
         self.provider_status["gliner"] = discover_gliner(self.config)
-        self.model_status["token_policy_ensemble"] = discover_token_policy(self.config)
         self.model_status["semantic"] = discover_semantic_models(self.config)
         self.model_status["hsd_advisory"] = discover_hsd_advisory(self.config)
         self.model_status["local_llm"] = discover_local_llm(self.config)
@@ -188,16 +186,6 @@ class AutoPipelineContext:
     def _load_model(self, name: str) -> Any:
         if name in self.model_factories:
             return self.model_factories[name](self)
-        if name == "token_policy_ensemble":
-            from contextsafe_hsd.models.token_policy_runtime import TokenPolicyRuntime
-            from contextsafe_hsd.span_providers.token_policy import TokenPolicySpanProvider
-
-            runtime = TokenPolicyRuntime.from_model_dirs(
-                list(self.config.token_policy_model_dirs),
-                mode=self.config.token_policy_mode,
-                device=self.config.device,
-            )
-            return TokenPolicySpanProvider(runtime=runtime)
         if name == "hsd_advisory":
             from contextsafe_hsd.models.hsd_advisory_runtime import HsdAdvisoryEnsembleRuntime
 
@@ -222,9 +210,6 @@ class AutoPipelineContext:
                 require_structured_output=self.config.local_llm_require_structured_output,
             )
         raise ValueError(f"unknown auto model {name!r}")
-
-    def ensure_token_policy_provider(self) -> Any | None:
-        return self.ensure_model("token_policy_ensemble")
 
     def ensure_hsd_advisory(self) -> Any | None:
         return self.ensure_model("hsd_advisory")

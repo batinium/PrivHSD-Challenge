@@ -65,7 +65,6 @@ def process_csv(
     audit_level: str = "summary",
     gliner_model: str | None = None,
     gliner_profile: str = "general",
-    enable_token_policy: bool = False,
     hsd_advisory_models: list[str] | None = None,
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
@@ -89,7 +88,6 @@ def process_csv(
             "provider_language": presidio_language,
             "gliner_model": gliner_model,
             "gliner_profile": gliner_profile,
-            "enable_token_policy": enable_token_policy,
             "generalize_targets": generalize_targets if generalize_targets is not None else False,
             "style_scrub": style_scrub,
         }

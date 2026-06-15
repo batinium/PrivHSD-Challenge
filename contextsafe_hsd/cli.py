@@ -77,44 +77,6 @@ from .simple_pipeline import (
 )
 from .source_report import SourceReportError, run_source_regression_report
 from .submission import SubmissionError, create_submission, validate_submission
-from .token_actions import (
-    DEFAULT_MODEL_PATH as DEFAULT_TOKEN_ACTION_MODEL_PATH,
-    DEFAULT_REPORT_PATH as DEFAULT_TOKEN_ACTION_REPORT_PATH,
-    TokenActionError,
-    train_token_action_tagger,
-)
-from .token_policy import (
-    DEFAULT_BATCH_SIZE as DEFAULT_TOKEN_POLICY_BATCH_SIZE,
-    DEFAULT_CLASS_WEIGHTING as DEFAULT_TOKEN_POLICY_CLASS_WEIGHTING,
-    DEFAULT_ENSEMBLE_EVALUATE_REPORT as DEFAULT_TOKEN_POLICY_ENSEMBLE_EVALUATE_REPORT,
-    DEFAULT_ENSEMBLE_PREDICTIONS as DEFAULT_TOKEN_POLICY_ENSEMBLE_PREDICTIONS,
-    DEFAULT_EVALUATE_REPORT as DEFAULT_TOKEN_POLICY_EVALUATE_REPORT,
-    DEFAULT_EPOCHS as DEFAULT_TOKEN_POLICY_EPOCHS,
-    DEFAULT_MAX_CLASS_WEIGHT as DEFAULT_TOKEN_POLICY_MAX_CLASS_WEIGHT,
-    DEFAULT_LABEL_FEATURE_REPORT,
-    DEFAULT_MAX_LENGTH as DEFAULT_TOKEN_POLICY_MAX_LENGTH,
-    DEFAULT_MODEL_NAME as DEFAULT_TOKEN_POLICY_MODEL_NAME,
-    DEFAULT_OUTPUT_DIR as DEFAULT_TOKEN_POLICY_OUTPUT_DIR,
-    DEFAULT_PREDICT_SAMPLE_SIZE as DEFAULT_TOKEN_POLICY_PREDICT_SAMPLE_SIZE,
-    DEFAULT_PREDICTIONS as DEFAULT_TOKEN_POLICY_PREDICTIONS,
-    DEFAULT_SAMPLE_SIZE as DEFAULT_TOKEN_POLICY_SAMPLE_SIZE,
-    DEFAULT_SAMPLE_STRATEGY as DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    DEFAULT_SPLIT_STRATEGY as DEFAULT_TOKEN_POLICY_SPLIT_STRATEGY,
-    DEFAULT_TEST_SIZE as DEFAULT_TOKEN_POLICY_TEST_SIZE,
-    CLASS_WEIGHTING_MODES as TOKEN_POLICY_CLASS_WEIGHTING_MODES,
-    DEFAULT_TRAIN_REPORT as DEFAULT_TOKEN_POLICY_TRAIN_REPORT,
-    ENSEMBLE_MODES as TOKEN_POLICY_ENSEMBLE_MODES,
-    SAMPLE_STRATEGIES as TOKEN_POLICY_SAMPLE_STRATEGIES,
-    SPLIT_STRATEGIES as TOKEN_POLICY_SPLIT_STRATEGIES,
-    TokenPolicyError,
-    apply_token_policy_candidates,
-    evaluate_token_policy_ensemble,
-    evaluate_token_policy,
-    label_feature_report,
-    predict_token_policy_ensemble,
-    predict_token_policy,
-    train_token_policy,
-)
 from .utility_benchmark import BenchmarkError, run_utility_benchmark
 
 
@@ -185,14 +147,6 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
         action="append",
         default=[],
         help="Disable an automatically discovered model. Repeatable.",
-    )
-    parser.add_argument(
-        "--enable-token-policy",
-        action="store_true",
-        help=(
-            "Enable research/audit token-policy candidate generation. "
-            "Disabled by default for explainability."
-        ),
     )
     parser.add_argument(
         "--audit-level",
@@ -866,284 +820,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="predicted_confidence",
     )
 
-    token_actions = subparsers.add_parser(
-        "train-token-action-tagger",
-        help="Train a weakly supervised token-action tagger from local rules.",
-    )
-    token_actions.add_argument("--input", type=Path, required=True)
-    token_actions.add_argument("--text-col", required=True)
-    token_actions.add_argument("--id-col")
-    token_actions.add_argument(
-        "--model",
-        type=Path,
-        default=DEFAULT_TOKEN_ACTION_MODEL_PATH,
-    )
-    token_actions.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_TOKEN_ACTION_REPORT_PATH,
-    )
-    token_actions.add_argument("--sample-size", type=int, default=5000)
-    token_actions.add_argument("--test-size", type=float, default=0.25)
-    token_actions.add_argument("--random-state", type=int, default=13)
-
-    label_features = subparsers.add_parser(
-        "label-feature-report",
-        help="Write a source-aware weak-label feature/action report without raw examples.",
-    )
-    label_features.add_argument("--input", type=Path, required=True)
-    label_features.add_argument("--text-col", required=True)
-    label_features.add_argument("--id-col")
-    label_features.add_argument("--source-col", default="source")
-    label_features.add_argument("--label-col", default="label")
-    label_features.add_argument("--target-col", default="target")
-    label_features.add_argument(
-        "--target-categories-col",
-        default="target_categories",
-    )
-    label_features.add_argument("--rationale-col", default="rationale_spans")
-    label_features.add_argument("--output", type=Path, default=DEFAULT_LABEL_FEATURE_REPORT)
-    label_features.add_argument("--sample-size", type=int, default=5000)
-    label_features.add_argument(
-        "--sample-strategy",
-        choices=sorted(TOKEN_POLICY_SAMPLE_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    )
-    label_features.add_argument("--top-features", type=int, default=500)
-
-    train_policy = subparsers.add_parser(
-        "train-token-policy",
-        help="Fine-tune an optional weakly supervised token-action policy model.",
-    )
-    train_policy.add_argument("--input", type=Path, required=True)
-    train_policy.add_argument("--text-col", required=True)
-    train_policy.add_argument("--id-col")
-    train_policy.add_argument("--source-col", default="source")
-    train_policy.add_argument("--label-col", default="label")
-    train_policy.add_argument("--target-col", default="target")
-    train_policy.add_argument("--target-categories-col", default="target_categories")
-    train_policy.add_argument("--rationale-col", default="rationale_spans")
-    train_policy.add_argument("--model-name", default=DEFAULT_TOKEN_POLICY_MODEL_NAME)
-    train_policy.add_argument(
-        "--output-dir",
-        type=Path,
-        default=DEFAULT_TOKEN_POLICY_OUTPUT_DIR,
-    )
-    train_policy.add_argument("--report", type=Path, default=DEFAULT_TOKEN_POLICY_TRAIN_REPORT)
-    train_policy.add_argument("--sample-size", type=int, default=DEFAULT_TOKEN_POLICY_SAMPLE_SIZE)
-    train_policy.add_argument(
-        "--sample-strategy",
-        choices=sorted(TOKEN_POLICY_SAMPLE_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    )
-    train_policy.add_argument("--max-length", type=int, default=DEFAULT_TOKEN_POLICY_MAX_LENGTH)
-    train_policy.add_argument("--epochs", type=float, default=DEFAULT_TOKEN_POLICY_EPOCHS)
-    train_policy.add_argument("--batch-size", type=int, default=DEFAULT_TOKEN_POLICY_BATCH_SIZE)
-    train_policy.add_argument("--learning-rate", type=float, default=5e-5)
-    train_policy.add_argument("--weight-decay", type=float, default=0.01)
-    train_policy.add_argument("--test-size", type=float, default=DEFAULT_TOKEN_POLICY_TEST_SIZE)
-    train_policy.add_argument("--random-state", type=int, default=13)
-    train_policy.add_argument(
-        "--split-strategy",
-        choices=sorted(TOKEN_POLICY_SPLIT_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SPLIT_STRATEGY,
-    )
-    train_policy.add_argument(
-        "--fold-count",
-        type=int,
-        default=0,
-        help="Use grouped K-fold training with this many folds; fold-index is dev.",
-    )
-    train_policy.add_argument(
-        "--fold-index",
-        type=int,
-        help="Grouped K-fold dev fold index in [0, fold-count). Defaults to 0.",
-    )
-    train_policy.add_argument(
-        "--class-weighting",
-        choices=sorted(TOKEN_POLICY_CLASS_WEIGHTING_MODES),
-        default=DEFAULT_TOKEN_POLICY_CLASS_WEIGHTING,
-    )
-    train_policy.add_argument(
-        "--max-class-weight",
-        type=float,
-        default=DEFAULT_TOKEN_POLICY_MAX_CLASS_WEIGHT,
-    )
-    train_policy.add_argument("--device", default="cpu")
-    train_policy.add_argument(
-        "--no-metadata-prefix",
-        action="store_true",
-        help="Do not prepend source/label/target context to model inputs.",
-    )
-    train_policy.add_argument("--log-steps", type=int, default=25)
-    train_policy.add_argument(
-        "--max-train-steps",
-        type=int,
-        help="Optional cap for smoke/overfit runs.",
-    )
-
-    evaluate_policy = subparsers.add_parser(
-        "evaluate-token-policy",
-        help="Evaluate a token-action policy model against weak token labels.",
-    )
-    evaluate_policy.add_argument("--input", type=Path, required=True)
-    evaluate_policy.add_argument("--model-dir", type=Path, default=DEFAULT_TOKEN_POLICY_OUTPUT_DIR)
-    evaluate_policy.add_argument("--text-col", required=True)
-    evaluate_policy.add_argument("--id-col")
-    evaluate_policy.add_argument("--source-col", default="source")
-    evaluate_policy.add_argument("--label-col", default="label")
-    evaluate_policy.add_argument("--target-col", default="target")
-    evaluate_policy.add_argument("--target-categories-col", default="target_categories")
-    evaluate_policy.add_argument("--rationale-col", default="rationale_spans")
-    evaluate_policy.add_argument("--sample-size", type=int, default=0)
-    evaluate_policy.add_argument(
-        "--sample-strategy",
-        choices=sorted(TOKEN_POLICY_SAMPLE_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    )
-    evaluate_policy.add_argument("--batch-size", type=int, default=DEFAULT_TOKEN_POLICY_BATCH_SIZE)
-    evaluate_policy.add_argument("--output", type=Path, default=DEFAULT_TOKEN_POLICY_EVALUATE_REPORT)
-
-    evaluate_policy_ensemble = subparsers.add_parser(
-        "evaluate-token-policy-ensemble",
-        help="Evaluate an ensemble of token-action policy models.",
-    )
-    evaluate_policy_ensemble.add_argument("--input", type=Path, required=True)
-    evaluate_policy_ensemble.add_argument(
-        "--model-dir",
-        dest="model_dirs",
-        action="append",
-        type=Path,
-        required=True,
-        help="Token-policy model directory. Repeat for each ensemble member.",
-    )
-    evaluate_policy_ensemble.add_argument(
-        "--model-weight",
-        dest="model_weights",
-        action="append",
-        type=float,
-        help="Optional positive weight for each model-dir, in the same order.",
-    )
-    evaluate_policy_ensemble.add_argument(
-        "--ensemble-mode",
-        choices=sorted(TOKEN_POLICY_ENSEMBLE_MODES),
-        default="mean_prob",
-    )
-    evaluate_policy_ensemble.add_argument("--text-col", required=True)
-    evaluate_policy_ensemble.add_argument("--id-col")
-    evaluate_policy_ensemble.add_argument("--source-col", default="source")
-    evaluate_policy_ensemble.add_argument("--label-col", default="label")
-    evaluate_policy_ensemble.add_argument("--target-col", default="target")
-    evaluate_policy_ensemble.add_argument(
-        "--target-categories-col",
-        default="target_categories",
-    )
-    evaluate_policy_ensemble.add_argument("--rationale-col", default="rationale_spans")
-    evaluate_policy_ensemble.add_argument("--sample-size", type=int, default=0)
-    evaluate_policy_ensemble.add_argument(
-        "--sample-strategy",
-        choices=sorted(TOKEN_POLICY_SAMPLE_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    )
-    evaluate_policy_ensemble.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_TOKEN_POLICY_ENSEMBLE_EVALUATE_REPORT,
-    )
-
-    predict_policy = subparsers.add_parser(
-        "predict-token-policy",
-        help="Write advisory token-policy action spans by row ID.",
-    )
-    predict_policy.add_argument("--input", type=Path, required=True)
-    predict_policy.add_argument("--text-col", required=True)
-    predict_policy.add_argument("--id-col")
-    predict_policy.add_argument("--source-col", default="source")
-    predict_policy.add_argument("--label-col", default="label")
-    predict_policy.add_argument("--target-col", default="target")
-    predict_policy.add_argument("--target-categories-col", default="target_categories")
-    predict_policy.add_argument("--rationale-col", default="rationale_spans")
-    predict_policy.add_argument(
-        "--model-dir",
-        type=Path,
-        default=DEFAULT_TOKEN_POLICY_OUTPUT_DIR,
-    )
-    predict_policy.add_argument(
-        "--sample-size",
-        type=int,
-        default=DEFAULT_TOKEN_POLICY_PREDICT_SAMPLE_SIZE,
-    )
-    predict_policy.add_argument(
-        "--sample-strategy",
-        choices=sorted(TOKEN_POLICY_SAMPLE_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    )
-    predict_policy.add_argument("--output", type=Path, default=DEFAULT_TOKEN_POLICY_PREDICTIONS)
-
-    predict_policy_ensemble = subparsers.add_parser(
-        "predict-token-policy-ensemble",
-        help="Write ensemble token-policy action spans by row ID.",
-    )
-    predict_policy_ensemble.add_argument("--input", type=Path, required=True)
-    predict_policy_ensemble.add_argument("--text-col", required=True)
-    predict_policy_ensemble.add_argument("--id-col")
-    predict_policy_ensemble.add_argument("--source-col", default="source")
-    predict_policy_ensemble.add_argument("--label-col", default="label")
-    predict_policy_ensemble.add_argument("--target-col", default="target")
-    predict_policy_ensemble.add_argument(
-        "--target-categories-col",
-        default="target_categories",
-    )
-    predict_policy_ensemble.add_argument("--rationale-col", default="rationale_spans")
-    predict_policy_ensemble.add_argument(
-        "--model-dir",
-        dest="model_dirs",
-        action="append",
-        type=Path,
-        required=True,
-        help="Token-policy model directory. Repeat for each ensemble member.",
-    )
-    predict_policy_ensemble.add_argument(
-        "--model-weight",
-        dest="model_weights",
-        action="append",
-        type=float,
-        help="Optional positive weight for each model-dir, in the same order.",
-    )
-    predict_policy_ensemble.add_argument(
-        "--ensemble-mode",
-        choices=sorted(TOKEN_POLICY_ENSEMBLE_MODES),
-        default="mean_prob",
-    )
-    predict_policy_ensemble.add_argument(
-        "--sample-size",
-        type=int,
-        default=DEFAULT_TOKEN_POLICY_PREDICT_SAMPLE_SIZE,
-    )
-    predict_policy_ensemble.add_argument(
-        "--sample-strategy",
-        choices=sorted(TOKEN_POLICY_SAMPLE_STRATEGIES),
-        default=DEFAULT_TOKEN_POLICY_SAMPLE_STRATEGY,
-    )
-    predict_policy_ensemble.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_TOKEN_POLICY_ENSEMBLE_PREDICTIONS,
-    )
-
-    apply_policy = subparsers.add_parser(
-        "apply-token-policy-candidates",
-        help="Apply token-policy predictions as candidate helper text for reranking.",
-    )
-    apply_policy.add_argument("--input", type=Path, required=True)
-    apply_policy.add_argument("--output", type=Path, required=True)
-    apply_policy.add_argument("--text-col", required=True)
-    apply_policy.add_argument("--id-col")
-    apply_policy.add_argument("--policy-predictions", type=Path, required=True)
-    apply_policy.add_argument("--candidate-col", default="token_policy_candidate")
-    apply_policy.add_argument("--audit", type=Path)
-    apply_policy.add_argument("--min-confidence", type=float, default=0.5)
-
     add_prepare_dynahate_parser(subparsers)
     add_prepare_recommended_parser(subparsers)
     add_prepare_tweet_eval_unseen_parser(subparsers)
@@ -1195,7 +871,6 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
-                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "sanitize-classify":
@@ -1222,7 +897,6 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
-                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
                 hsd_classification_backend=args.hsd_classification_backend.replace(
                     "-",
@@ -1416,7 +1090,6 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
-                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
         elif args.command == "create-submission":
@@ -1447,7 +1120,6 @@ def main(argv: list[str] | None = None) -> int:
                 audit_level=args.audit_level,
                 gliner_model=args.gliner_model,
                 gliner_profile=args.gliner_profile,
-                enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
                 author_group_masking=args.enable_author_group_masking,
                 author_group_col=args.author_group_col,
@@ -1571,140 +1243,6 @@ def main(argv: list[str] | None = None) -> int:
                 prediction_col=args.prediction_col,
                 confidence_col=args.confidence_col,
             )
-        elif args.command == "train-token-action-tagger":
-            result = train_token_action_tagger(
-                args.input,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                model_path=args.model,
-                output_path=args.output,
-                sample_size=args.sample_size,
-                test_size=args.test_size,
-                random_state=args.random_state,
-            )
-        elif args.command == "label-feature-report":
-            result = label_feature_report(
-                args.input,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                target_col=args.target_col,
-                target_categories_col=args.target_categories_col,
-                rationale_col=args.rationale_col,
-                output_path=args.output,
-                sample_size=args.sample_size,
-                sample_strategy=args.sample_strategy,
-                top_features=args.top_features,
-            )
-        elif args.command == "train-token-policy":
-            result = train_token_policy(
-                args.input,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                target_col=args.target_col,
-                target_categories_col=args.target_categories_col,
-                rationale_col=args.rationale_col,
-                model_name=args.model_name,
-                output_dir=args.output_dir,
-                report_path=args.report,
-                sample_size=args.sample_size,
-                sample_strategy=args.sample_strategy,
-                max_length=args.max_length,
-                epochs=args.epochs,
-                batch_size=args.batch_size,
-                learning_rate=args.learning_rate,
-                weight_decay=args.weight_decay,
-                test_size=args.test_size,
-                random_state=args.random_state,
-                split_strategy=args.split_strategy,
-                fold_count=args.fold_count,
-                fold_index=args.fold_index,
-                class_weighting=args.class_weighting,
-                max_class_weight=args.max_class_weight,
-                device=args.device,
-                metadata_prefix=not args.no_metadata_prefix,
-                log_steps=args.log_steps,
-                max_train_steps=args.max_train_steps,
-            )
-        elif args.command == "evaluate-token-policy":
-            result = evaluate_token_policy(
-                args.input,
-                model_dir=args.model_dir,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                target_col=args.target_col,
-                target_categories_col=args.target_categories_col,
-                rationale_col=args.rationale_col,
-                sample_size=args.sample_size,
-                sample_strategy=args.sample_strategy,
-                batch_size=args.batch_size,
-                output_path=args.output,
-            )
-        elif args.command == "evaluate-token-policy-ensemble":
-            result = evaluate_token_policy_ensemble(
-                args.input,
-                model_dirs=args.model_dirs,
-                model_weights=args.model_weights,
-                mode=args.ensemble_mode,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                target_col=args.target_col,
-                target_categories_col=args.target_categories_col,
-                rationale_col=args.rationale_col,
-                sample_size=args.sample_size,
-                sample_strategy=args.sample_strategy,
-                output_path=args.output,
-            )
-        elif args.command == "predict-token-policy":
-            result = predict_token_policy(
-                args.input,
-                model_dir=args.model_dir,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                target_col=args.target_col,
-                target_categories_col=args.target_categories_col,
-                rationale_col=args.rationale_col,
-                sample_size=args.sample_size,
-                sample_strategy=args.sample_strategy,
-                output_path=args.output,
-            )
-        elif args.command == "predict-token-policy-ensemble":
-            result = predict_token_policy_ensemble(
-                args.input,
-                model_dirs=args.model_dirs,
-                model_weights=args.model_weights,
-                mode=args.ensemble_mode,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                target_col=args.target_col,
-                target_categories_col=args.target_categories_col,
-                rationale_col=args.rationale_col,
-                sample_size=args.sample_size,
-                sample_strategy=args.sample_strategy,
-                output_path=args.output,
-            )
-        elif args.command == "apply-token-policy-candidates":
-            result = apply_token_policy_candidates(
-                args.input,
-                args.output,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                policy_predictions=args.policy_predictions,
-                candidate_col=args.candidate_col,
-                audit_path=args.audit,
-                min_confidence=args.min_confidence,
-            )
         elif args.command == "prepare-dynahate":
             count = prepare_dynahate(
                 raw_path=args.raw,
@@ -1763,8 +1301,6 @@ def main(argv: list[str] | None = None) -> int:
         SimplifiedPipelineError,
         SourceReportError,
         SubmissionError,
-        TokenActionError,
-        TokenPolicyError,
         ValueError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)

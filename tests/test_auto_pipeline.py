@@ -1,6 +1,5 @@
 import csv
 from dataclasses import dataclass
-from pathlib import Path
 
 from contextsafe_hsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 from contextsafe_hsd.auto.engine import (
@@ -99,7 +98,7 @@ def test_create_submission_auto_preserves_exact_four_column_shape(tmp_path):
         replace_text=True,
         mode="auto",
         disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
     )
 
     rows = read_rows(output)
@@ -205,7 +204,7 @@ def test_create_submission_auto_can_mask_repeated_author_group_residuals(
         replace_text=True,
         mode="auto",
         disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
         author_group_masking=True,
         author_group_col="author",
     )
@@ -246,13 +245,7 @@ def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(
     assert manifest["providers"]["presidio"]["status"] == "missing_dependency"
     assert manifest["providers"]["scrubadub"]["status"] == "missing_dependency"
     assert manifest["providers"]["gliner"]["status"] == "disabled"
-    assert manifest["models"]["token_policy_ensemble"]["status"] == "disabled"
-    assert (
-        manifest["stages"]["meaning_protection"].get(
-            "rows_considered_for_token_policy_internal"
-        )
-        is None
-    )
+    assert manifest["models"]["hsd_advisory"]["status"] == "missing_dependency"
     assert "[EMAIL]" in read_rows(output)[0]["text"]
 
 
@@ -333,25 +326,6 @@ class MismatchedBatchedProvider:
         return []
 
 
-class CountingModel:
-    def __init__(self, batch_calls):
-        self.batch_calls = batch_calls
-
-    def status_metadata(self):
-        return {"device": "cpu", "member_count": 0}
-
-    def propose_many(self, rows, *, text_col, batch_size):
-        self.batch_calls.append(len(rows))
-        return [
-            SpanProviderOutput(
-                provider="token_policy_ensemble",
-                spans=(),
-                audit={"accepted_span_count": 0},
-            )
-            for _row in rows
-        ]
-
-
 class CountingHsdAdvisory:
     def __init__(self, batch_calls):
         self.batch_calls = batch_calls
@@ -383,54 +357,6 @@ class CountingHsdAdvisory:
         }
 
 
-def test_auto_context_loads_fake_provider_and_model_once_per_run():
-    provider_loads = []
-    provider_calls = []
-    model_loads = []
-    batch_calls = []
-
-    def provider_factory(_context):
-        provider_loads.append("load")
-        return CountingProvider(provider_loads, provider_calls)
-
-    def model_factory(_context):
-        model_loads.append("load")
-        return CountingModel(batch_calls)
-
-    context = AutoPipelineContext.create(
-        AutoPipelineConfig(
-            enable_token_policy=True,
-            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset({"semantic", "hsd_advisory"}),
-        ),
-        provider_factories={"fake_provider": provider_factory},
-        model_factories={"token_policy_ensemble": model_factory},
-    )
-    rows = [
-        {"id": "1", "text": "kill Amy"},
-        {"id": "2", "text": "reported Amy"},
-        {"id": "3", "text": "emailed Amy"},
-        {"id": "4", "text": "lol!!! #tag"},
-        {"id": "5", "text": "lol??? #tag"},
-    ]
-
-    result = AutoPipelineEngine(context).process_rows(
-        rows,
-        ["id", "text"],
-        text_col="text",
-        id_col="id",
-        replace_text=True,
-    )
-
-    assert provider_loads == ["load"]
-    assert model_loads == ["load"]
-    assert context.provider_load_counts["fake_provider"] == 1
-    assert context.model_load_counts["token_policy_ensemble"] == 1
-    assert len(provider_calls) == 3
-    assert batch_calls == [2]
-    assert sum("[PERSON]" in row["text"] for row in result.rows[:3]) >= 2
-
-
 def test_auto_engine_uses_provider_batch_api_once_per_provider():
     batch_calls = []
 
@@ -439,7 +365,7 @@ def test_auto_engine_uses_provider_batch_api_once_per_provider():
             max_model_batch_size=7,
             disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
             disabled_models=frozenset(
-                {"token_policy_ensemble", "semantic", "hsd_advisory"}
+                {"semantic", "hsd_advisory"}
             ),
             audit_level="row",
         ),
@@ -482,7 +408,7 @@ def test_auto_engine_rejects_mismatched_provider_batch_count():
         AutoPipelineConfig(
             disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
             disabled_models=frozenset(
-                {"token_policy_ensemble", "semantic", "hsd_advisory"}
+                {"semantic", "hsd_advisory"}
             ),
             audit_level="row",
         ),
@@ -705,7 +631,7 @@ def test_auto_hsd_advisory_scores_candidates_in_one_batch():
         AutoPipelineConfig(
             max_model_batch_size=8,
             disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset({"token_policy_ensemble", "semantic"}),
+            disabled_models=frozenset({"semantic"}),
         ),
         model_factories={"hsd_advisory": hsd_factory},
     )
@@ -749,7 +675,7 @@ def test_auto_hsd_advisory_scores_single_candidate_rows():
         AutoPipelineConfig(
             max_model_batch_size=8,
             disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset({"token_policy_ensemble", "semantic"}),
+            disabled_models=frozenset({"semantic"}),
         ),
         model_factories={"hsd_advisory": lambda _context: CountingHsdAdvisory(hsd_batches)},
     )
@@ -773,11 +699,24 @@ def test_auto_hsd_advisory_scores_single_candidate_rows():
     assert hsd["original_score"] == 0.9
 
 
-def test_testing_dataset_fast_submission_path_is_practical(tmp_path):
-    source = Path("data/external_unseen/tweet_eval_hate_offensive_test.csv")
-    if not source.exists():
-        return
-    output = tmp_path / "tweet_eval_fast.csv"
+def test_balanced_fast_submission_path_is_bounded_and_exact(tmp_path):
+    source = tmp_path / "bounded.csv"
+    output = tmp_path / "bounded.out.csv"
+    fieldnames = ["id", "text", "label"]
+    rows = [
+        {
+            "id": str(index),
+            "text": (
+                f"Email person{index}@example.test because Muslims should leave."
+            ),
+            "label": "1",
+        }
+        for index in range(25)
+    ]
+    with source.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
     manifest = create_submission(
         source,
@@ -789,9 +728,13 @@ def test_testing_dataset_fast_submission_path_is_practical(tmp_path):
         metric_depth="fast",
     )
 
+    output_rows = read_rows(output)
     assert manifest["validation"]["valid"] is True
-    assert manifest["metrics"]["row_count"] == 3830
-    assert manifest["metrics"]["metric_depth_counts"] == {"fast": 3830}
+    assert manifest["metrics"]["row_count"] == 25
+    assert manifest["metrics"]["metric_depth_counts"] == {"fast": 25}
+    assert list(output_rows[0]) == fieldnames
+    assert [row["id"] for row in output_rows] == [row["id"] for row in rows]
+    assert all("[EMAIL]" in row["text"] for row in output_rows)
 
 
 def test_create_submission_auto_records_configured_gliner_model(
@@ -815,7 +758,7 @@ def test_create_submission_auto_records_configured_gliner_model(
         replace_text=True,
         mode="auto",
         disabled_providers=["presidio", "scrubadub"],
-        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        disabled_models=["semantic", "hsd_advisory"],
         gliner_model=str(model_dir),
         gliner_profile="pii",
     )

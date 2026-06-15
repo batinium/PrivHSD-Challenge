@@ -50,13 +50,6 @@ CSV_JOB_TTL_SECONDS = 60 * 60
 HSD_ADVISORY_MODEL_ID = "facebook/roberta-hate-speech-dynabench-r4-target"
 CARDIFF_HATE_MODEL_ID = "cardiffnlp/twitter-roberta-base-hate-latest"
 LOCAL_CLASSIFIER_PATH = ROOT / "data/outputs/privhsd_classifier.pkl"
-ENSEMBLE_MODEL_DIRS = [
-    ROOT / "data/outputs/token_policy_roberta_base.action_balanced_train30000.cuda",
-    ROOT / "data/outputs/token_policy_hatebert.action_balanced_train30000.cuda",
-]
-ENSEMBLE_REPORT = (
-    ROOT / "data/outputs/token_policy_ensemble.roberta_hatebert.tweet_eval_external.evaluate.json"
-)
 CSV_JOBS: dict[str, dict[str, Any]] = {}
 CSV_JOBS_LOCK = threading.Lock()
 CSV_PROGRESS_PHASES = {
@@ -65,7 +58,6 @@ CSV_PROGRESS_PHASES = {
     "setup": (4, 7, "Preparing pipeline"),
     "baseline": (7, 22, "Privacy baseline"),
     "providers": (22, 40, "PII provider scan"),
-    "token_policy": (40, 52, "Token-policy candidates"),
     "candidates": (52, 64, "Candidate generation"),
     "hsd_advisory": (64, 82, "HSD preservation"),
     "local_llm_review": (64, 82, "Local LLM review"),
@@ -105,7 +97,6 @@ class PrivatizeRequest(BaseModel):
     providers: list[str] = Field(default_factory=list)
     gliner_model: str | None = None
     gliner_profile: Literal["general", "pii"] = "general"
-    run_model_ensemble: bool = False
     run_hsd_classifier: bool = False
 
 
@@ -928,8 +919,6 @@ def current_auto_pipeline_profile(
             "style_scrubbed_strict_pii",
             "provider_fusion_augmented",
             "provider_fusion_augmented_strict_pii",
-            "token_policy_candidate",
-            "token_policy_candidate_strict_pii",
         ],
         "meaning_protection": {
             "hard_rejects": [
@@ -1677,26 +1666,6 @@ def platform_insight_report(
     }
 
 
-def read_ensemble_metrics() -> dict[str, Any] | None:
-    if not ENSEMBLE_REPORT.exists():
-        return None
-    try:
-        report = json.loads(ENSEMBLE_REPORT.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return None
-    metrics = report.get("metrics", {})
-    per_action = metrics.get("per_action", {})
-    return {
-        "report": str(ENSEMBLE_REPORT.relative_to(ROOT)),
-        "accuracy": metrics.get("accuracy"),
-        "macro_f1": metrics.get("macro_f1"),
-        "protect_target_f1": per_action.get("PROTECT_TARGET", {}).get("f1"),
-        "protect_hsd_f1": per_action.get("PROTECT_HSD", {}).get("f1"),
-        "mask_identifier_f1": per_action.get("MASK_IDENTIFIER", {}).get("f1"),
-        "runtime_seconds": report.get("runtime_seconds"),
-    }
-
-
 def presidio_available() -> bool:
     return importlib.util.find_spec("presidio_analyzer") is not None
 
@@ -1706,31 +1675,12 @@ def module_available(module_name: str) -> bool:
 
 
 def model_status() -> dict[str, Any]:
-    model_dirs = [
-        {
-            "path": str(path.relative_to(ROOT)),
-            "exists": path.exists(),
-        }
-        for path in ENSEMBLE_MODEL_DIRS
-    ]
-    available = all(item["exists"] for item in model_dirs)
     return {
         "auto_pipeline_profile": current_auto_pipeline_profile(),
         "deterministic": {
             "active": True,
             "label": "Deterministic privacy and cue checks",
             "role": "Always runs. This is the submission-safe layer.",
-        },
-        "token_policy_ensemble": {
-            "available": available,
-            "active_by_default": True,
-            "pipeline_role": "auto_lazy_candidate_source",
-            "role": (
-                "Lazy auto-pipeline token-action candidate source. It is only "
-                "loaded on routed rows when local artifacts are present."
-            ),
-            "members": model_dirs,
-            "metrics": read_ensemble_metrics(),
         },
         "hsd_advisory": {
             "available": module_available("transformers")
@@ -1817,82 +1767,6 @@ def model_status() -> dict[str, Any]:
                 "pipeline_role": "default_pii_assist",
             },
         },
-    }
-
-
-@lru_cache(maxsize=1)
-def load_ensemble() -> tuple[list[dict[str, Any]], list[float]]:
-    from contextsafe_hsd.token_policy import (
-        load_token_policy_ensemble,
-        normalize_model_weights,
-    )
-
-    members = load_token_policy_ensemble(ENSEMBLE_MODEL_DIRS)
-    weights = normalize_model_weights(None, len(members))
-    return members, weights
-
-
-def run_token_policy_ensemble(text: str) -> dict[str, Any]:
-    status = model_status()["token_policy_ensemble"]
-    if not status["available"]:
-        return {
-            "active": False,
-            "available": False,
-            "status": "missing_model_dirs",
-            "message": "Token-policy ensemble model directories are not present.",
-        }
-    try:
-        from contextsafe_hsd.token_policy import (
-            ensemble_member_report,
-            ensemble_predictions_for_row,
-            token_spans_for_text,
-        )
-    except Exception as exc:  # pragma: no cover - optional dependency path
-        return {
-            "active": False,
-            "available": True,
-            "status": "dependency_error",
-            "message": str(exc),
-        }
-
-    try:
-        members, weights = load_ensemble()
-        row = {
-            "text": text,
-            "source": "workbench",
-            "label": "",
-            "target": "",
-            "target_categories": "",
-            "rationale_spans": "",
-        }
-        spans, action_counts, skipped, _member_actions, _ensemble_actions = (
-            ensemble_predictions_for_row(
-                row,
-                members=members,
-                model_weights=weights,
-                mode="mean_prob",
-                text_col="text",
-                token_spans=token_spans_for_text(text),
-            )
-        )
-    except Exception as exc:  # pragma: no cover - hardware/model-load path
-        return {
-            "active": False,
-            "available": True,
-            "status": "runtime_error",
-            "message": str(exc),
-        }
-
-    return {
-        "active": True,
-        "available": True,
-        "status": "ok",
-        "mode": "mean_prob",
-        "members": ensemble_member_report(members, weights),
-        "action_counts": dict(sorted(action_counts.items())),
-        "skipped_token_count": skipped,
-        "spans": spans[:80],
-        "metrics": read_ensemble_metrics(),
     }
 
 
@@ -2124,17 +1998,12 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
             *context["original"].get("context_tags", []),
         }
     )
-    model_advisory = (
-        run_token_policy_ensemble(request.text)
-        if request.run_model_ensemble
-        else {
-            "active": False,
-            "available": model_status()["token_policy_ensemble"]["available"],
-            "status": "not_requested",
-            "message": "Enable Run ensemble to load RoBERTa + HateBERT advisory predictions.",
-            "metrics": read_ensemble_metrics(),
-        }
-    )
+    model_advisory = {
+        "active": False,
+        "available": False,
+        "status": "removed",
+        "message": "Token-policy ensemble candidate generation was removed from the final pipeline.",
+    }
     hsd_classifier = (
         run_hsd_classifier(request.text, result.text)
         if request.run_hsd_classifier

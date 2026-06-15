@@ -83,6 +83,8 @@ commit/push stable milestones.
 - Removed the abandoned DPMLM spike, DPMLM rewrite-candidate, and local LLM
   rewrite-candidate modules, CLI commands, and legacy tests. This does not
   affect the local LLM HSD review runtime used by the final sidecar path.
+- Removed token-policy experiment/runtime modules, CLI commands, workbench
+  model controls, training runbook, and legacy tests from the production tree.
 
 Focused verification so far:
 

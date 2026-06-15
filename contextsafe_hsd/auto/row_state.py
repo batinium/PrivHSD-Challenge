@@ -58,7 +58,6 @@ class RowRiskProfile:
 @dataclass(frozen=True)
 class RowRoutingDecision:
     use_providers: bool
-    use_token_policy: bool
     use_style_candidate: bool
     review_recommended: bool
     fallback_reason: str | None = None
@@ -66,7 +65,6 @@ class RowRoutingDecision:
     def audit_record(self) -> dict[str, Any]:
         return {
             "use_providers": self.use_providers,
-            "use_token_policy": self.use_token_policy,
             "use_style_candidate": self.use_style_candidate,
             "review_recommended": self.review_recommended,
             "fallback_reason": self.fallback_reason,
@@ -85,7 +83,5 @@ class AutoRowState:
     decision: RowRoutingDecision
     provider_outputs: list[SpanProviderOutput] = field(default_factory=list)
     provider_candidates: list[SpanCandidate] = field(default_factory=list)
-    model_outputs: list[SpanProviderOutput] = field(default_factory=list)
-    model_candidates: list[SpanCandidate] = field(default_factory=list)
     provider_errors: list[dict[str, str]] = field(default_factory=list)
     model_errors: list[dict[str, str]] = field(default_factory=list)
