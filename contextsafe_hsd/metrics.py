@@ -21,7 +21,10 @@ from .detectors import (
     detect_spans,
     high_confidence_direct_identifier_spans,
     merge_spans,
+    target_group_spans,
     target_group_term_patterns,
+    target_org_preservation_context,
+    target_org_privacy_context,
 )
 from .resource_config import load_utility_cue_terms
 
@@ -173,11 +176,29 @@ def quasi_spans(spans: Iterable[Span]) -> list[Span]:
 
 
 def target_term_spans(text: str) -> list[Span]:
-    return [
+    targets = target_group_spans(text)
+    org_spans = [
         span
-        for span in detect_spans(text, include_context=False, include_targets=True)
-        if span.entity_type == "TARGET_GROUP"
+        for span in detect_spans(text, include_context=False, include_targets=False)
+        if span.entity_type == "ORGANIZATION"
     ]
+    filtered: list[Span] = []
+    for target in targets:
+        containing_orgs = [
+            span
+            for span in org_spans
+            if target.start >= span.start and target.end <= span.end
+        ]
+        if not containing_orgs:
+            filtered.append(target)
+            continue
+        if any(
+            target_org_preservation_context(text, span.start, span.end)
+            and not target_org_privacy_context(text, span.start)
+            for span in containing_orgs
+        ):
+            filtered.append(target)
+    return filtered
 
 
 def placeholder_counts(text: str) -> tuple[Counter[str], int]:

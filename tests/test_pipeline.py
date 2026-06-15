@@ -1,3 +1,5 @@
+import pytest
+
 from contextsafe_hsd.detectors import target_group_spans
 from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
 
@@ -142,6 +144,63 @@ def test_titlecase_address_and_mixedcase_place_context_are_masked():
     assert "London library" not in result.text
 
 
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "st.",
+        "st",
+        "ave.",
+        "ave",
+        "rd.",
+        "rd",
+        "blvd.",
+        "blvd",
+        "ln.",
+        "ln",
+        "dr.",
+        "dr",
+        "ct.",
+        "ct",
+        "sq.",
+        "sq",
+    ],
+)
+def test_lowercase_abbreviated_street_suffixes_are_masked(suffix):
+    text = f"meet at oak {suffix} after school."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "meet at [LOCATION] after school."
+
+
+def test_lowercase_abbreviated_street_at_sentence_start_is_masked():
+    text = "james st. is near london library."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "[LOCATION] is near [LOCATION]."
+
+
+def test_lowercase_abbreviated_street_after_direction_context_is_masked():
+    text = "walk down elm st. today."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "walk down [LOCATION] today."
+
+
+def test_lowercase_street_suffix_avoids_common_non_address_phrase():
+    text = "That is a good drive."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == text
+
+
+@pytest.mark.parametrize("suffix", ["St.", "Rd.", "Ave.", "BLVD.", "LN", "DR"])
+def test_mixedcase_abbreviated_street_suffixes_are_masked(suffix):
+    text = f"Meet at Oak {suffix} after school."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == "Meet at [LOCATION] after school."
+
+
 def test_lowercase_meeting_context_masks_person_and_place():
     text = "i met james smith at london library"
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))
@@ -218,6 +277,194 @@ def test_balanced_preserves_historical_victim_group_terms():
     assert "[PERSON]" in result.text
     assert "Holocaust survivors" in result.text
     assert "attacked" in result.text
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Riverside Jewish School should be attacked.",
+            "Jewish [ORG] should be attacked.",
+        ),
+        (
+            "Roma Cultural Center should be destroyed.",
+            "Roma [ORG] should be destroyed.",
+        ),
+        (
+            "Muslim Academy should be banned from the city.",
+            "Muslim [ORG] should be banned from the city.",
+        ),
+        (
+            "LGBTQ Youth Centre should be banned from the city.",
+            "LGBTQ [ORG] should be banned from the city.",
+        ),
+        (
+            "Disabled Students Centre should be destroyed.",
+            "Disabled Students [ORG] should be destroyed.",
+        ),
+        (
+            "The Roma Association should be banned.",
+            "Roma [ORG] should be banned.",
+        ),
+        (
+            "riverside jewish school should be attacked.",
+            "jewish [ORG] should be attacked.",
+        ),
+        (
+            "roma cultural club should be destroyed.",
+            "roma [ORG] should be destroyed.",
+        ),
+        (
+            "muslim charity should be shut down.",
+            "muslim [ORG] should be shut down.",
+        ),
+        (
+            "migrant aid office should be burned down.",
+            "migrant [ORG] should be burned down.",
+        ),
+        (
+            "black student union should be attacked.",
+            "black [ORG] should be attacked.",
+        ),
+        (
+            "islamic community house should be banned.",
+            "islamic community [ORG] should be banned.",
+        ),
+        (
+            "the muslim-owned cafe should be burned down.",
+            "the muslim [ORG] should be burned down.",
+        ),
+        (
+            "the queer-owned shop should be attacked.",
+            "the queer [ORG] should be attacked.",
+        ),
+    ],
+)
+def test_balanced_preserves_target_cues_inside_attacked_organizations(text, expected):
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == expected
+    assert result.transformations[0]["entity_type"] == "ORGANIZATION"
+    assert result.transformations[0]["category"].startswith("target_org:")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Silver City Mosque should be destroyed and its members forced out.",
+            "Mosque [ORG] should be destroyed and its members forced out.",
+        ),
+        (
+            "Northbridge Synagogue should be attacked tonight.",
+            "Synagogue [ORG] should be attacked tonight.",
+        ),
+        (
+            "Old Town Church should be burned down.",
+            "Church [ORG] should be burned down.",
+        ),
+        (
+            "Riverside Hindu Temple should be banned.",
+            "Hindu [ORG] should be banned.",
+        ),
+    ],
+)
+def test_balanced_preserves_implicit_religious_institution_targets(text, expected):
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == expected
+    assert result.transformations[0]["entity_type"] == "ORGANIZATION"
+    assert result.transformations[0]["category"] == "target_org:religion"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            "Do not attack Riverside Jewish School.",
+            "Do not attack Jewish [ORG].",
+        ),
+        (
+            "Riverside Jewish School should not be attacked.",
+            "Jewish [ORG] should not be attacked.",
+        ),
+        (
+            "A reporter documented the post saying 'Riverside Jewish School "
+            "should be attacked'.",
+            "A reporter documented the post saying 'Jewish [ORG] should be "
+            "attacked'.",
+        ),
+        (
+            "We condemn hate against Riverside Jewish School and support the "
+            "students.",
+            "We condemn hate against Jewish [ORG] and support the students.",
+        ),
+    ],
+)
+def test_target_org_preservation_keeps_context_stance(text, expected):
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "preserved_target"),
+    [
+        (
+            "I work at Riverside Jewish School and reported threats against "
+            "Muslim students.",
+            "I work at [ORG] and reported threats against Muslim students.",
+            "Muslim students",
+        ),
+        (
+            "Contact Lena at Riverside Jewish School about the meeting.",
+            "Contact [PERSON] at [ORG] about the meeting.",
+            None,
+        ),
+        (
+            "i work at riverside jewish school and reported threats against "
+            "Muslim students.",
+            "i work at [ORG] and reported threats against Muslim students.",
+            "Muslim students",
+        ),
+        (
+            "contact lena at riverside jewish school about the meeting.",
+            "contact [PERSON] at [ORG] about the meeting.",
+            None,
+        ),
+        (
+            "Riverside Jewish School failed disabled students and ignored "
+            "complaints.",
+            "[ORG] failed disabled students and ignored complaints.",
+            "disabled students",
+        ),
+    ],
+)
+def test_target_org_privacy_contexts_still_mask_full_org(
+    text,
+    expected,
+    preserved_target,
+):
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == expected
+    assert "Jewish" not in result.text
+    if preserved_target:
+        assert preserved_target in result.text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "the public school should be closed.",
+        "the black market should be shut down.",
+        "the community centre should publish its report.",
+    ],
+)
+def test_case_insensitive_target_org_detection_avoids_generic_lowercase_orgs(text):
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert result.text == text
 
 
 def test_context_location_does_not_mask_target_terms():

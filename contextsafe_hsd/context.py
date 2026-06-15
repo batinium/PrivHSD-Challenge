@@ -11,7 +11,7 @@ from collections.abc import Mapping
 import re
 from typing import Any
 
-from .detectors import TARGET_GROUP_TERMS, target_group_spans
+from .detectors import TARGET_GROUP_TERMS, detect_spans, target_group_spans
 from .style import ACTION_TERMS
 
 
@@ -35,6 +35,9 @@ THREAT_TERMS = {
     "attacks",
     "attacked",
     "attacking",
+    "burn",
+    "burned",
+    "burning",
     "kill",
     "kills",
     "killed",
@@ -80,9 +83,11 @@ EXCLUSION_TERMS = {
 EXCLUSION_PHRASES = (
     "do not belong",
     "don't belong",
+    "forced out",
     "go back",
     "not belong",
     "should leave",
+    "shut down",
 )
 
 NEGATION_PATTERNS = (
@@ -216,7 +221,17 @@ def analyze_context(
 
     if protected_target is None:
         target_spans = target_group_spans(value)
-        target_present = bool(target_spans) or metadata_has_target(metadata)
+        target_org_present = any(
+            span.source == "regex_target_org"
+            for span in detect_spans(
+                value,
+                include_context=False,
+                include_targets=False,
+            )
+        )
+        target_present = (
+            bool(target_spans) or target_org_present or metadata_has_target(metadata)
+        )
     else:
         target_spans = []
         target_present = protected_target or metadata_has_target(metadata)

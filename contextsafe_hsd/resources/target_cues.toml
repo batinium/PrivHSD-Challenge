@@ -28,6 +28,8 @@ religion = [
   "muslim people",
   "muslim community",
   "muslim communities",
+  "islamic",
+  "islamic community",
   "jew",
   "jews",
   "jewish",
@@ -127,4 +129,3 @@ historical_victim_group = [
   "auschwitz survivors",
   "mauthausen survivors",
 ]
-

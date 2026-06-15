@@ -68,6 +68,53 @@ def test_row_metric_target_cue_retention_counts_category_placeholders():
     assert "target_cue_loss" not in metrics["overmasking_warnings"]
 
 
+def test_row_metric_warns_when_org_mask_removes_hsd_target_cue():
+    metrics = row_metric(
+        "Riverside Jewish School should be attacked.",
+        "[ORG] should be attacked.",
+    )
+
+    assert metrics["target_cue_count_before"] == 1
+    assert metrics["target_cue_count_after"] == 0
+    assert metrics["target_cue_retention"] == 0.0
+    assert "target_cue_loss" in metrics["overmasking_warnings"]
+
+
+def test_row_metric_accepts_target_org_preserving_replacement():
+    metrics = row_metric(
+        "Riverside Jewish School should be attacked.",
+        "Jewish [ORG] should be attacked.",
+    )
+
+    assert metrics["target_cue_count_before"] == 1
+    assert metrics["target_cue_count_after"] == 1
+    assert metrics["target_cue_retention"] == 1.0
+    assert "target_cue_loss" not in metrics["overmasking_warnings"]
+
+
+def test_row_metric_accepts_lowercase_target_org_preserving_replacement():
+    metrics = row_metric(
+        "muslim charity should be shut down.",
+        "muslim [ORG] should be shut down.",
+    )
+
+    assert metrics["target_cue_count_before"] == 1
+    assert metrics["target_cue_count_after"] == 1
+    assert metrics["target_cue_retention"] == 1.0
+    assert "target_cue_loss" not in metrics["overmasking_warnings"]
+
+
+def test_row_metric_ignores_protected_org_affiliation_cue_loss():
+    metrics = row_metric(
+        "Contact Lena at Riverside Jewish School about the meeting.",
+        "Contact [PERSON] at [ORG] about the meeting.",
+    )
+
+    assert metrics["target_cue_count_before"] == 0
+    assert metrics["target_cue_count_after"] == 0
+    assert "target_cue_loss" not in metrics["overmasking_warnings"]
+
+
 def test_row_metric_warns_for_residual_identifiers_and_overmasking():
     original = "Email alex@example.test and meet in Berlin."
     privatized = (

@@ -86,7 +86,10 @@ class SpanCandidate:
             score=float(span.score),
             explanation_code=explanation_code or span.source,
             category=span.category,
-            metadata={"source": span.source},
+            metadata={
+                "source": span.source,
+                **({"replacement": span.replacement} if span.replacement else {}),
+            },
         )
 
     def to_span(self) -> Span:
@@ -98,6 +101,7 @@ class SpanCandidate:
             score=self.score,
             source=str(self.metadata.get("source") or self.provider),
             category=self.category,
+            replacement=self.metadata.get("replacement"),
         )
 
     def audit_record(self, *, reason: str | None = None) -> dict[str, Any]:

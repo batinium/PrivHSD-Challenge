@@ -42,3 +42,19 @@ def test_context_detects_public_interest_criticism_without_target():
 
     assert "public_interest_or_institutional_criticism" in result
     assert "protected_target" not in result
+
+
+def test_context_detects_institution_attack_action_variants():
+    burned = tags("Old Town Church should be burned down.")
+    forced_out = tags("Silver City Mosque should be forced out.")
+    shut_down = tags("Northbridge Synagogue should be shut down.")
+
+    assert {"protected_target", "hostile_action", "threat"} <= burned
+    assert {"protected_target", "hostile_action", "exclusion"} <= forced_out
+    assert {"protected_target", "hostile_action", "exclusion"} <= shut_down
+
+
+def test_context_detects_lowercase_target_org_attack():
+    result = tags("muslim charity should be shut down.")
+
+    assert {"protected_target", "hostile_action", "exclusion"} <= result
