@@ -158,6 +158,12 @@ Cleanup follow-up:
 - Final cleanup handoff for the next unattended agent:
   `docs/planning/final_pipeline_simplification/prompt.md`.
 
+Cleanup progress on 2026-06-15:
+
+- Removed abandoned DPMLM spike, DPMLM rewrite-candidate, and local LLM
+  rewrite-candidate modules and CLI commands. The retained local LLM code is the
+  structured HSD review runtime used for sidecar labels/reasons/suggestions.
+
 Simplification implementation verification:
 
 - `git diff --check`: passed.

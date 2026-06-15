@@ -80,6 +80,9 @@ commit/push stable milestones.
   default to exact-format export.
 - Added focused tests for exact CSV shape preservation, sidecar-only fake local
   LLM output, and workbench local LLM review without helper columns.
+- Removed the abandoned DPMLM spike, DPMLM rewrite-candidate, and local LLM
+  rewrite-candidate modules, CLI commands, and legacy tests. This does not
+  affect the local LLM HSD review runtime used by the final sidecar path.
 
 Focused verification so far:
 

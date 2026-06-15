@@ -36,24 +36,6 @@ from .datasets import (
     prepare_tweet_eval_unseen,
 )
 from .dataset_profile import DatasetProfileError, profile_dataset
-from .dpmlm_spike import (
-    DEFAULT_EPSILONS,
-    DEFAULT_SAMPLE_SIZE as DEFAULT_DPMLM_SAMPLE_SIZE,
-    DpmlmSpikeError,
-    run_dpmlm_spike,
-)
-from .dpmlm_candidates import (
-    DEFAULT_BATCH_SIZE as DEFAULT_DPMLM_BATCH_SIZE,
-    DEFAULT_EPSILON as DEFAULT_DPMLM_CANDIDATE_EPSILON,
-    DEFAULT_MAX_LENGTH_DRIFT as DEFAULT_DPMLM_MAX_LENGTH_DRIFT,
-    DEFAULT_MAX_REWRITE_TOKENS,
-    DEFAULT_MIN_ELIGIBLE_SCORE,
-    DEFAULT_MIN_CHARACTER_RETENTION,
-    DEFAULT_MODEL as DEFAULT_DPMLM_MODEL,
-    DEFAULT_SAMPLE_SIZE as DEFAULT_DPMLM_CANDIDATE_SAMPLE_SIZE,
-    DpmlmCandidateError,
-    run_dpmlm_candidates,
-)
 from .hf_utility import (
     DEFAULT_DEVICE as DEFAULT_HF_DEVICE,
     DEFAULT_DROP_THRESHOLD,
@@ -61,13 +43,6 @@ from .hf_utility import (
     HfUtilityError,
     run_hf_utility_evaluation,
     write_model_registry,
-)
-from .local_llm import (
-    DEFAULT_ENDPOINT as DEFAULT_LLM_ENDPOINT,
-    DEFAULT_MODEL as DEFAULT_LLM_MODEL,
-    DEFAULT_SAMPLE_SIZE as DEFAULT_LLM_SAMPLE_SIZE,
-    LocalLlmError,
-    run_local_llm_candidates,
 )
 from .lm_context_benchmark import (
     DEFAULT_ENDPOINT as DEFAULT_LM_CONTEXT_ENDPOINT,
@@ -625,85 +600,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rerank.add_argument("--audit", type=Path)
 
-    dpmlm = subparsers.add_parser(
-        "dpmlm-spike",
-        help="Run a bounded protected-cue DPMLM rewrite spike or blocker report.",
-    )
-    dpmlm.add_argument("--input", type=Path, required=True)
-    dpmlm.add_argument("--text-col", required=True)
-    dpmlm.add_argument("--id-col")
-    dpmlm.add_argument("--privatized-col")
-    dpmlm.add_argument("--output", type=Path)
-    dpmlm.add_argument("--sample-size", type=int, default=DEFAULT_DPMLM_SAMPLE_SIZE)
-    dpmlm.add_argument(
-        "--epsilon",
-        dest="epsilons",
-        action="append",
-        type=float,
-        help=(
-            "Privacy epsilon to test. Repeatable. Defaults to "
-            + ", ".join(str(value) for value in DEFAULT_EPSILONS)
-            + "."
-        ),
-    )
-    dpmlm.add_argument("--backend", default="auto")
-    dpmlm.add_argument("--random-seed", type=int, default=0)
-
-    dpmlm_candidates = subparsers.add_parser(
-        "generate-dpmlm-candidates",
-        help="Generate protected-token DPMLM rewrite candidates for reranking only.",
-    )
-    dpmlm_candidates.add_argument("--input", type=Path, required=True)
-    dpmlm_candidates.add_argument("--output", type=Path, required=True)
-    dpmlm_candidates.add_argument("--text-col", required=True)
-    dpmlm_candidates.add_argument("--id-col")
-    dpmlm_candidates.add_argument("--candidate-col", default="dpmlm_candidate")
-    dpmlm_candidates.add_argument("--report", type=Path)
-    dpmlm_candidates.add_argument("--model", default=DEFAULT_DPMLM_MODEL)
-    dpmlm_candidates.add_argument(
-        "--sample-size",
-        type=int,
-        default=DEFAULT_DPMLM_CANDIDATE_SAMPLE_SIZE,
-    )
-    dpmlm_candidates.add_argument(
-        "--epsilon",
-        type=float,
-        default=DEFAULT_DPMLM_CANDIDATE_EPSILON,
-    )
-    dpmlm_candidates.add_argument(
-        "--batch-size",
-        type=int,
-        default=DEFAULT_DPMLM_BATCH_SIZE,
-    )
-    dpmlm_candidates.add_argument(
-        "--max-rewrite-tokens",
-        type=int,
-        default=DEFAULT_MAX_REWRITE_TOKENS,
-    )
-    dpmlm_candidates.add_argument(
-        "--min-eligible-score",
-        type=int,
-        default=DEFAULT_MIN_ELIGIBLE_SCORE,
-        help=(
-            "Minimum protected-token risk score for DPMLM rewrite eligibility. "
-            "Higher values rewrite fewer, riskier tokens."
-        ),
-    )
-    dpmlm_candidates.add_argument("--random-seed", type=int, default=0)
-    dpmlm_candidates.add_argument("--min-target-retention", type=float, default=1.0)
-    dpmlm_candidates.add_argument("--min-utility-retention", type=float, default=1.0)
-    dpmlm_candidates.add_argument(
-        "--min-character-retention",
-        type=float,
-        default=DEFAULT_MIN_CHARACTER_RETENTION,
-    )
-    dpmlm_candidates.add_argument(
-        "--max-length-drift",
-        type=float,
-        default=DEFAULT_DPMLM_MAX_LENGTH_DRIFT,
-    )
-    dpmlm_candidates.add_argument("--cue-retention-threshold", type=float, default=1.0)
-
     create_submission_parser = subparsers.add_parser(
         "create-submission",
         help="Create an exact-format upload CSV by privatizing text columns in place.",
@@ -767,26 +663,6 @@ def build_parser() -> argparse.ArgumentParser:
     presidio.add_argument("--output", type=Path)
     presidio.add_argument("--sample-size", type=int, default=100)
     presidio.add_argument("--language", default="en")
-
-    llm_candidates = subparsers.add_parser(
-        "generate-llm-candidates",
-        help="Generate local LLM rewrite candidates for reranking only.",
-    )
-    llm_candidates.add_argument("--input", type=Path, required=True)
-    llm_candidates.add_argument("--output", type=Path, required=True)
-    llm_candidates.add_argument("--text-col", required=True)
-    llm_candidates.add_argument("--id-col")
-    llm_candidates.add_argument("--source-col")
-    llm_candidates.add_argument("--label-col")
-    llm_candidates.add_argument("--candidate-col", default="llm_candidate")
-    llm_candidates.add_argument("--report", type=Path)
-    llm_candidates.add_argument("--endpoint", default=DEFAULT_LLM_ENDPOINT)
-    llm_candidates.add_argument("--model", default=DEFAULT_LLM_MODEL)
-    llm_candidates.add_argument("--sample-size", type=int, default=DEFAULT_LLM_SAMPLE_SIZE)
-    llm_candidates.add_argument("--timeout", type=float, default=10.0)
-    llm_candidates.add_argument("--min-target-retention", type=float, default=1.0)
-    llm_candidates.add_argument("--min-utility-retention", type=float, default=1.0)
-    llm_candidates.add_argument("--max-length-drift", type=float, default=0.6)
 
     cue_checks = subparsers.add_parser(
         "check-hsd-cues",
@@ -1543,39 +1419,6 @@ def main(argv: list[str] | None = None) -> int:
                 enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
             )
-        elif args.command == "dpmlm-spike":
-            result = run_dpmlm_spike(
-                args.input,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                privatized_col=args.privatized_col,
-                output_path=args.output,
-                sample_size=args.sample_size,
-                epsilons=args.epsilons,
-                backend=args.backend,
-                random_seed=args.random_seed,
-            )
-        elif args.command == "generate-dpmlm-candidates":
-            result = run_dpmlm_candidates(
-                args.input,
-                args.output,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                candidate_col=args.candidate_col,
-                report_path=args.report,
-                model_name=args.model,
-                sample_size=args.sample_size,
-                epsilon=args.epsilon,
-                batch_size=args.batch_size,
-                max_rewrite_tokens=args.max_rewrite_tokens,
-                min_eligible_score=args.min_eligible_score,
-                random_seed=args.random_seed,
-                min_target_retention=args.min_target_retention,
-                min_utility_retention=args.min_utility_retention,
-                min_character_retention=args.min_character_retention,
-                max_length_drift=args.max_length_drift,
-                cue_retention_threshold=args.cue_retention_threshold,
-            )
         elif args.command == "create-submission":
             generalize_targets = None
             if args.generalize_targets:
@@ -1628,24 +1471,6 @@ def main(argv: list[str] | None = None) -> int:
                 output_path=args.output,
                 sample_size=args.sample_size,
                 language=args.language,
-            )
-        elif args.command == "generate-llm-candidates":
-            result = run_local_llm_candidates(
-                args.input,
-                args.output,
-                text_col=args.text_col,
-                id_col=args.id_col,
-                source_col=args.source_col,
-                label_col=args.label_col,
-                candidate_col=args.candidate_col,
-                report_path=args.report,
-                endpoint=args.endpoint,
-                model=args.model,
-                sample_size=args.sample_size,
-                timeout=args.timeout,
-                min_target_retention=args.min_target_retention,
-                min_utility_retention=args.min_utility_retention,
-                max_length_drift=args.max_length_drift,
             )
         elif args.command == "check-hsd-cues":
             result = run_cue_checks(
@@ -1927,11 +1752,8 @@ def main(argv: list[str] | None = None) -> int:
         CsvPipelineError,
         CueCheckError,
         DatasetProfileError,
-        DpmlmCandidateError,
-        DpmlmSpikeError,
         HfUtilityError,
         LmContextBenchmarkError,
-        LocalLlmError,
         MetadataLeakageError,
         OSError,
         PresidioAugmentError,

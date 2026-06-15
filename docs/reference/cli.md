@@ -115,9 +115,6 @@ Important legacy exact-output flags:
 | `predict-token-policy` | Token-policy training and runtime | Single-model advisory token-action spans. |
 | `predict-token-policy-ensemble` | Token-policy training and runtime | Advisory predictions. |
 | `apply-token-policy-candidates` | Candidate generation and reranking | Candidate helper; still requires audit. |
-| `dpmlm-spike` | Candidate generation and reranking | Bounded DPMLM feasibility/blocker report. |
-| `generate-dpmlm-candidates` | Candidate generation and reranking | Research candidate path. |
-| `generate-llm-candidates` | Candidate generation and reranking | Local candidate path only. |
 
 ## Dataset Prep Commands
 
