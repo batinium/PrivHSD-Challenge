@@ -37,6 +37,25 @@ Use `openai/gpt-oss-20b` as the practical MVP local LLM default because it parse
 
 Keep model and endpoint configurable. Do not hardcode the user's network endpoint as the only value.
 
+After the 800-row live pipeline run, use the endorsement/context prompt below
+as the default local LLM system prompt. It was selected over the initial prompt
+because it improved full-set F1 from about 0.535 to 0.596 and reduced false
+positives from 273 to 169 while keeping recall higher than the stricter
+context-first prompt in the isolated prompt sweep. After wiring it into the CLI
+runtime, the final live `sanitize-classify` run reached F1 0.5827 with 174
+false positives, 48 false negatives, 800/800 parsed rows, and 0 skipped rows.
+
+```text
+Classify cleaned text for a hate-speech dataset. Hate speech means the text
+itself endorses, advocates, commands, or asserts abuse, inferiority, exclusion,
+dehumanization, or violence against a protected identity group. Return
+hate=false for quotations, reports, moderation requests, condemnation,
+counterspeech, negation, hypotheticals, questions, or examples that mention
+hateful words without endorsing them. Offensive profanity without a protected
+target is not HSD. Return binary labels, allowed reason tags, exact residual
+PII substrings only, and no confidence or explanation.
+```
+
 ## Expected LLM Contract
 
 The local LLM receives batches of cleaned rows only.
@@ -127,6 +146,8 @@ Do not reuse any existing local LLM rewrite path as-is if it asks the model to r
 5. Implement `LocalLlmHsdReviewRuntime`:
    - Use OpenAI-compatible chat completions.
    - Prefer tool calling.
+   - Send `tool_choice: "required"` for LM Studio compatibility.
+   - Use JSON Schema response format for the non-tool fallback path.
    - Batch cleaned rows.
    - Retry malformed batch responses per row.
    - Return structured labels, reason tags, suggestion validation records, parse counts, fallback counts, and status metadata.
@@ -279,10 +300,25 @@ python -m contextsafe_hsd.cli sanitize-classify \
   --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
   --local-llm-model openai/gpt-oss-20b \
   --local-llm-batch-size 10 \
+  --require-hate-classification \
   --manifest data/outputs/llm_hsd_review_integration/curated_hsd_training.local_llm.manifest.json
 ```
 
 If the live smoke endpoint is unavailable, do not block the implementation. The ML CSV smoke and unit tests should still run.
+
+Live prompt-tuning artifacts:
+
+- `docs/planning/llm_hsd_review_integration/live_llm_failure_subsample.csv`
+  contains all 302 initial local-LLM failures from the 800-row run.
+- `docs/planning/llm_hsd_review_integration/prompt_tuning_failure_subset.csv`
+  contains the 99-row focused tuning subset.
+- `docs/planning/llm_hsd_review_integration/prompt_tuning_results.json`
+  records prompt results on the failure subset.
+- `docs/planning/llm_hsd_review_integration/prompt_tuning_full_results.json`
+  records the complete 800-row comparison for the best prompt candidates.
+
+The selected default is `v1_endorsement_rule`, not `v2_context_first`, because
+the latter won on accuracy but gave up too much HSD recall.
 
 ## Done Means
 
@@ -296,3 +332,5 @@ If the live smoke endpoint is unavailable, do not block the implementation. The 
 - Tests pass without live LLM access.
 - The manifest makes it clear which backend was used and whether parsing/fallback happened.
 - The integration commit has been created and pushed, or the push blocker is reported with exact next steps.
+- The live endpoint compatibility fix and selected prompt are committed and
+  pushed after the 800-row validation and failure-subset prompt tuning.

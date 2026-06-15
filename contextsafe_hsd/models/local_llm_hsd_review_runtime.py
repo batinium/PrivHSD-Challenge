@@ -50,6 +50,17 @@ SENTENCE_END_PATTERN = re.compile(r"[.!?][\"')\]]?\s*$")
 TOO_BROAD_WORD_LIMIT = 12
 TOO_BROAD_CHAR_LIMIT = 120
 REQUEST_FUNCTION_NAME = "record_hsd_review"
+LOCAL_LLM_HSD_SYSTEM_PROMPT = (
+    "Classify cleaned text for a hate-speech dataset. Hate speech means the text "
+    "itself endorses, advocates, commands, or asserts abuse, inferiority, "
+    "exclusion, dehumanization, or violence against a protected identity group. "
+    "Return hate=false for quotations, reports, moderation requests, "
+    "condemnation, counterspeech, negation, hypotheticals, questions, or "
+    "examples that mention hateful words without endorsing them. Offensive "
+    "profanity without a protected target is not HSD. Return binary labels, "
+    "allowed reason tags, exact residual PII substrings only, and no confidence "
+    "or explanation."
+)
 
 
 class LocalLlmHsdReviewError(ValueError):
@@ -585,13 +596,7 @@ class LocalLlmHsdReviewRuntime:
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "Classify post-PII-cleaning text for a hate-speech "
-                        "dataset. You see cleaned text only. Return binary HSD "
-                        "labels, allowed reason tags, and exact residual PII "
-                        "substrings if visible. Do not rewrite, mask, explain, "
-                        "or include confidence."
-                    ),
+                    "content": LOCAL_LLM_HSD_SYSTEM_PROMPT,
                 },
                 {
                     "role": "user",
@@ -643,6 +648,7 @@ class LocalLlmHsdReviewRuntime:
 
 __all__ = [
     "ALLOWED_HSD_REASON_TAGS",
+    "LOCAL_LLM_HSD_SYSTEM_PROMPT",
     "LocalLlmHsdReviewError",
     "LocalLlmHsdReviewRuntime",
     "LocalLlmReviewResult",

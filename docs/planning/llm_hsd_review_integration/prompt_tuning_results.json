@@ -1,0 +1,58 @@
+{
+  "v0_current": {
+    "rows": 99,
+    "request_count": 10,
+    "parse_failures": 0,
+    "accuracy_on_failure_subset": 0.2525,
+    "fixed_previous_failures": 25,
+    "still_wrong": 74,
+    "false_positives_remaining": 62,
+    "false_negatives_remaining": 12,
+    "pred_counts": {
+      "0": 20,
+      "1": 79
+    }
+  },
+  "v1_endorsement_rule": {
+    "rows": 99,
+    "request_count": 10,
+    "parse_failures": 0,
+    "accuracy_on_failure_subset": 0.404,
+    "fixed_previous_failures": 40,
+    "still_wrong": 59,
+    "false_positives_remaining": 35,
+    "false_negatives_remaining": 24,
+    "pred_counts": {
+      "0": 59,
+      "1": 40
+    }
+  },
+  "v2_context_first": {
+    "rows": 99,
+    "request_count": 10,
+    "parse_failures": 0,
+    "accuracy_on_failure_subset": 0.4747,
+    "fixed_previous_failures": 47,
+    "still_wrong": 52,
+    "false_positives_remaining": 25,
+    "false_negatives_remaining": 27,
+    "pred_counts": {
+      "0": 72,
+      "1": 27
+    }
+  },
+  "v3_label_guideline": {
+    "rows": 99,
+    "request_count": 10,
+    "parse_failures": 0,
+    "accuracy_on_failure_subset": 0.3636,
+    "fixed_previous_failures": 36,
+    "still_wrong": 63,
+    "false_positives_remaining": 43,
+    "false_negatives_remaining": 20,
+    "pred_counts": {
+      "0": 47,
+      "1": 52
+    }
+  }
+}

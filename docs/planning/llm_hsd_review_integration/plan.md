@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-15
 
-Status: implementation planning handoff
+Status: implemented and live-smoke validated
 
 ## Decision
 
@@ -58,6 +58,116 @@ PII findings:
   - Recall against expected remaining privacy was about 0.5.
 
 Conclusion: use the LLM for opt-in HSD classification and review cues. Do not use it as an automatic PII scrubber.
+
+## 800-Row Live Pipeline Validation
+
+The local LLM backend was exercised end-to-end on
+`workbench/demo/curated_hsd_training.csv` after implementation.
+
+Command shape:
+
+```bash
+python -m contextsafe_hsd.cli sanitize-classify \
+  --input workbench/demo/curated_hsd_training.csv \
+  --output data/outputs/llm_hsd_review_integration/curated_hsd_training.local_llm.csv \
+  --text-col text \
+  --id-col author_id \
+  --hsd-classification-backend local-llm \
+  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --local-llm-model openai/gpt-oss-20b \
+  --local-llm-batch-size 10 \
+  --require-hate-classification \
+  --manifest data/outputs/llm_hsd_review_integration/curated_hsd_training.local_llm.manifest.json
+```
+
+Live endpoint compatibility finding:
+
+- LM Studio rejected object-form `tool_choice` and `response_format: json_object`.
+- The runtime now sends `tool_choice: "required"` and uses JSON Schema for the
+  non-tool fallback path.
+
+Live run summary:
+
+| Metric | Value |
+| --- | ---: |
+| Rows | 800 |
+| Parse count | 800 |
+| Skipped count | 0 |
+| Request count | 100 |
+| Batch fallback rows | 20 |
+| LLM elapsed time | 280.907s |
+| Output validation | valid |
+| Prediction counts | 353 non-HSD, 447 HSD |
+| PII suggestions | 2 accepted for review, 11 rejected placeholders, 6 rejected protected/HSD cues |
+
+Against the fixture `hsd_answer`, the first deployed prompt was too aggressive:
+
+| Prompt | Accuracy | Precision | Recall | F1 | FP | FN |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Initial deployed prompt | 0.6225 | 0.3893 | 0.8571 | 0.5354 | 273 | 29 |
+
+The dataset does contain the edge cases needed for this validation:
+
+- 86 `manual_edge` rows.
+- Direct protected-group attacks.
+- Quoted or reported hateful phrases.
+- Counterspeech and negation.
+- Threat words attached to persons or locations.
+- Handles, emails, phone-like strings, URLs, placeholders, case/card IDs.
+- Long rows and very short rows.
+
+Failure artifacts committed for tuning:
+
+- `docs/planning/llm_hsd_review_integration/live_llm_failure_subsample.csv`
+  - 302 rows where the initial local LLM prompt disagreed with `hsd_answer`.
+  - Cleaned text only; no duplicated raw pre-cleaning text.
+- `docs/planning/llm_hsd_review_integration/prompt_tuning_failure_subset.csv`
+  - 99-row focused subset containing all manual-edge failures, all false
+    negatives, and a spread of false positives by source.
+- `docs/planning/llm_hsd_review_integration/prompt_tuning_results.json`
+  - Failure-subset prompt comparison.
+- `docs/planning/llm_hsd_review_integration/prompt_tuning_full_results.json`
+  - Full 800-row prompt comparison for the best candidates.
+
+## Selected Prompt Version
+
+Four prompt variants were tested against the failure-focused subset. The best
+subset fixer was `v2_context_first`, but it traded away too much recall on the
+full 800-row evaluation.
+
+Full cleaned-row comparison:
+
+| Prompt | Accuracy | Precision | Recall | F1 | FP | FN | Notes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Initial deployed prompt | 0.6225 | 0.3893 | 0.8571 | 0.5354 | 273 | 29 | High recall, too many quote/report false positives. |
+| `v1_endorsement_rule` | 0.7325 | 0.4832 | 0.7783 | 0.5962 | 169 | 45 | Best F1 and much lower false-positive load. |
+| `v2_context_first` | 0.7638 | 0.5289 | 0.6305 | 0.5753 | 114 | 75 | Best accuracy, but recall drop is too large. |
+| `v1_endorsement_rule` final CLI run | 0.7225 | 0.4711 | 0.7635 | 0.5827 | 174 | 48 | Actual `sanitize-classify` run after wiring prompt into runtime. |
+
+Selected prompt: `v1_endorsement_rule`.
+
+```text
+Classify cleaned text for a hate-speech dataset. Hate speech means the text
+itself endorses, advocates, commands, or asserts abuse, inferiority, exclusion,
+dehumanization, or violence against a protected identity group. Return
+hate=false for quotations, reports, moderation requests, condemnation,
+counterspeech, negation, hypotheticals, questions, or examples that mention
+hateful words without endorsing them. Offensive profanity without a protected
+target is not HSD. Return binary labels, allowed reason tags, exact residual
+PII substrings only, and no confidence or explanation.
+```
+
+Reasoning:
+
+- It improved F1 by about 0.061 in the isolated prompt sweep and about 0.047
+  in the final CLI run, compared with the initial prompt.
+- It reduces false positives by 104 while preserving better recall than the
+  stricter `v2_context_first` variant.
+- It explicitly encodes the key failure mode from the manual edge cases:
+  quote/report/counterspeech text should not become HSD unless the speaker is
+  endorsing the hateful content.
+- The final CLI run with the selected prompt parsed 800/800 rows, skipped 0,
+  and reached 0.9186 accuracy on the 86 manual edge rows.
 
 ## Non-Goals
 
@@ -475,6 +585,7 @@ python -m contextsafe_hsd.cli sanitize-classify \
   --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
   --local-llm-model openai/gpt-oss-20b \
   --local-llm-batch-size 10 \
+  --require-hate-classification \
   --manifest data/outputs/llm_hsd_review_integration/curated_hsd_training.local_llm.manifest.json
 ```
 
@@ -543,6 +654,8 @@ After implementation and verification:
 
 - Decide whether `qwen/qwen3-4b` should be the quality-oriented local LLM option after a larger benchmark.
 - Add a larger multilingual/protected-group benchmark with local minority names.
+- Re-evaluate the selected `v1_endorsement_rule` prompt on a larger holdout,
+  especially false-negative-sensitive hate rows.
 - Add a reviewer profile that can make deterministic decisions over accepted suggestions.
 - Decide whether raw suggestion strings are allowed in local dashboard artifacts or only in debug audit mode.
 - Add dashboard UX for suggestion review after MVP.

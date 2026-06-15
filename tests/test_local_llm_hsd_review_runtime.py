@@ -1,6 +1,7 @@
 import json
 
 from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
+    LOCAL_LLM_HSD_SYSTEM_PROMPT,
     LocalLlmHsdReviewRuntime,
 )
 
@@ -143,6 +144,16 @@ def test_runtime_sends_cleaned_text_only_to_request_callable():
     )
 
     assert seen_payloads
+
+
+def test_system_prompt_preserves_context_and_endorsement_guardrails():
+    prompt = LOCAL_LLM_HSD_SYSTEM_PROMPT.lower()
+
+    assert "endorses" in prompt
+    assert "quotations" in prompt
+    assert "reports" in prompt
+    assert "counterspeech" in prompt
+    assert "without endorsing" in prompt
 
 
 def test_runtime_uses_required_tool_choice_and_json_schema_fallback():
