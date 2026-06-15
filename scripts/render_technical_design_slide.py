@@ -152,17 +152,29 @@ def stage_card(
     body: list[str],
     fill: str,
     outline: str,
+    title_size: int = 29,
+    body_size: int = 19,
 ) -> None:
     rounded_box(draw, xy, fill=fill, outline=outline, width=3, radius=20)
     x1, y1, x2, _ = xy
-    line_text(draw, title, (x1 + 24, y1 + 24), size=29, fill="#182238", bold=True)
-    y = y1 + 72
+    title_y = y1 + 24
+    for line in title.split("\n"):
+        line_text(
+            draw,
+            line,
+            (x1 + 24, title_y),
+            size=title_size,
+            fill="#182238",
+            bold=True,
+        )
+        title_y += title_size + 5
+    y = title_y + 8
     for item in body:
         y = wrapped_text(
             draw,
             item,
             (x1 + 24, y),
-            size=19,
+            size=body_size,
             fill="#2B3748",
             max_width=x2 - x1 - 48,
             line_gap=5,
@@ -207,40 +219,47 @@ def render() -> None:
     draw.rectangle((0, 850, WIDTH, HEIGHT), fill="#EEF3F7")
 
     # Public pipeline row.
-    line_text(draw, "PUBLIC CONTRACT", (82, 38), size=18, fill="#5D6878", bold=True)
+    line_text(draw, "PUBLIC REVIEW FLOW", (82, 38), size=18, fill="#5D6878", bold=True)
     stages = [
         (
-            (80, 68, 330, 240),
+            (80, 68, 300, 240),
             "Input CSV",
             ["text + labels + IDs", "metadata preserved"],
             "#E9F2FF",
             "#3573B7",
         ),
         (
-            (390, 50, 735, 258),
+            (350, 50, 625, 258),
             "Privacy Detection",
-            ["direct PII, quasi IDs, author clues", "deterministic baseline always runs"],
+            ["direct PII + author clues", "deterministic baseline always runs"],
             "#E8F7F4",
             "#1D8A78",
         ),
         (
-            (790, 50, 1135, 258),
-            "Meaning Protection",
-            ["preserve target groups, actions, negation", "reject cue-loss candidates"],
+            (675, 50, 950, 258),
+            "Meaning\nProtection",
+            ["target/action/negation kept", "cue loss flagged"],
             "#FFF5DF",
             "#C17E1C",
         ),
         (
-            (1190, 50, 1535, 258),
-            "HSD Classification",
-            ["advisory hate/not-hate score", "target-group stats after scoring"],
+            (1000, 50, 1275, 258),
+            "LLM-Guided\nClassification",
+            ["cleaned text only", "hate label + reason tags"],
             "#EDF1FA",
             "#506993",
         ),
         (
-            (1590, 68, 1840, 240),
-            "NGO Review",
-            ["portal check queue", "protected text + score"],
+            (1325, 50, 1600, 258),
+            "Residual PII\nCheck",
+            ["validate LLM suggestions", "review metadata only"],
+            "#F2F7FF",
+            "#5577AD",
+        ),
+        (
+            (1650, 68, 1840, 240),
+            "Human\nReview",
+            ["review queue", "protected text + flags"],
             "#EAF7EF",
             "#2F8A5F",
         ),
@@ -253,12 +272,20 @@ def render() -> None:
             body=body,
             fill=fill,
             outline=outline,
+            title_size=24,
+            body_size=17,
         )
 
-    for start_x, end_x in [(330, 390), (735, 790), (1135, 1190), (1535, 1590)]:
+    for start_x, end_x in [
+        (300, 350),
+        (625, 675),
+        (950, 1000),
+        (1275, 1325),
+        (1600, 1650),
+    ]:
         arrow(draw, (start_x + 14, 154), (end_x - 14, 154), fill="#7A8594", width=5)
 
-    # Novel contribution band.
+    # Current design band: one protected review path, not a public candidate ladder.
     rounded_box(
         draw,
         (80, 318, 1840, 818),
@@ -275,12 +302,12 @@ def render() -> None:
         width=0,
         radius=20,
     )
-    line_text(draw, "NOVEL ADDITION", (140, 390), size=20, fill="#9BC7FF", bold=True)
-    line_text(draw, "Gradual PII", (140, 450), size=42, fill="#FFFFFF", bold=True)
-    line_text(draw, "Removal Ladder", (140, 502), size=42, fill="#FFFFFF", bold=True)
+    line_text(draw, "CURRENT DESIGN", (140, 390), size=20, fill="#9BC7FF", bold=True)
+    line_text(draw, "Privacy-Minimized", (140, 450), size=38, fill="#FFFFFF", bold=True)
+    line_text(draw, "Review Layer", (140, 500), size=42, fill="#FFFFFF", bold=True)
     wrapped_text(
         draw,
-        "Generate several candidates, each with stronger privacy. Score them and select the best tradeoff.",
+        "Produce one protected text for review, then add LLM HSD signals and validated residual PII flags.",
         (142, 578),
         size=24,
         fill="#DDE7F6",
@@ -288,95 +315,111 @@ def render() -> None:
         line_gap=8,
     )
 
-    # Candidate ladder.
-    ladder = [
-        ("0", ["Original"], "not released", "#F1F4F8", "#8C98A8", 0),
-        ("1", ["Balanced", "mask"], "regex + context", "#E8F7F4", "#1D8A78", 2),
-        ("2", ["Strict", "cleanup"], "residual PII rung", "#DDF3ED", "#168469", 3),
-        ("3", ["PII Assist"], "Presidio + GLiNER", "#D7EFE8", "#117A62", 4),
-        ("4", ["Style +", "policy"], "token candidate", "#D1E9E1", "#0D6F59", 5),
+    # Single protected review path.
+    review_steps = [
+        (
+            (610, 372, 828, 528),
+            "Detect",
+            ["PII, handles, locations", "author clues + metadata"],
+            "#E8F7F4",
+            "#1D8A78",
+        ),
+        (
+            (866, 372, 1084, 528),
+            "Mask",
+            ["typed placeholders", "strict direct cleanup"],
+            "#E2F4EE",
+            "#168469",
+        ),
+        (
+            (1122, 372, 1340, 528),
+            "Preserve",
+            ["target/action/negation", "quote + counterspeech"],
+            "#FFF5DF",
+            "#C17E1C",
+        ),
+        (
+            (1378, 372, 1596, 528),
+            "Classify",
+            ["cleaned text only", "label + reason tags"],
+            "#EDF1FA",
+            "#506993",
+        ),
+        (
+            (1634, 372, 1814, 528),
+            "Flag",
+            ["validated residual PII", "no auto-apply"],
+            "#EAF7EF",
+            "#2F8A5F",
+        ),
     ]
-    x = 610
-    y = 372
-    card_w = 225
-    for index, (step, title, caption, fill, outline, bars) in enumerate(ladder):
-        x1 = x + index * 245
-        ladder_card(
+    for xy, title, body, fill, outline in review_steps:
+        stage_card(
             draw,
-            (x1, y, x1 + card_w, y + 126),
+            xy,
+            title=title,
+            body=body,
             fill=fill,
             outline=outline,
-            step=step,
-            title=title,
-            caption=caption,
-            bars=bars,
+            title_size=26,
+            body_size=16,
         )
-        if index < len(ladder) - 1:
-            arrow(draw, (x1 + card_w + 8, y + 63), (x1 + 238, y + 63), fill="#8A95A5", width=4)
+    for start_x, end_x in [(828, 866), (1084, 1122), (1340, 1378), (1596, 1634)]:
+        arrow(draw, (start_x + 8, 441), (end_x - 8, 441), fill="#8A95A5", width=4)
 
-    # Scoring panels.
-    rounded_box(
-        draw,
-        (610, 548, 1076, 686),
-        fill="#F8FBFA",
-        outline="#B6CEC7",
-        width=2,
-        radius=16,
-    )
-    line_text(draw, "Privacy gain score", (636, 572), size=25, fill="#176D58", bold=True)
-    bullet_list(
-        draw,
-        ["direct/quasi identifier reduction", "residual warning count", "metadata leakage signal"],
-        (638, 610),
-        size=18,
-        fill="#2E3B4C",
-        max_width=390,
-        bullet_fill="#176D58",
-        line_gap=2,
-    )
-    rounded_box(
-        draw,
-        (1112, 548, 1578, 720),
-        fill="#FFFCF3",
-        outline="#D8BA75",
-        width=2,
-        radius=16,
-    )
-    line_text(draw, "HSD score preservation", (1138, 572), size=25, fill="#9A6718", bold=True)
-    bullet_list(
-        draw,
-        [
-            "target/action/negation retention",
-            "target-group distribution retained",
-            "advisory hate-score drift",
-            "quote/counterspeech cues",
-        ],
-        (1140, 610),
-        size=18,
-        fill="#2E3B4C",
-        max_width=390,
-        bullet_fill="#B77A1E",
-        line_gap=2,
-    )
-    rounded_box(
-        draw,
-        (1614, 548, 1814, 686),
-        fill="#EDF3FF",
-        outline="#5577AD",
-        width=2,
-        radius=16,
-    )
-    line_text(draw, "Selector", (1644, 574), size=27, fill="#385D92", bold=True)
-    wrapped_text(
-        draw,
-        "best privacy/utility tradeoff",
-        (1644, 610),
-        size=18,
-        fill="#2E3B4C",
-        max_width=136,
-        line_gap=5,
-    )
-    arrow(draw, (1578, 606), (1614, 606), fill="#7A8594", width=4)
+    # Evidence panels.
+    evidence_panels = [
+        (
+            (610, 568, 998, 714),
+            "Privacy evidence",
+            [
+                "direct/quasi identifier reduction",
+                "strict residual cleanup count",
+                "metadata leakage signal",
+            ],
+            "#F8FBFA",
+            "#B6CEC7",
+            "#176D58",
+        ),
+        (
+            (1034, 568, 1422, 714),
+            "HSD context kept",
+            [
+                "target/action/negation retention",
+                "target-group distribution retained",
+                "quote/counterspeech cues",
+            ],
+            "#FFFCF3",
+            "#D8BA75",
+            "#9A6718",
+        ),
+        (
+            (1458, 568, 1814, 714),
+            "Review metadata",
+            [
+                "LLM hate label + reason tags",
+                "residual PII suggestion status",
+                "human decides, not AI",
+            ],
+            "#EDF3FF",
+            "#9EB4D5",
+            "#385D92",
+        ),
+    ]
+    for xy, title, items, fill, outline, accent in evidence_panels:
+        rounded_box(draw, xy, fill=fill, outline=outline, width=2, radius=16)
+        x1, y1, x2, _ = xy
+        line_text(draw, title, (x1 + 24, y1 + 24), size=24, fill=accent, bold=True)
+        bullet_list(
+            draw,
+            items,
+            (x1 + 26, y1 + 66),
+            size=17,
+            fill="#2E3B4C",
+            max_width=x2 - x1 - 48,
+            bullet_fill=accent,
+            line_gap=0,
+        )
 
     # Under the hood implementation band.
     line_text(draw, "UNDER THE HOOD", (82, 888), size=18, fill="#5D6878", bold=True)
@@ -389,23 +432,23 @@ def render() -> None:
         ),
         (
             "PII Assist",
-            ["Presidio, scrubadub, GLiNER", "span fusion + cue-safe filters", "optional, local-only default"],
+            ["Presidio + scrubadub", "span fusion + cue-safe filters", "GLiNER explicit research path"],
             "#FFFFFF",
             "#B7C0CE",
         ),
         (
             "Model signals",
             [
-                "token-policy RoBERTa + HateBERT",
-                "Dynabench RoBERTa HSD probe",
-                "Cardiff Twitter RoBERTa hate probe",
+                "local LLM HSD review",
+                "binary labels + reason tags",
+                "ML advisory remains fallback",
             ],
             "#FFFFFF",
             "#B7C0CE",
         ),
         (
-            "Next verifier",
-            ["gpt-oss-safeguard-20b", "structured policy review", "supports NGO check flow"],
+            "Residual review",
+            ["validate LLM PII suggestions", "reject placeholders/HSD cues", "metadata only; no auto-apply"],
             "#FFFFFF",
             "#B7C0CE",
         ),
