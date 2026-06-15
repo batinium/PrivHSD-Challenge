@@ -73,12 +73,3 @@ def load_utility_cue_terms(section: str) -> tuple[str, ...]:
     data = load_toml_resource("utility_cues.toml")
     return tuple(str(term) for term in data[section]["terms"])
 
-
-@lru_cache(maxsize=1)
-def load_expected_source_labels() -> dict[str, set[str]]:
-    data = load_toml_resource("source_schemas.toml")
-    return {
-        source: {str(label) for label in labels}
-        for source, labels in data["expected_source_labels"].items()
-    }
-

@@ -20,7 +20,7 @@ import workbench.backend.app as workbench_app
 from workbench.backend.app import app, platform_insight_report
 
 
-def test_platform_insight_uses_pipeline_hsd_advisory_without_label_columns():
+def test_platform_insight_without_label_columns_is_unclassified():
     report = platform_insight_report(
         original_rows=[
             {
@@ -37,35 +37,18 @@ def test_platform_insight_uses_pipeline_hsd_advisory_without_label_columns():
         text_col="text",
         output_col="text",
         aggregate={"residual_identifier_count": 0},
-        audit_rows=[
-            {
-                "chosen_candidate": "balanced",
-                "scores": [
-                    {
-                        "name": "balanced",
-                        "metrics": {
-                            "hsd_advisory": {
-                                "original_score": 0.92,
-                                "candidate_score": 0.89,
-                                "candidate_decision": "positive",
-                                "decision_threshold": 0.5,
-                            }
-                        },
-                    }
-                ],
-            }
-        ],
     )
 
-    assert report["classification"]["source"] == "pipeline_hsd_advisory"
-    assert report["classification"]["classified_rows"] == 1
-    assert report["classification"]["hatred_rows"] == 1
-    assert report["classification"]["mean_hatred_score"] == 0.89
-    assert report["target_groups"]["categories"]["religion"]["hatred_rows"] == 1
-    assert report["ngo_review"]["routing_rule"] == "pipeline_hsd_advisory_positive"
+    assert report["classification"]["source"] == "not_classified"
+    assert report["classification"]["classified_rows"] == 0
+    assert report["classification"]["hatred_rows"] == 0
+    assert report["classification"]["mean_hatred_score"] is None
+    assert report["target_groups"]["categories"]["religion"]["hatred_rows"] == 0
+    assert report["ngo_review"]["routing_rule"] == "not_classified"
+    assert report["ngo_review"]["queue_rows"] == 0
 
 
-def test_platform_insight_counts_positive_hsd_member_vote():
+def test_platform_insight_does_not_classify_from_audit_candidate_scores():
     report = platform_insight_report(
         original_rows=[
             {
@@ -88,31 +71,19 @@ def test_platform_insight_counts_positive_hsd_member_vote():
                 "scores": [
                     {
                         "name": "balanced",
-                        "metrics": {
-                            "hsd_advisory": {
-                                "original_score": 0.44,
-                                "candidate_score": 0.48,
-                                "candidate_max_score": 0.96,
-                                "candidate_positive_model_count": 1,
-                                "model_count": 2,
-                                "candidate_decision": "negative",
-                                "decision_threshold": 0.5,
-                            }
-                        },
+                        "metrics": {"privacy_gain": 1.0},
                     }
                 ],
             }
         ],
     )
 
-    assert report["classification"]["hatred_rows"] == 1
-    assert report["classification"]["mean_hatred_score"] == 0.96
-    assert report["classification"]["total_positive_model_votes"] == 1
-    assert report["classification"]["total_model_votes"] == 2
-    assert (
-        report["classification"]["model_vote_rule"]
-        == "one_or_more_registered_hsd_models_positive"
-    )
+    assert report["classification"]["source"] == "not_classified"
+    assert report["classification"]["hatred_rows"] == 0
+    assert report["classification"]["mean_hatred_score"] is None
+    assert report["classification"]["total_positive_model_votes"] == 0
+    assert report["classification"]["total_model_votes"] == 0
+    assert report["classification"]["model_vote_rule"] is None
 
 
 def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
@@ -189,8 +160,8 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
             "id_col": "id",
             "mode": "auto",
             "replace_text": True,
-            "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["semantic", "hsd_advisory"],
+            "disabled_providers": ["presidio", "scrubadub"],
+            "disabled_models": ["local_llm"],
         },
     )
 
@@ -223,8 +194,8 @@ def test_workbench_csv_endpoint_does_not_require_case_key(tmp_path, monkeypatch)
             "text_col": "text",
             "mode": "auto",
             "replace_text": True,
-            "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["semantic", "hsd_advisory"],
+            "disabled_providers": ["presidio", "scrubadub"],
+            "disabled_models": ["local_llm"],
         },
     )
 
@@ -253,8 +224,8 @@ def test_workbench_csv_uses_safe_fingerprint_as_review_case_key(tmp_path, monkey
             "id_col": "case_fingerprint",
             "mode": "auto",
             "replace_text": True,
-            "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["semantic", "hsd_advisory"],
+            "disabled_providers": ["presidio", "scrubadub"],
+            "disabled_models": ["local_llm"],
         },
     )
 
@@ -310,8 +281,8 @@ def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, mo
             "id_col": "author_id",
             "mode": "auto",
             "replace_text": True,
-            "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["semantic", "hsd_advisory"],
+            "disabled_providers": ["presidio", "scrubadub"],
+            "disabled_models": ["local_llm"],
         },
     )
 
@@ -346,8 +317,8 @@ def test_workbench_csv_endpoint_persists_and_reuses_cached_result(tmp_path, monk
         "id_col": "id",
         "mode": "auto",
         "replace_text": True,
-        "disabled_providers": ["presidio", "scrubadub", "gliner"],
-        "disabled_models": ["semantic", "hsd_advisory"],
+        "disabled_providers": ["presidio", "scrubadub"],
+        "disabled_models": ["local_llm"],
     }
 
     first = client.post("/api/csv/privatize", json=payload)
@@ -382,8 +353,8 @@ def test_workbench_csv_job_reports_progress_and_result(tmp_path, monkeypatch):
         "id_col": "id",
         "mode": "auto",
         "replace_text": True,
-        "disabled_providers": ["presidio", "scrubadub", "gliner"],
-        "disabled_models": ["semantic", "hsd_advisory"],
+        "disabled_providers": ["presidio", "scrubadub"],
+        "disabled_models": ["local_llm"],
     }
 
     start = client.post("/api/csv/jobs", json=payload)
@@ -425,8 +396,8 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
         "id_col": "id",
         "mode": "auto",
         "replace_text": True,
-        "disabled_providers": ["presidio", "scrubadub", "gliner"],
-        "disabled_models": ["semantic", "hsd_advisory"],
+        "disabled_providers": ["presidio", "scrubadub"],
+        "disabled_models": ["local_llm"],
     }
     processed = client.post("/api/csv/privatize", json=payload)
     assert processed.status_code == 200
@@ -521,13 +492,13 @@ def test_workbench_csv_cache_key_includes_hsd_backend_options():
         csv_text="id,text\n1,hello\n",
         text_col="text",
         id_col="id",
-        disabled_models=["semantic", "hsd_advisory"],
+        disabled_models=["local_llm"],
     )
     local = workbench_app.CsvPrivatizeRequest(
         csv_text="id,text\n1,hello\n",
         text_col="text",
         id_col="id",
-        disabled_models=["semantic", "hsd_advisory"],
+        disabled_models=["local_llm"],
         hsd_classification_backend="local_llm",
         local_llm_model="fake-local-llm",
     )
@@ -536,7 +507,7 @@ def test_workbench_csv_cache_key_includes_hsd_backend_options():
     local_key, local_options = workbench_app.csv_result_cache_key(local)
 
     assert base_key != local_key
-    assert base_options["hsd_classification_backend"] == "ml"
+    assert base_options["hsd_classification_backend"] == "none"
     assert local_options["hsd_classification_backend"] == "local_llm"
     assert "local_llm" not in local_options["disabled_models"]
 
@@ -611,8 +582,8 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
             "id_col": "id",
             "mode": "auto",
             "replace_text": True,
-            "disabled_providers": ["presidio", "scrubadub", "gliner"],
-            "disabled_models": ["semantic", "hsd_advisory"],
+            "disabled_providers": ["presidio", "scrubadub"],
+            "disabled_models": ["local_llm"],
             "hsd_classification_backend": "local_llm",
             "local_llm_endpoint": "http://local.test/v1/chat/completions",
             "local_llm_model": "fake-local-llm",

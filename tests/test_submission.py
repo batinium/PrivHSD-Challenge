@@ -1,33 +1,10 @@
 import csv
-from dataclasses import dataclass
 import json
 import subprocess
 import sys
 
-import pytest
-
 from contextsafe_hsd.cli import build_parser, main
-from contextsafe_hsd.submission import (
-    SubmissionError,
-    create_submission,
-    validate_submission,
-)
-
-
-@dataclass(frozen=True)
-class FakePresidioResult:
-    start: int
-    end: int
-    entity_type: str
-    score: float = 0.85
-
-
-class FakePresidioAnalyzer:
-    def analyze(self, *, text, language):
-        if "Amy" not in text:
-            return []
-        start = text.index("Amy")
-        return [FakePresidioResult(start, start + len("Amy"), "PERSON")]
+from contextsafe_hsd.submission import validate_submission
 
 
 def write_source(path):
@@ -57,49 +34,18 @@ def read_rows(path):
         return list(csv.DictReader(handle))
 
 
-def test_submission_commands_are_registered():
+def test_public_commands_are_registered():
     parser = build_parser()
 
-    create_args = parser.parse_args(
+    protect_args = parser.parse_args(
         [
-            "create-submission",
-            "--input",
-            "input.csv",
-            "--output",
-            "submission.csv",
-            "--text-col",
-            "text",
-            "--replace-text",
-            "--mode",
-            "auto",
-            "--metric-depth",
-            "fast",
-        ]
-    )
-    anonymize_args = parser.parse_args(
-        [
-            "anonymize",
+            "protect",
             "--input",
             "input.csv",
             "--output",
             "output.csv",
             "--text-col",
             "text",
-            "--mode",
-            "auto",
-        ]
-    )
-    rerank_args = parser.parse_args(
-        [
-            "rerank-candidates",
-            "--input",
-            "input.csv",
-            "--output",
-            "output.csv",
-            "--text-col",
-            "text",
-            "--mode",
-            "auto",
         ]
     )
     validate_args = parser.parse_args(
@@ -114,12 +60,8 @@ def test_submission_commands_are_registered():
         ]
     )
 
-    assert create_args.command == "create-submission"
-    assert create_args.text_cols == ["text"]
-    assert create_args.mode == "auto"
-    assert create_args.metric_depth == "fast"
-    assert anonymize_args.mode == "auto"
-    assert rerank_args.mode == "auto"
+    assert protect_args.command == "protect"
+    assert protect_args.llm_review == "local-llm"
     assert validate_args.command == "validate-submission"
 
 
@@ -134,29 +76,19 @@ def test_protect_help_is_short_public_surface():
     assert "--preset" in result.stdout
     assert "--llm-review" in result.stdout
     assert "exact" in result.stdout
-    assert "preserves the input schema" in result.stdout
+    assert "Run the final exact CSV pipeline" in result.stdout
     assert "--disable-provider" not in result.stdout
     assert "--disable-model" not in result.stdout
-    assert "--gliner-profile" not in result.stdout
     assert "--metric-depth" not in result.stdout
+    assert "create-submission" not in result.stdout
+    assert "rerank-candidates" not in result.stdout
 
 
-def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr("contextsafe_hsd.auto.context.has_module", lambda _name: False)
-    monkeypatch.setattr("contextsafe_hsd.auto.model_registry.module_available", lambda _name: False)
+def test_protect_exact_preserves_schema_and_manifest_stages(tmp_path, capsys):
     source = tmp_path / "source.csv"
     output = tmp_path / "protected.csv"
     manifest_path = tmp_path / "manifest.json"
-    with source.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
-        writer.writeheader()
-        writer.writerow(
-            {
-                "id": "1",
-                "text": "Muslims should leave",
-                "label": "hate",
-            }
-        )
+    write_source(source)
 
     exit_code = main(
         [
@@ -173,6 +105,8 @@ def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_pat
             str(manifest_path),
             "--preset",
             "exact",
+            "--llm-review",
+            "off",
         ]
     )
     captured = capsys.readouterr()
@@ -181,11 +115,12 @@ def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_pat
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert exit_code == 0
     assert '"preset": "exact"' in captured.out
-    assert list(rows[0]) == ["id", "text", "label"]
+    assert list(rows[0]) == ["id", "text", "label", "meta"]
     assert not any(column.startswith("hate_speech") for column in rows[0])
     assert not any(column.startswith("predicted_") for column in rows[0])
+    assert "[USER]" in rows[0]["text"]
+    assert "[EMAIL]" in rows[0]["text"]
     assert manifest["pipeline"] == "final_exact"
-    assert manifest["preset"] == "exact"
     assert manifest["exact_format_submission"] is True
     assert manifest["llm_review"] == "off"
     assert set(manifest["stages"]) == {
@@ -193,7 +128,7 @@ def test_protect_exact_preserves_schema_and_manifest_stages(monkeypatch, tmp_pat
         "meaning_protection",
         "verification",
     }
-    assert manifest["stages"]["verification"]["hsd_advisory_status"] == "skipped"
+    assert "hsd_advisory" not in manifest["stages"]["verification"]
     assert manifest["stages"]["verification"]["local_llm_hsd_review"][
         "status"
     ] == "skipped"
@@ -204,6 +139,19 @@ def test_protect_exact_local_llm_review_stays_in_sidecar(monkeypatch, tmp_path):
     def fake_post_chat_completion(*, endpoint, payload, timeout):
         rows = json.loads(payload["messages"][1]["content"])["items"]
         assert "mara@example.test" not in payload["messages"][1]["content"]
+        items = [
+            {
+                "id": row["id"],
+                "hate": True,
+                "hsd_reasons": [
+                    "protected_target",
+                    "exclusion",
+                ],
+                "pii_leftover": ["[EMAIL]"],
+                "review_needed": True,
+            }
+            for row in rows
+        ]
         return {
             "choices": [
                 {
@@ -213,20 +161,7 @@ def test_protect_exact_local_llm_review_stays_in_sidecar(monkeypatch, tmp_path):
                                 "function": {
                                     "name": "record_hsd_review",
                                     "arguments": json.dumps(
-                                        {
-                                            "items": [
-                                                {
-                                                    "id": rows[0]["id"],
-                                                    "hate": True,
-                                                    "hsd_reasons": [
-                                                        "protected_target",
-                                                        "exclusion",
-                                                    ],
-                                                    "pii_leftover": ["[EMAIL]"],
-                                                    "review_needed": True,
-                                                }
-                                            ]
-                                        }
+                                        {"items": items}
                                     ),
                                 }
                             }
@@ -244,16 +179,7 @@ def test_protect_exact_local_llm_review_stays_in_sidecar(monkeypatch, tmp_path):
     output = tmp_path / "protected.csv"
     manifest_path = tmp_path / "manifest.json"
     audit_path = tmp_path / "audit.json"
-    with source.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
-        writer.writeheader()
-        writer.writerow(
-            {
-                "id": "1",
-                "text": "Email mara@example.test because Muslims should leave.",
-                "label": "hate",
-            }
-        )
+    write_source(source)
 
     exit_code = main(
         [
@@ -285,171 +211,25 @@ def test_protect_exact_local_llm_review_stays_in_sidecar(monkeypatch, tmp_path):
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     audit = json.loads(audit_path.read_text(encoding="utf-8"))
     assert exit_code == 0
-    assert list(rows[0]) == ["id", "text", "label"]
-    assert rows[0]["text"] == "Email [EMAIL] because Muslims should leave."
+    assert list(rows[0]) == ["id", "text", "label", "meta"]
+    assert "[EMAIL]" in rows[0]["text"]
     assert "is_hate_speech" not in rows[0]
     classification = manifest["classification"]
     assert classification["backend"] == "local_llm"
     assert classification["status"] == "ok"
-    assert classification["parse_count"] == 1
+    assert classification["parse_count"] == 2
     assert classification["fallback_count"] == 0
     assert classification["reason_tag_counts"] == {
-        "exclusion": 1,
-        "protected_target": 1,
+        "exclusion": 2,
+        "protected_target": 2,
     }
     assert classification["validated_pii_suggestion_counts"] == {
-        "total": 1,
+        "total": 2,
         "accepted_for_review": 0,
-        "rejected": 1,
+        "rejected": 2,
     }
     assert audit["classification_reviews"][0]["label"] == "1"
     assert "[EMAIL]" not in json.dumps(classification)
-
-
-def test_protect_analysis_appends_hsd_advisory_columns(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr("contextsafe_hsd.auto.context.has_module", lambda _name: False)
-    monkeypatch.setattr("contextsafe_hsd.auto.model_registry.module_available", lambda _name: False)
-    source = tmp_path / "source.csv"
-    output = tmp_path / "analysis.csv"
-    manifest_path = tmp_path / "manifest.json"
-    with source.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
-        writer.writeheader()
-        writer.writerow(
-            {
-                "id": "1",
-                "text": "Everyone deserves respect.",
-                "label": "not_hate",
-            }
-        )
-
-    exit_code = main(
-        [
-            "protect",
-            "--input",
-            str(source),
-            "--output",
-            str(output),
-            "--text-col",
-            "text",
-            "--id-col",
-            "id",
-            "--manifest",
-            str(manifest_path),
-            "--preset",
-            "analysis",
-        ]
-    )
-    capsys.readouterr()
-
-    rows = read_rows(output)
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert exit_code == 0
-    assert list(rows[0]) == [
-        "id",
-        "text",
-        "label",
-        "is_hate_speech",
-        "hate_speech_score",
-        "hate_speech_model_count",
-    ]
-    assert manifest["preset"] == "analysis"
-    assert manifest["exact_format_submission"] is False
-    assert manifest["stages"]["verification"]["hsd_advisory_status"] == "skipped"
-
-
-def test_create_submission_privatizes_in_place_and_writes_manifest(tmp_path):
-    source = tmp_path / "source.csv"
-    output = tmp_path / "submission.csv"
-    manifest_path = tmp_path / "manifest.json"
-    original_rows = write_source(source)
-
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
-        id_col="id",
-        manifest_path=manifest_path,
-        command=[
-            "privhsd",
-            "create-submission",
-            "--input",
-            str(source),
-            "--replace-text",
-        ],
-        mode="balanced",
-        replace_text=True,
-    )
-
-    rows = read_rows(output)
-    written_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest == written_manifest
-    assert list(rows[0]) == ["id", "text", "label", "meta"]
-    assert [row["id"] for row in rows] == [row["id"] for row in original_rows]
-    assert [row["label"] for row in rows] == [row["label"] for row in original_rows]
-    assert [row["meta"] for row in rows] == [row["meta"] for row in original_rows]
-    assert "[USER]" in rows[0]["text"]
-    assert "[EMAIL]" in rows[0]["text"]
-    assert "immigrants should leave" in rows[0]["text"]
-    assert "privatized_text" not in rows[0]
-    assert manifest["artifact_type"] == "exact_format_submission"
-    assert manifest["input"]["sha256"]
-    assert manifest["output"]["sha256"]
-    assert manifest["validation"]["valid"] is True
-    assert manifest["metrics"]["row_count"] == 2
-
-
-def test_create_submission_can_use_filtered_presidio_augmentation(
-    monkeypatch,
-    tmp_path,
-):
-    source = tmp_path / "source.csv"
-    output = tmp_path / "submission.csv"
-    manifest_path = tmp_path / "manifest.json"
-    with source.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["id", "text", "label", "meta"])
-        writer.writeheader()
-        writer.writerow(
-            {
-                "id": "1",
-                "text": "i'm going to kill Amy",
-                "label": "nothate",
-                "meta": "keep",
-            }
-        )
-    monkeypatch.setattr(
-        "contextsafe_hsd.submission.load_presidio_analyzer",
-        lambda: FakePresidioAnalyzer(),
-    )
-
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
-        id_col="id",
-        manifest_path=manifest_path,
-        replace_text=True,
-        presidio_augment=True,
-    )
-
-    rows = read_rows(output)
-    assert rows[0]["text"] == "i'm going to kill [PERSON]"
-    assert manifest["presidio_augment"]["accepted_counts_by_type"] == {"PERSON": 1}
-    assert manifest["validation"]["valid"] is True
-
-
-def test_create_submission_requires_replace_text(tmp_path):
-    source = tmp_path / "source.csv"
-    output = tmp_path / "submission.csv"
-    write_source(source)
-
-    with pytest.raises(SubmissionError, match="replace-text"):
-        create_submission(
-            source,
-            output,
-            text_cols=["text"],
-            replace_text=False,
-        )
 
 
 def test_validate_submission_reports_helper_columns(tmp_path):

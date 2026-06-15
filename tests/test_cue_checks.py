@@ -3,7 +3,6 @@ import json
 
 import pytest
 
-from contextsafe_hsd.cli import build_parser
 from contextsafe_hsd.cue_checks import CueCheckError, run_cue_checks
 
 
@@ -24,23 +23,6 @@ def write_rows(path):
         writer = csv.writer(handle)
         writer.writerow(["id", "text", "privatized_text"])
         writer.writerows(rows)
-
-
-def test_check_hsd_cues_command_is_registered():
-    parser = build_parser()
-
-    args = parser.parse_args(
-        [
-            "check-hsd-cues",
-            "--input",
-            "input.csv",
-            "--text-col",
-            "text",
-        ]
-    )
-
-    assert args.command == "check-hsd-cues"
-    assert args.privatized_col == "privatized_text"
 
 
 def test_cue_checks_report_rows_with_loss(tmp_path):

@@ -11,7 +11,6 @@ from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
 from contextsafe_hsd.simple_pipeline import (
     SimplifiedPipelineError,
     run_final_csv_pipeline,
-    run_sanitize_classify,
 )
 
 
@@ -20,10 +19,8 @@ def read_rows(path):
         return list(csv.DictReader(handle))
 
 
-def write_rows(path, *, include_label=True):
-    fieldnames = ["id", "text"]
-    if include_label:
-        fieldnames.append("is_hate_speech")
+def write_rows(path):
+    fieldnames = ["id", "text", "is_hate_speech"]
     rows = [
         {
             "id": "1",
@@ -39,31 +36,7 @@ def write_rows(path, *, include_label=True):
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
-        for row in rows:
-            writer.writerow({column: row[column] for column in fieldnames})
-
-
-class FakeHsdAdvisory:
-    decision_threshold = 0.5
-
-    def __init__(self):
-        self.calls = []
-
-    def status_metadata(self):
-        return {
-            "model_ids": ["fake/hate-a", "fake/hate-b"],
-            "member_count": 2,
-            "device": "cpu",
-        }
-
-    def score_texts_by_model(self, texts, *, batch_size):
-        self.calls.append({"count": len(texts), "batch_size": batch_size})
-        scores_a = [0.9 if "leave" in text else 0.1 for text in texts]
-        scores_b = [0.7 if "leave" in text else 0.2 for text in texts]
-        return {
-            "fake/hate-a": scores_a,
-            "fake/hate-b": scores_b,
-        }
+        writer.writerows(rows)
 
 
 class FakeLocalLlmReview:
@@ -117,13 +90,38 @@ class FakeLocalLlmReview:
         )
 
 
+def test_protect_parser_is_small_and_defaults_to_local_llm_review():
+    parser = build_parser()
+
+    assert set(parser._subparsers._actions[1].choices) == {
+        "protect",
+        "validate-submission",
+        "profile-dataset",
+    }
+    args = parser.parse_args(
+        [
+            "protect",
+            "--input",
+            "input.csv",
+            "--output",
+            "output.csv",
+            "--text-col",
+            "body",
+        ]
+    )
+
+    assert args.command == "protect"
+    assert args.text_col == "body"
+    assert args.llm_review == "local-llm"
+
+
 def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
     source = tmp_path / "input.csv"
     output = tmp_path / "output.csv"
     manifest_path = tmp_path / "manifest.json"
     audit_path = tmp_path / "audit.json"
     fake_runtime = FakeLocalLlmReview()
-    write_rows(source, include_label=True)
+    write_rows(source)
 
     manifest = run_final_csv_pipeline(
         source,
@@ -132,8 +130,7 @@ def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
         id_col="id",
         manifest_path=manifest_path,
         audit_path=audit_path,
-        disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["semantic", "hsd_advisory"],
+        disabled_providers=["presidio", "scrubadub"],
         llm_review="local_llm",
         local_llm_batch_size=4,
         model_factories={"local_llm": lambda _context: fake_runtime},
@@ -158,6 +155,7 @@ def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
     assert manifest["columns"]["output_columns"] == ["id", "text", "is_hate_speech"]
     assert manifest["columns"]["classification_columns"] == []
     assert manifest["validation"]["valid"] is True
+
     classification = manifest["classification"]
     assert classification["backend"] == "local_llm"
     assert classification["status"] == "ok"
@@ -172,173 +170,9 @@ def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
     }
     verification = manifest["stages"]["verification"]
     assert verification["local_llm_hsd_review"]["status"] == "ok"
+    assert "hsd_advisory" not in verification
     assert audit["summary"]["artifact_type"] == "final_exact_csv"
     assert audit["classification_reviews"][0]["label"] == "1"
-    serialized = json.dumps(manifest)
-    assert "mara@example.test" not in serialized
-
-
-def test_sanitize_classify_command_is_registered():
-    parser = build_parser()
-
-    args = parser.parse_args(
-        [
-            "sanitize-classify",
-            "--input",
-            "input.csv",
-            "--output",
-            "output.csv",
-            "--text-col",
-            "body",
-            "--allow-model-download",
-        ]
-    )
-
-    assert args.command == "sanitize-classify"
-    assert args.text_col == "body"
-    assert args.device == "cpu"
-
-
-def test_sanitize_classify_command_maps_local_llm_backend():
-    parser = build_parser()
-
-    args = parser.parse_args(
-        [
-            "sanitize-classify",
-            "--input",
-            "input.csv",
-            "--output",
-            "output.csv",
-            "--hsd-classification-backend",
-            "local-llm",
-            "--progress",
-        ]
-    )
-
-    assert args.hsd_classification_backend.replace("-", "_") == "local_llm"
-    assert args.progress is True
-
-
-def test_sanitize_classify_replaces_text_and_appends_predictions(tmp_path):
-    source = tmp_path / "input.csv"
-    output = tmp_path / "output.csv"
-    manifest_path = tmp_path / "manifest.json"
-    audit_path = tmp_path / "audit.json"
-    fake_runtime = FakeHsdAdvisory()
-    write_rows(source, include_label=True)
-
-    manifest = run_sanitize_classify(
-        source,
-        output,
-        text_col="text",
-        id_col="id",
-        manifest_path=manifest_path,
-        audit_path=audit_path,
-        disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["semantic"],
-        max_model_batch_size=4,
-        model_factories={"hsd_advisory": lambda _context: fake_runtime},
-    )
-
-    rows = read_rows(output)
-    written_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    audit = json.loads(audit_path.read_text(encoding="utf-8"))
-    assert manifest == written_manifest
-    assert list(rows[0]) == [
-        "id",
-        "text",
-        "is_hate_speech",
-        "predicted_is_hate_speech",
-        "hate_speech_score",
-        "hate_speech_model_count",
-    ]
-    assert rows[0]["is_hate_speech"] == "gold-positive"
-    assert rows[0]["predicted_is_hate_speech"] == "1"
-    assert rows[0]["hate_speech_score"] == "0.8000"
-    assert rows[0]["hate_speech_model_count"] == "2"
-    assert rows[1]["predicted_is_hate_speech"] == "0"
-    assert "[USER]" in rows[0]["text"]
-    assert "[EMAIL]" in rows[0]["text"]
-    assert "mara@example.test" not in rows[0]["text"]
-    assert manifest["classification"]["status"] == "ok"
-    assert manifest["classification"]["model_count"] == 2
-    assert manifest["classification"]["prediction_counts"] == {"0": 1, "1": 1}
-    assert manifest["pipeline"] == "auto"
-    assert manifest["preset"] == "analysis"
-    assert set(manifest["stages"]) == {
-        "privacy_detection",
-        "meaning_protection",
-        "verification",
-    }
-    assert manifest["stages"]["privacy_detection"]["pii_assist"]["label"] == (
-        "PII Assist"
-    )
-    verification = manifest["stages"]["verification"]
-    assert verification["hsd_advisory_status"] == "ok"
-    assert verification["hsd_advisory"]["use"] == "analysis_prediction_columns"
-    assert verification["hsd_advisory"]["model_count"] == 2
-    assert verification["author_risk"]["author_or_user_column_exists"] is False
-    assert manifest["sanitization"]["stages"]["verification"][
-        "hsd_advisory_status"
-    ] == "ok"
-    assert manifest["tradeoff"]["identifier_count_after"] == 0
-    assert manifest["tradeoff"]["classification_decision_changed_count"] == 0
-    assert manifest["validation"]["valid"] is True
-    assert audit["summary"]["artifact_type"] == "sanitize_classify_csv"
-    serialized = json.dumps(manifest)
-    assert "mara@example.test" not in serialized
-    assert "Everyone deserves respect" not in serialized
-
-
-def test_sanitize_classify_adds_default_label_col_when_missing(tmp_path):
-    source = tmp_path / "input.csv"
-    output = tmp_path / "output.csv"
-    fake_runtime = FakeHsdAdvisory()
-    write_rows(source, include_label=False)
-
-    run_sanitize_classify(
-        source,
-        output,
-        text_col="text",
-        id_col="id",
-        disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["semantic"],
-        model_factories={"hsd_advisory": lambda _context: fake_runtime},
-    )
-
-    rows = read_rows(output)
-    assert "is_hate_speech" in rows[0]
-    assert rows[0]["is_hate_speech"] == "1"
-
-
-def test_sanitize_classify_local_llm_receives_sanitized_text_only(tmp_path):
-    source = tmp_path / "input.csv"
-    output = tmp_path / "output.csv"
-    fake_runtime = FakeLocalLlmReview()
-    write_rows(source, include_label=False)
-
-    manifest = run_sanitize_classify(
-        source,
-        output,
-        text_col="text",
-        id_col="id",
-        disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["semantic", "hsd_advisory"],
-        hsd_classification_backend="local_llm",
-        local_llm_batch_size=3,
-        model_factories={"local_llm": lambda _context: fake_runtime},
-    )
-
-    rows = read_rows(output)
-    assert rows[0]["is_hate_speech"] == "1"
-    assert rows[1]["is_hate_speech"] == "0"
-    assert manifest["classification"]["backend"] == "local_llm"
-    assert manifest["classification"]["model_id"] == "fake-local-llm"
-    assert manifest["classification"]["parse_count"] == 2
-    assert manifest["stages"]["verification"]["hsd_classification"]["backend"] == (
-        "local_llm"
-    )
-    assert fake_runtime.calls[0]["batch_size"] == 3
     sent_texts = [row["text"] for row in fake_runtime.calls[0]["rows"]]
     assert all("mara@example.test" not in text for text in sent_texts)
     assert "[EMAIL]" in sent_texts[0]
@@ -346,41 +180,41 @@ def test_sanitize_classify_local_llm_receives_sanitized_text_only(tmp_path):
     assert "mara@example.test" not in serialized
 
 
-def test_sanitize_classify_local_llm_required_fails_on_parse_skip(tmp_path):
+def test_final_pipeline_can_skip_local_llm_sidecar(tmp_path):
     source = tmp_path / "input.csv"
     output = tmp_path / "output.csv"
-    write_rows(source, include_label=False)
+    write_rows(source)
+
+    manifest = run_final_csv_pipeline(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        disabled_providers=["presidio", "scrubadub"],
+        llm_review="off",
+    )
+
+    assert manifest["llm_review"] == "off"
+    assert manifest["classification"]["status"] == "skipped"
+    assert manifest["classification"]["skip_reason"] == "disabled"
+    assert read_rows(output)[0]["text"].count("[EMAIL]") == 1
+
+
+def test_final_pipeline_required_llm_fails_on_parse_skip(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    write_rows(source)
 
     with pytest.raises(SimplifiedPipelineError, match="could not be parsed"):
-        run_sanitize_classify(
+        run_final_csv_pipeline(
             source,
             output,
             text_col="text",
             id_col="id",
             require_hate_classification=True,
-            disabled_providers=["presidio", "scrubadub", "gliner"],
-            disabled_models=["semantic", "hsd_advisory"],
-            hsd_classification_backend="local_llm",
+            disabled_providers=["presidio", "scrubadub"],
+            llm_review="local_llm",
             model_factories={
                 "local_llm": lambda _context: FakeLocalLlmReview(skip_all=True)
             },
-        )
-
-
-def test_sanitize_classify_can_require_classifier(tmp_path):
-    source = tmp_path / "input.csv"
-    output = tmp_path / "output.csv"
-    write_rows(source, include_label=False)
-
-    with pytest.raises(SimplifiedPipelineError, match="required"):
-        run_sanitize_classify(
-            source,
-            output,
-            text_col="text",
-            require_hate_classification=True,
-            disabled_providers=["presidio", "scrubadub", "gliner"],
-            disabled_models=[
-                "semantic",
-                "hsd_advisory",
-            ],
         )

@@ -38,7 +38,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v6"
+CSV_CACHE_VERSION = "workbench_csv_result_v7"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -52,7 +52,6 @@ CSV_PROGRESS_PHASES = {
     "baseline": (7, 22, "Privacy baseline"),
     "providers": (22, 40, "PII provider scan"),
     "candidates": (52, 64, "Candidate generation"),
-    "hsd_advisory": (64, 82, "HSD preservation"),
     "local_llm_review": (64, 82, "Local LLM review"),
     "selection": (82, 96, "Final row audit"),
     "summary": (96, 98, "Aggregating report"),
@@ -122,7 +121,7 @@ class CsvPrivatizeRequest(BaseModel):
     disabled_providers: list[str] = Field(default_factory=list)
     disabled_models: list[str] = Field(default_factory=list)
     metric_depth: Literal["fast", "sampled", "deep"] = "fast"
-    hsd_classification_backend: Literal["ml", "local_llm"] = "ml"
+    hsd_classification_backend: Literal["none", "local_llm"] = "none"
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions"
     local_llm_model: str = "openai/gpt-oss-20b"
     local_llm_timeout_seconds: float = 120.0
@@ -864,9 +863,7 @@ NEGATIVE_HATRED_LABELS = frozenset(
     }
 )
 HATRED_SCORE_THRESHOLD = 0.5
-CSV_INSIGHT_DEFAULT_DISABLED_MODELS = frozenset(
-    {"semantic", "local_llm"}
-)
+CSV_INSIGHT_DEFAULT_DISABLED_MODELS = frozenset({"local_llm"})
 
 
 def csv_disabled_models_for_request(request: CsvPrivatizeRequest) -> frozenset[str]:
@@ -895,7 +892,7 @@ def current_auto_pipeline_profile(
         "baseline": "deterministic_balanced",
         "pii_assist": {
             "default_components": ["presidio", "scrubadub"],
-            "removed_components": ["gliner"],
+            "supported_components": ["presidio", "scrubadub"],
         },
         "candidate_ladder": [
             "balanced",
@@ -948,6 +945,11 @@ def parse_float(value: Any) -> float | None:
         return None
 
 
+def metric_float(metric: dict[str, Any], key: str, *, default: float = 1.0) -> float:
+    value = parse_float(metric.get(key))
+    return default if value is None else value
+
+
 def hatred_classification(
     row: dict[str, Any],
     *,
@@ -971,68 +973,16 @@ def hatred_classification(
     }
 
 
-def pipeline_hsd_classification(audit_row: dict[str, Any] | None) -> dict[str, Any]:
-    if not audit_row:
-        return {
-            "classified": False,
-            "is_hatred": None,
-            "score": None,
-            "original_score": None,
-            "source": "pipeline_hsd_advisory",
-        }
-    chosen_name = str(audit_row.get("chosen_candidate", "") or "")
-    scores = audit_row.get("scores") or []
-    chosen_score = None
-    for score in scores:
-        if str(score.get("name", "") or "") == chosen_name:
-            chosen_score = score
-            break
-    if chosen_score is None:
-        return {
-            "classified": False,
-            "is_hatred": None,
-            "score": None,
-            "original_score": None,
-            "source": "pipeline_hsd_advisory",
-        }
-    hsd = (chosen_score or {}).get("metrics", {}).get("hsd_advisory") or {}
-    candidate_score = parse_float(hsd.get("candidate_score"))
-    original_score = parse_float(hsd.get("original_score"))
-    candidate_max_score = parse_float(hsd.get("candidate_max_score"))
-    original_max_score = parse_float(hsd.get("original_max_score"))
-    positive_model_count = hsd.get("candidate_positive_model_count")
-    model_count = hsd.get("model_count")
-    threshold = parse_float(hsd.get("decision_threshold"))
-    if threshold is None:
-        threshold = HATRED_SCORE_THRESHOLD
-    decision = str(hsd.get("candidate_decision", "") or "").strip().lower()
-    if isinstance(positive_model_count, int):
-        is_hatred = positive_model_count > 0
-    elif decision == "positive":
-        is_hatred = True
-    elif decision == "negative":
-        is_hatred = False
-    elif candidate_score is not None:
-        is_hatred = candidate_score >= threshold
-    elif original_score is not None:
-        is_hatred = original_score >= threshold
-    else:
-        is_hatred = None
+def skipped_hsd_classification(audit_row: dict[str, Any] | None) -> dict[str, Any]:
+    _ = audit_row
     return {
-        "classified": is_hatred is not None,
-        "is_hatred": is_hatred,
-        "score": (
-            candidate_max_score
-            if candidate_max_score is not None
-            else candidate_score
-            if candidate_score is not None
-            else original_score
-        ),
-        "original_score": original_score,
-        "original_max_score": original_max_score,
-        "positive_model_count": positive_model_count,
-        "model_count": model_count,
-        "source": "pipeline_hsd_advisory",
+        "classified": False,
+        "is_hatred": None,
+        "score": None,
+        "original_score": None,
+        "source": "not_classified",
+        "backend": "none",
+        "status": "skipped",
     }
 
 
@@ -1200,14 +1150,10 @@ def context_preservation_status(
     required_tags = sorted(original_tags & CONTEXT_PRESERVATION_TAGS)
     preserved_tags = sorted((original_tags & protected_tags) & CONTEXT_PRESERVATION_TAGS)
     lost_tags = sorted((original_tags - protected_tags) & CONTEXT_PRESERVATION_TAGS)
-    target_retention = float(metric.get("target_cue_retention", 1.0) or 1.0)
-    target_category_retention = float(
-        metric.get("target_category_retention", 1.0) or 1.0
-    )
-    utility_retention = float(metric.get("utility_cue_retention", 1.0) or 1.0)
-    character_retention = float(
-        metric.get("character_utility_retention", 1.0) or 1.0
-    )
+    target_retention = metric_float(metric, "target_cue_retention")
+    target_category_retention = metric_float(metric, "target_category_retention")
+    utility_retention = metric_float(metric, "utility_cue_retention")
+    character_retention = metric_float(metric, "character_utility_retention")
     target_applies = "protected_target" in original_tags or int(
         metric.get("target_cue_count_before", 0) or 0
     ) > 0
@@ -1422,7 +1368,7 @@ def platform_insight_report(
                 score_col=score_col,
             )
         else:
-            classification = pipeline_hsd_classification(audit_row)
+            classification = skipped_hsd_classification(audit_row)
         safeguard = safeguard_card(
             classification=classification,
             leakage=leakage,
@@ -1543,7 +1489,7 @@ def platform_insight_report(
                 else
                 "csv_post_classification_columns"
                 if uses_explicit_classification
-                else "pipeline_hsd_advisory"
+                else "not_classified"
             ),
             "display_name": (
                 "Local LLM HSD review"
@@ -1551,7 +1497,7 @@ def platform_insight_report(
                 else
                 "Post-classification hatred"
                 if uses_explicit_classification
-                else "HSD model flags"
+                else "No HSD labels"
             ),
             "score_basis": (
                 "binary_structured_hsd_label_no_confidence"
@@ -1559,11 +1505,15 @@ def platform_insight_report(
                 else
                 "csv_score_or_label_columns"
                 if uses_explicit_classification
-                else "any_registered_hsd_model_positive_for_chosen_candidate"
+                else "explicit_csv_or_local_llm_only"
             ),
             "backend": (classification_summary or {}).get(
                 "backend",
-                "local_llm" if uses_local_llm_reviews else "ml",
+                "local_llm"
+                if uses_local_llm_reviews
+                else "csv"
+                if uses_explicit_classification
+                else "none",
             ),
             "model_id": (classification_summary or {}).get("model_id"),
             "parse_count": (classification_summary or {}).get("parse_count"),
@@ -1590,7 +1540,7 @@ def platform_insight_report(
             "total_model_votes": sum(model_counts),
             "model_vote_rule": None
             if uses_explicit_classification or uses_local_llm_reviews
-            else "one_or_more_registered_hsd_models_positive",
+            else None,
         },
         "target_groups": {
             "rows_with_target_group": target_rows,
@@ -1632,7 +1582,7 @@ def platform_insight_report(
                 else
                 "post_classification_hatred_positive"
                 if uses_explicit_classification
-                else "pipeline_hsd_advisory_positive"
+                else "not_classified"
             ),
             "auto_moderation": False,
             "message": (
@@ -1880,8 +1830,8 @@ def privatize(request: PrivatizeRequest) -> dict[str, Any]:
         "available": False,
         "status": "removed",
         "message": (
-            "Workbench HF HSD classifier scoring was removed from the final "
-            "runtime; use sidecar local LLM review in the CSV pipeline."
+            "Additional HSD classifier scoring is not part of the final runtime; "
+            "use sidecar local LLM review in the CSV pipeline."
         ),
     }
     llm_guidance = llm_review_guidance(metric=metric, cue=cue, context=context)
@@ -2102,9 +2052,10 @@ def build_csv_privatize_response(
             "models": dict(sorted(context.model_load_counts.items())),
         }
         classification = {
-            "backend": request.hsd_classification_backend,
-            "status": "using_pipeline_hsd_advisory",
-            "source": "pipeline_hsd_advisory",
+            "backend": "none",
+            "status": "skipped",
+            "source": "not_classified",
+            "reason": "no_csv_labels_or_local_llm_review",
             "pii_suggestions_applied": False,
         }
         if request.hsd_classification_backend == "local_llm":

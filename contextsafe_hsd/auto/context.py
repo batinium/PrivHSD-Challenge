@@ -8,7 +8,6 @@ import importlib.util
 from typing import Any, Callable, Mapping
 
 from contextsafe_hsd.span_providers.base import SpanProvider
-from contextsafe_hsd.span_providers.gliner import GlinerProviderError, load_gliner_provider
 from contextsafe_hsd.span_providers.presidio import PresidioAugmentError, PresidioSpanProvider, load_presidio_analyzer
 from contextsafe_hsd.span_providers.scrubadub_provider import (
     ScrubadubProviderError,
@@ -16,12 +15,7 @@ from contextsafe_hsd.span_providers.scrubadub_provider import (
 )
 
 from .config import AutoPipelineConfig
-from .model_registry import (
-    discover_gliner,
-    discover_hsd_advisory,
-    discover_local_llm,
-    discover_semantic_models,
-)
+from .model_registry import discover_local_llm
 
 
 ProviderFactory = Callable[["AutoPipelineContext"], SpanProvider]
@@ -77,9 +71,6 @@ class AutoPipelineContext:
         self.provider_status["deterministic"] = {"status": "ready", "kind": "provider"}
         self._discover_provider("presidio", "presidio_analyzer")
         self._discover_provider("scrubadub", "scrubadub")
-        self.provider_status["gliner"] = discover_gliner(self.config)
-        self.model_status["semantic"] = discover_semantic_models(self.config)
-        self.model_status["hsd_advisory"] = discover_hsd_advisory(self.config)
         self.model_status["local_llm"] = discover_local_llm(self.config)
         for name in self.provider_factories:
             self.provider_status[name] = {
@@ -144,18 +135,11 @@ class AutoPipelineContext:
             )
         if name == "scrubadub":
             return load_scrubadub_provider()
-        if name == "gliner":
-            if self.config.gliner_model:
-                return load_gliner_provider(
-                    self.config.gliner_model,
-                    profile=self.config.gliner_profile,
-                )
-            return load_gliner_provider(profile=self.config.gliner_profile)
         raise ValueError(f"unknown auto provider {name!r}")
 
     def optional_span_providers(self) -> list[SpanProvider]:
         providers = []
-        for name in ("presidio", "scrubadub", "gliner", *self.provider_factories):
+        for name in ("presidio", "scrubadub", *self.provider_factories):
             provider = self.ensure_provider(name)
             if provider is not None:
                 providers.append(provider)
@@ -186,17 +170,6 @@ class AutoPipelineContext:
     def _load_model(self, name: str) -> Any:
         if name in self.model_factories:
             return self.model_factories[name](self)
-        if name == "hsd_advisory":
-            from contextsafe_hsd.models.hsd_advisory_runtime import HsdAdvisoryEnsembleRuntime
-
-            return HsdAdvisoryEnsembleRuntime.from_model_ids(
-                self.config.hsd_advisory_models,
-                allow_model_download=self.config.allow_model_download,
-                device=self.config.device,
-                decision_threshold=self.config.hsd_advisory_decision_threshold,
-                large_drop_threshold=self.config.hsd_advisory_large_drop_threshold,
-                max_abs_drift=self.config.hsd_advisory_max_abs_drift,
-            )
         if name == "local_llm":
             from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
                 LocalLlmHsdReviewRuntime,
@@ -210,9 +183,6 @@ class AutoPipelineContext:
                 require_structured_output=self.config.local_llm_require_structured_output,
             )
         raise ValueError(f"unknown auto model {name!r}")
-
-    def ensure_hsd_advisory(self) -> Any | None:
-        return self.ensure_model("hsd_advisory")
 
     def ensure_local_llm_review(self) -> Any | None:
         return self.ensure_model("local_llm")
@@ -229,7 +199,6 @@ class AutoPipelineContext:
 
 __all__ = [
     "AutoPipelineContext",
-    "GlinerProviderError",
     "PresidioAugmentError",
     "ScrubadubProviderError",
 ]

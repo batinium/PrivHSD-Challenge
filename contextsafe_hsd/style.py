@@ -226,3 +226,36 @@ def scrub_style(text: str) -> StyleScrubResult:
             "style_counts_by_type": dict(sorted(counts.items())),
         },
     )
+
+
+STYLE_RISK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("emoji", EMOJI_PATTERN),
+    ("hashtag", HASHTAG_PATTERN),
+    ("style_marker", STYLE_MARKER_PATTERN),
+    ("symbol_burst", SYMBOL_BURST_PATTERN),
+    ("repeated_punctuation", REPEATED_PUNCTUATION_PATTERN),
+    ("repeated_letters", REPEATED_LETTER_PATTERN),
+)
+
+
+def style_risk_counts(text: str) -> dict[str, int]:
+    counts = Counter(
+        name
+        for name, pattern in STYLE_RISK_PATTERNS
+        for _match in pattern.finditer(text)
+    )
+    signature_count = 0
+    for pattern in SIGNATURE_PATTERNS:
+        signature_count += len(pattern.findall(text))
+    if signature_count:
+        counts["signature"] += signature_count
+    return dict(sorted(counts.items()))
+
+
+def style_risk_count(text: str) -> int:
+    return sum(style_risk_counts(text).values())
+
+
+def length_drift(original: str, candidate: str) -> float:
+    denominator = max(len(original), 1)
+    return abs(len(candidate) - len(original)) / denominator

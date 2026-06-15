@@ -7,7 +7,6 @@ from typing import Any, Iterable
 
 
 PII_ASSIST_COMPONENTS = ("presidio", "scrubadub")
-EXPLICIT_PII_ASSIST_COMPONENTS = ("gliner",)
 AUTHOR_COLUMN_NAMES = frozenset(
     {
         "author",
@@ -21,9 +20,6 @@ AUTHOR_COLUMN_NAMES = frozenset(
 )
 MEANING_PROTECTION_REJECTION_REASONS = frozenset(
     {"target_cue_loss", "utility_cue_loss"}
-)
-HSD_ADVISORY_REJECTION_REASONS = frozenset(
-    {"hsd_advisory_large_drop", "hsd_advisory_decision_drift"}
 )
 
 
@@ -55,10 +51,6 @@ def pii_assist_summary(
     components: dict[str, str] = {}
     component_details: dict[str, dict[str, Any]] = {}
     component_names = list(PII_ASSIST_COMPONENTS)
-    for name in EXPLICIT_PII_ASSIST_COMPONENTS:
-        status_name = status_value(provider_statuses, name)
-        if status_name != "disabled":
-            component_names.append(name)
     for name in component_names:
         status = provider_statuses.get(name, {})
         status_name = str(status.get("status", "unknown"))
@@ -115,56 +107,6 @@ def author_risk_hook(
     }
 
 
-def hsd_advisory_summary(
-    model_statuses: dict[str, dict[str, Any]],
-    model_load_counts: Counter[str],
-    audit_counters: Counter[str],
-    *,
-    comparison_count: int,
-    rejection_counts: Counter[str],
-) -> dict[str, Any]:
-    status = model_statuses.get("hsd_advisory", {})
-    component_status = str(status.get("status", "unknown"))
-    runtime_errors = {
-        key: int(value)
-        for key, value in audit_counters.items()
-        if key.startswith("model_runtime_error:hsd_advisory:")
-    }
-    load_count = int(model_load_counts.get("hsd_advisory", 0))
-    summary: dict[str, Any] = {
-        "component_status": component_status,
-        "load_count": load_count,
-        "candidate_comparisons": comparison_count,
-        "rejection_counts": dict(
-            sorted(
-                (reason, int(count))
-                for reason, count in rejection_counts.items()
-                if reason in HSD_ADVISORY_REJECTION_REASONS
-            )
-        ),
-    }
-    if runtime_errors:
-        return {
-            **summary,
-            "status": "skipped",
-            "skipped_reason": "model_runtime_error",
-            "runtime_errors": runtime_errors,
-        }
-    if comparison_count:
-        return {**summary, "status": "ok"}
-    if component_status in {"available", "ready"}:
-        return {
-            **summary,
-            "status": "skipped",
-            "skipped_reason": "no_candidate_drift_check_required",
-        }
-    return {
-        **summary,
-        "status": "skipped",
-        "skipped_reason": component_status,
-    }
-
-
 def build_stage_summary(
     *,
     config: Any,
@@ -183,7 +125,6 @@ def build_stage_summary(
     candidate_name_counts: Counter[str],
     rejected_candidate_count: int,
     rejection_counts: Counter[str],
-    hsd_advisory_comparison_count: int,
     residual_review_required_count: int,
     residual_direct_cleanup_count: int,
     author_group_masking: dict[str, Any],
@@ -195,13 +136,6 @@ def build_stage_summary(
             for reason, count in rejection_counts.items()
             if reason in MEANING_PROTECTION_REJECTION_REASONS
         }
-    )
-    hsd_summary = hsd_advisory_summary(
-        model_statuses,
-        model_load_counts,
-        audit_counters,
-        comparison_count=hsd_advisory_comparison_count,
-        rejection_counts=rejection_counts,
     )
     privacy_ladder_order = [
         "deterministic_baseline",
@@ -273,8 +207,6 @@ def build_stage_summary(
             "residual_review_required_rows": residual_review_required_count,
             "privacy_warning_counts": metrics.get("privacy_warning_counts", {}),
             "overmasking_warning_counts": metrics.get("overmasking_warning_counts", {}),
-            "hsd_advisory_status": hsd_summary["status"],
-            "hsd_advisory": hsd_summary,
             "author_group_masking": author_group_masking,
             "metadata_leakage_status": "not_run",
             "metadata_leakage": {

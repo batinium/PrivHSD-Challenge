@@ -11,13 +11,7 @@ AUTO_MODES = frozenset({"auto"})
 AUTO_CAPABLE_MODES = frozenset({"auto", "utility", "balanced", "privacy"})
 DEVICE_POLICIES = frozenset({"auto", "cpu", "cuda"})
 AUDIT_LEVELS = frozenset({"summary", "row", "debug"})
-GLINER_PROFILES = frozenset({"general", "pii"})
-HSD_CLASSIFICATION_BACKENDS = frozenset({"ml", "local_llm"})
-DEFAULT_HSD_ADVISORY_MODEL = "facebook/roberta-hate-speech-dynabench-r4-target"
-DEFAULT_HSD_ADVISORY_MODELS = (
-    DEFAULT_HSD_ADVISORY_MODEL,
-    "cardiffnlp/twitter-roberta-base-hate-latest",
-)
+HSD_CLASSIFICATION_BACKENDS = frozenset({"none", "local_llm"})
 
 
 @dataclass(frozen=True)
@@ -38,14 +32,7 @@ class AutoPipelineConfig:
     disabled_models: frozenset[str] = field(default_factory=frozenset)
     audit_level: str = "summary"
     provider_language: str = "en"
-    gliner_model: str | None = None
-    gliner_profile: str = "general"
-    hsd_advisory_model: str = DEFAULT_HSD_ADVISORY_MODEL
-    hsd_advisory_models: tuple[str, ...] = DEFAULT_HSD_ADVISORY_MODELS
-    hsd_advisory_decision_threshold: float = 0.5
-    hsd_advisory_large_drop_threshold: float = 0.25
-    hsd_advisory_max_abs_drift: float = 0.35
-    hsd_classification_backend: str = "ml"
+    hsd_classification_backend: str = "none"
     generalize_targets: bool | None = False
     style_scrub: bool = False
     official_mode: bool = True
@@ -62,11 +49,6 @@ class AutoPipelineConfig:
     author_group_min_author_rows: int = 2
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "gliner_profile",
-            self.gliner_profile.strip().lower(),
-        )
         backend = self.hsd_classification_backend.strip().lower().replace("-", "_")
         object.__setattr__(self, "hsd_classification_backend", backend)
         disabled_models = frozenset(
@@ -74,8 +56,6 @@ class AutoPipelineConfig:
             for model in self.disabled_models
             if model and model.strip()
         )
-        if backend == "local_llm":
-            disabled_models = disabled_models | {"hsd_advisory"}
         object.__setattr__(self, "disabled_models", disabled_models)
         object.__setattr__(
             self,
@@ -99,16 +79,6 @@ class AutoPipelineConfig:
                 "author_group_col",
                 self.author_group_col.strip() or None,
             )
-        normalized_hsd_models = tuple(
-            dict.fromkeys(
-                model.strip()
-                for model in self.hsd_advisory_models
-                if model and model.strip()
-            )
-        )
-        if not normalized_hsd_models and self.hsd_advisory_model:
-            normalized_hsd_models = (self.hsd_advisory_model.strip(),)
-        object.__setattr__(self, "hsd_advisory_models", normalized_hsd_models)
         if self.baseline_mode not in {"utility", "balanced", "privacy"}:
             raise ValueError("baseline_mode must be utility, balanced, or privacy")
         if self.metric_depth not in METRIC_DEPTHS:
@@ -117,8 +87,6 @@ class AutoPipelineConfig:
             raise ValueError(f"device must be one of {sorted(DEVICE_POLICIES)}")
         if self.audit_level not in AUDIT_LEVELS:
             raise ValueError(f"audit_level must be one of {sorted(AUDIT_LEVELS)}")
-        if self.gliner_profile not in GLINER_PROFILES:
-            raise ValueError(f"gliner_profile must be one of {sorted(GLINER_PROFILES)}")
         if self.hsd_classification_backend not in HSD_CLASSIFICATION_BACKENDS:
             raise ValueError(
                 "hsd_classification_backend must be one of "
@@ -128,12 +96,6 @@ class AutoPipelineConfig:
             raise ValueError("max_model_batch_size must be positive")
         if self.max_provider_rows is not None and self.max_provider_rows < 0:
             raise ValueError("max_provider_rows must be non-negative")
-        if not 0.0 < self.hsd_advisory_decision_threshold < 1.0:
-            raise ValueError("hsd_advisory_decision_threshold must be between 0 and 1")
-        if self.hsd_advisory_large_drop_threshold < 0.0:
-            raise ValueError("hsd_advisory_large_drop_threshold must be non-negative")
-        if self.hsd_advisory_max_abs_drift < 0.0:
-            raise ValueError("hsd_advisory_max_abs_drift must be non-negative")
         if self.local_llm_timeout_seconds <= 0.0:
             raise ValueError("local_llm_timeout_seconds must be positive")
         if self.local_llm_batch_size < 1:

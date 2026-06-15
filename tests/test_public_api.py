@@ -1,8 +1,8 @@
 import csv
 from pathlib import Path
 
-import contextsafe_hsd as hsd
 import contextsafe_hsd
+import contextsafe_hsd as hsd
 
 
 def write_rows(path: Path) -> None:
@@ -18,55 +18,31 @@ def read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def test_top_level_process_csv_api_writes_output(tmp_path):
+def test_top_level_final_pipeline_and_validation_api(tmp_path):
     source = tmp_path / "input.csv"
     output = tmp_path / "output.csv"
-    audit = tmp_path / "audit.json"
-    write_rows(source)
-
-    summary = hsd.process_csv(
-        source,
-        output,
-        text_col="text",
-        id_col="id",
-        audit_path=audit,
-        mode="balanced",
-    )
-
-    rows = read_rows(output)
-    assert summary["output"] == str(output)
-    assert audit.exists()
-    assert [row["id"] for row in rows] == ["1", "2"]
-    assert "privatized_text" in rows[0]
-    assert "[USER]" in rows[0]["privatized_text"]
-    assert "Immigrants" in rows[1]["privatized_text"]
-
-
-def test_top_level_create_and_validate_submission_api(tmp_path):
-    source = tmp_path / "input.csv"
-    submission = tmp_path / "submission.csv"
     manifest = tmp_path / "manifest.json"
     validation = tmp_path / "validation.json"
     write_rows(source)
 
-    result = hsd.create_submission(
+    result = hsd.run_final_csv_pipeline(
         source,
-        submission,
-        text_cols=["text"],
+        output,
+        text_col="text",
         id_col="id",
         manifest_path=manifest,
-        replace_text=True,
-        mode="balanced",
+        llm_review="off",
+        disabled_providers=["presidio", "scrubadub"],
     )
     report = hsd.validate_submission(
         source,
-        submission,
+        output,
         text_cols=["text"],
         id_col="id",
         output_path=validation,
     )
 
-    rows = read_rows(submission)
+    rows = read_rows(output)
     assert result["validation"]["valid"] is True
     assert report["valid"] is True
     assert manifest.exists()
@@ -76,6 +52,6 @@ def test_top_level_create_and_validate_submission_api(tmp_path):
 
 
 def test_contextsafe_hsd_exposes_public_api():
-    assert hsd.process_csv is contextsafe_hsd.process_csv
-    assert hsd.create_submission is contextsafe_hsd.create_submission
+    assert hsd.run_final_csv_pipeline is contextsafe_hsd.run_final_csv_pipeline
+    assert hsd.validate_submission is contextsafe_hsd.validate_submission
     assert hsd.privatize_text is contextsafe_hsd.privatize_text

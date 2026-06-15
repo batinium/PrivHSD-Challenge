@@ -1,7 +1,5 @@
 import csv
-import json
 
-from contextsafe_hsd.csv_pipeline import process_csv
 from contextsafe_hsd.metrics import row_metric
 from contextsafe_hsd.pipeline import PrivatizerConfig, privatize_text
 from contextsafe_hsd.style import scrub_style
@@ -64,10 +62,8 @@ def test_privatizer_style_scrub_preserves_privacy_placeholders():
     )
 
 
-def test_process_csv_accepts_style_scrub_flag(tmp_path):
+def test_privatizer_accepts_style_scrub_flag_for_csv_rows(tmp_path):
     source = tmp_path / "input.csv"
-    output = tmp_path / "output.csv"
-    audit = tmp_path / "audit.json"
     with source.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=["id", "text", "label"])
         writer.writeheader()
@@ -79,18 +75,12 @@ def test_process_csv_accepts_style_scrub_flag(tmp_path):
             }
         )
 
-    summary = process_csv(
-        source,
-        output,
-        text_col="text",
-        id_col="id",
-        audit_path=audit,
-        style_scrub=True,
+    rows = read_csv_rows(source)
+    result = privatize_text(
+        rows[0]["text"],
+        PrivatizerConfig(mode="balanced", style_scrub=True),
     )
 
-    rows = read_csv_rows(output)
-    audit_data = json.loads(audit.read_text(encoding="utf-8"))
-    assert summary["style_scrub"] is True
-    assert rows[0]["privatized_text"] == "[USER] hates refugees! [TAG]"
-    assert audit_data["rows"][0]["metrics"]["style_scrub_enabled"] is True
-    assert audit_data["rows"][0]["metrics"]["style_transform_count"] > 0
+    assert result.text == "[USER] hates refugees! [TAG]"
+    assert result.metrics["style_scrub_enabled"] is True
+    assert result.metrics["style_transform_count"] > 0

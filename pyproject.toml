@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "contextsafe-hsd"
 version = "0.1.0"
 description = "ContextSafe-HSD privacy-preserving text privatization pipeline for hate speech detection datasets."
-readme = "readme.md"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["better-profanity>=0.7.0"]
 keywords = ["privacy", "hate-speech-detection", "nlp", "text-anonymization"]
@@ -19,39 +19,12 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-author-risk = ["scikit-learn>=1.3"]
-benchmark = ["scikit-learn>=1.3"]
-classifier = ["scikit-learn>=1.3"]
-data-prep = ["pyarrow>=15"]
-dpmlm = ["dpmlm>=1.1.2"]
-hf-utility = ["transformers>=4.40", "torch>=2.1"]
 presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
-gliner = ["gliner", "torch", "transformers"]
 scrubadub = ["scrubadub"]
-weak-supervision = ["skweak", "cleanlab"]
-semantic = ["sentence-transformers", "bert-score"]
-hsd-advisory = ["transformers", "torch", "detoxify"]
-dp-training = ["opacus"]
-metadata-privacy = ["diffprivlib", "opendp"]
-token-actions = ["scikit-learn>=1.3"]
-token-policy = [
-  "transformers>=4.40",
-  "torch>=2.1",
-  "datasets>=2.19",
-  "evaluate>=0.4",
-  "seqeval>=1.2",
-]
 workbench = ["fastapi>=0.111", "uvicorn[standard]>=0.30"]
 dev = [
-  "dateparser>=1.4",
-  "Faker>=40",
-  "nltk>=3.9",
-  "pyflakes>=3.4",
   "pytest>=9.0",
-  "reportlab>=4.5",
   "ruff>=0.15",
-  "textblob>=0.15",
-  "vulture>=2.16",
 ]
 spacy-models = [
   "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",

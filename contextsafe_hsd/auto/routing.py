@@ -6,8 +6,8 @@ import re
 from typing import Any
 
 from contextsafe_hsd.metrics import row_metric_fast
-from contextsafe_hsd.rerank import style_risk_count
 from contextsafe_hsd.row_ids import report_row_id
+from contextsafe_hsd.style import style_risk_count
 
 from .row_state import RowRiskProfile, RowRoutingDecision
 
@@ -21,6 +21,13 @@ QUASI_CONTEXT_PATTERN = re.compile(
     r"[A-Z][A-Za-z0-9.'-]{2,}(?:\s+[A-Z][A-Za-z0-9.'-]{2,}){0,4}\b"
 )
 TARGET_AMBIGUITY_PATTERN = re.compile(r"(?:#\w{5,}|[A-Za-z0-9]\s+[A-Za-z0-9]\s+[A-Za-z0-9])")
+
+
+def metric_float(metrics: dict[str, Any], key: str, default: float) -> float:
+    value = metrics.get(key, default)
+    if value is None:
+        return default
+    return float(value)
 
 
 def row_id_for(
@@ -64,8 +71,8 @@ def cheap_profile(
         model_reasons.append("high_style_risk")
 
     target_count = int(metrics.get("target_cue_count_before", 0) or 0)
-    target_retention = float(metrics.get("target_cue_retention", 1.0) or 1.0)
-    utility_retention = float(metrics.get("utility_cue_retention", 1.0) or 1.0)
+    target_retention = metric_float(metrics, "target_cue_retention", 1.0)
+    utility_retention = metric_float(metrics, "utility_cue_retention", 1.0)
     if target_count and target_retention < 1.0:
         model_reasons.append("target_cue_loss_risk")
         review_reasons.append("target_cue_loss_risk")

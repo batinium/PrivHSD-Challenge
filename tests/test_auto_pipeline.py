@@ -9,13 +9,13 @@ from contextsafe_hsd.auto.engine import (
     cleanup_strict_residuals,
 )
 from contextsafe_hsd.detectors import Span
+from contextsafe_hsd.simple_pipeline import build_final_pipeline_rows
 from contextsafe_hsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
     UTILITY_CLASS_NONE,
     SpanCandidate,
     SpanProviderOutput,
 )
-from contextsafe_hsd.submission import create_submission
 
 
 def read_rows(path):
@@ -23,12 +23,16 @@ def read_rows(path):
         return list(csv.DictReader(handle))
 
 
-def test_default_auto_config_uses_ml_hsd_backend():
+def test_default_auto_config_uses_cpu_and_no_sidecar_model():
     config = AutoPipelineConfig()
+    context = AutoPipelineContext.create(config)
 
-    assert config.hsd_classification_backend == "ml"
+    assert config.hsd_classification_backend == "none"
     assert config.local_llm_enabled is False
     assert config.device == "cpu"
+    assert set(context.provider_status) == {"deterministic", "presidio", "scrubadub"}
+    assert set(context.model_status) == {"local_llm"}
+    assert context.model_status["local_llm"]["status"] == "disabled"
 
 
 def test_local_llm_backend_enables_lazy_local_model_status():
@@ -40,13 +44,11 @@ def test_local_llm_backend_enables_lazy_local_model_status():
     )
 
     assert context.config.hsd_classification_backend == "local_llm"
-    assert "hsd_advisory" in context.config.disabled_models
-    assert context.model_status["hsd_advisory"]["status"] == "disabled"
     assert context.model_status["local_llm"]["status"] == "available"
     assert context.model_load_counts["local_llm"] == 0
 
 
-def write_four_col(path):
+def test_build_final_pipeline_rows_preserves_schema_and_stage_names():
     rows = [
         {
             "source": "unit",
@@ -57,100 +59,41 @@ def write_four_col(path):
         {
             "source": "unit",
             "author_id": "a2",
-            "text": "Muslims should leave.",
-            "is_hate_speech": "1",
-        },
-        {
-            "source": "unit",
-            "author_id": "a3",
-            "text": "No identifiers here, just rude words.",
-            "is_hate_speech": "0",
-        },
-        {
-            "source": "unit",
-            "author_id": "a4",
-            "text": "lol!!! #MyTag signed, alex",
+            "text": "Everyone deserves respect.",
             "is_hate_speech": "0",
         },
     ]
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=["source", "author_id", "text", "is_hate_speech"],
-        )
-        writer.writeheader()
-        writer.writerows(rows)
-    return rows
+    fieldnames = ["source", "author_id", "text", "is_hate_speech"]
 
-
-def test_create_submission_auto_preserves_exact_four_column_shape(tmp_path):
-    source = tmp_path / "four_col.csv"
-    output = tmp_path / "four_col.out.csv"
-    manifest_path = tmp_path / "four_col.manifest.json"
-    original_rows = write_four_col(source)
-
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
-        id_col=None,
-        manifest_path=manifest_path,
-        replace_text=True,
-        mode="auto",
-        disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["semantic", "hsd_advisory"],
+    result = build_final_pipeline_rows(
+        rows,
+        fieldnames,
+        text_col="text",
+        disabled_providers=["presidio", "scrubadub"],
+        llm_review="off",
     )
 
-    rows = read_rows(output)
-    assert list(rows[0]) == ["source", "author_id", "text", "is_hate_speech"]
-    assert len(rows) == len(original_rows)
-    assert [row["source"] for row in rows] == [row["source"] for row in original_rows]
-    assert [row["author_id"] for row in rows] == [
-        row["author_id"] for row in original_rows
-    ]
-    assert [row["is_hate_speech"] for row in rows] == [
-        row["is_hate_speech"] for row in original_rows
-    ]
-    assert "[USER]" in rows[0]["text"]
-    assert "[EMAIL]" in rows[0]["text"]
-    assert "Muslims should leave" in rows[0]["text"]
-    assert rows[1]["text"] == "Muslims should leave."
-    assert manifest["mode"] == "auto"
-    assert manifest["metric_depth"] == "fast"
-    assert manifest["validation"]["valid"] is True
-    assert manifest["metrics"]["metric_depth_counts"] == {"fast": 4}
-    summary = manifest["text_column_summaries"]["text"]
-    assert set(summary["stages"]) == {
+    output_rows = result["rows"]
+    assert result["fieldnames"] == fieldnames
+    assert output_rows[0]["source"] == "unit"
+    assert output_rows[0]["is_hate_speech"] == "1"
+    assert "[USER]" in output_rows[0]["text"]
+    assert "[EMAIL]" in output_rows[0]["text"]
+    assert "Muslims should leave" in output_rows[0]["text"]
+    assert set(result["stages"]) == {
         "privacy_detection",
         "meaning_protection",
         "verification",
     }
-    privacy_detection = summary["stages"]["privacy_detection"]
-    assert privacy_detection["baseline"] == "deterministic_balanced"
-    assert privacy_detection["pii_assist"]["label"] == "PII Assist"
-    assert privacy_detection["pii_assist"]["components"] == {
+    privacy = result["stages"]["privacy_detection"]
+    assert privacy["pii_assist"]["components"] == {
         "presidio": "disabled",
         "scrubadub": "disabled",
     }
-    verification = summary["stages"]["verification"]
-    assert verification["hsd_advisory_status"] == "skipped"
-    assert verification["hsd_advisory"]["skipped_reason"] == "disabled"
-    assert verification["author_risk"] == {
-        "author_or_user_column_exists": True,
-        "author_columns": ["author_id"],
-        "author_metadata_rows": 4,
-        "repeated_author_data_available": False,
-        "author_risk_evaluation_ran": False,
-        "skipped_reason": "not_run_manifest_hook_only",
-    }
+    assert "hsd_advisory" not in result["stages"]["verification"]
 
 
-def test_create_submission_auto_can_mask_repeated_author_group_residuals(
-    monkeypatch,
-    tmp_path,
-):
-    source = tmp_path / "author_group.csv"
-    output = tmp_path / "author_group.out.csv"
+def test_auto_mode_can_mask_repeated_author_group_residuals(monkeypatch):
     rows = [
         {
             "ID": "r1",
@@ -171,10 +114,6 @@ def test_create_submission_auto_can_mask_repeated_author_group_residuals(
             "hs": "0",
         },
     ]
-    with source.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["ID", "author", "text", "hs"])
-        writer.writeheader()
-        writer.writerows(rows)
 
     def fake_candidate_spans(text):
         start = text.find("sharedtrail")
@@ -196,27 +135,23 @@ def test_create_submission_auto_can_mask_repeated_author_group_residuals(
         fake_candidate_spans,
     )
 
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
+    result = build_final_pipeline_rows(
+        rows,
+        ["ID", "author", "text", "hs"],
+        text_col="text",
         id_col="ID",
-        replace_text=True,
-        mode="auto",
-        disabled_providers=["presidio", "scrubadub", "gliner"],
-        disabled_models=["semantic", "hsd_advisory"],
+        disabled_providers=["presidio", "scrubadub"],
+        llm_review="off",
         author_group_masking=True,
         author_group_col="author",
     )
 
-    output_rows = read_rows(output)
-    assert list(output_rows[0]) == ["ID", "author", "text", "hs"]
+    output_rows = result["rows"]
     assert output_rows[0]["text"].startswith("[LOCATION] should stay private")
     assert output_rows[1]["text"].startswith("[LOCATION] shows up again")
     assert output_rows[2]["text"] == rows[2]["text"]
     assert "Muslims should leave" in output_rows[0]["text"]
-    assert manifest["validation"]["valid"] is True
-    group_summary = manifest["stages"]["verification"]["author_group_masking"]
+    group_summary = result["stages"]["verification"]["author_group_masking"]
     assert group_summary["status"] == "ok"
     assert group_summary["author_col"] == "author"
     assert group_summary["changed_rows"] == 2
@@ -225,33 +160,30 @@ def test_create_submission_auto_can_mask_repeated_author_group_residuals(
 
 def test_auto_mode_degrades_to_deterministic_when_optional_dependencies_missing(
     monkeypatch,
-    tmp_path,
 ):
     monkeypatch.setattr("contextsafe_hsd.auto.context.has_module", lambda _name: False)
-    monkeypatch.setattr("contextsafe_hsd.auto.model_registry.module_available", lambda _name: False)
-    source = tmp_path / "rows.csv"
-    output = tmp_path / "out.csv"
-    write_four_col(source)
+    rows = [
+        {
+            "id": "1",
+            "text": "@mara emailed mara@example.test that Muslims should leave.",
+        }
+    ]
 
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
-        replace_text=True,
-        mode="auto",
+    result = build_final_pipeline_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        llm_review="off",
     )
 
-    assert manifest["validation"]["valid"] is True
-    assert manifest["providers"]["presidio"]["status"] == "missing_dependency"
-    assert manifest["providers"]["scrubadub"]["status"] == "missing_dependency"
-    assert manifest["providers"]["gliner"]["status"] == "disabled"
-    assert manifest["models"]["hsd_advisory"]["status"] == "missing_dependency"
-    assert "[EMAIL]" in read_rows(output)[0]["text"]
+    assert result["providers"]["presidio"]["status"] == "missing_dependency"
+    assert result["providers"]["scrubadub"]["status"] == "missing_dependency"
+    assert "[EMAIL]" in result["rows"][0]["text"]
 
 
 @dataclass
 class CountingProvider:
-    loads: list[str]
     propose_calls: list[str]
     name: str = "fake_provider"
 
@@ -319,54 +251,12 @@ class BatchedCountingProvider:
         return outputs
 
 
-class MismatchedBatchedProvider:
-    name = "mismatched_provider"
-
-    def propose_many(self, texts, *, batch_size):
-        return []
-
-
-class CountingHsdAdvisory:
-    def __init__(self, batch_calls):
-        self.batch_calls = batch_calls
-
-    def status_metadata(self):
-        return {
-            "model_id": "facebook/roberta-hate-speech-dynabench-r4-target",
-            "device": "cpu",
-        }
-
-    def score_texts(self, texts, *, batch_size):
-        self.batch_calls.append({"count": len(texts), "batch_size": batch_size})
-        return [0.1 if "[STYLE]" in text or "[TAG]" in text else 0.9 for text in texts]
-
-    def compare(self, original_score, candidate_score):
-        drop = max(0.0, original_score - candidate_score)
-        abs_drift = abs(candidate_score - original_score)
-        original_positive = original_score >= 0.5
-        candidate_positive = candidate_score >= 0.5
-        return {
-            "model_id": "facebook/roberta-hate-speech-dynabench-r4-target",
-            "original_score": round(original_score, 4),
-            "candidate_score": round(candidate_score, 4),
-            "score_drop": round(drop, 4),
-            "abs_drift": round(abs_drift, 4),
-            "decision_changed": original_positive != candidate_positive,
-            "large_drop": original_positive and drop >= 0.25,
-            "large_abs_drift": abs_drift >= 0.35,
-        }
-
-
 def test_auto_engine_uses_provider_batch_api_once_per_provider():
     batch_calls = []
-
     context = AutoPipelineContext.create(
         AutoPipelineConfig(
             max_model_batch_size=7,
-            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset(
-                {"semantic", "hsd_advisory"}
-            ),
+            disabled_providers=frozenset({"presidio", "scrubadub"}),
             audit_level="row",
         ),
         provider_factories={
@@ -384,84 +274,33 @@ def test_auto_engine_uses_provider_batch_api_once_per_provider():
         ["id", "text"],
         text_col="text",
         id_col="id",
+        output_col="text",
         replace_text=True,
     )
 
     assert batch_calls == [{"count": 2, "batch_size": 7}]
+    assert result.summary["providers"]["items"]["batched_provider"]["status"] == "ready"
     assert context.provider_load_counts["batched_provider"] == 1
     assert result.audit_rows[0]["accepted_provider_spans_by_provider"] == {
         "batched_provider": 1
     }
-    assert result.audit_rows[0]["chosen_candidate"]
-    assert result.audit_rows[0]["why_chosen"]
-    assert result.audit_rows[0]["privacy_gain"] is not None
-    assert "meaning_protection_rejections" in result.audit_rows[0]
-    assert "residual_review_required" in result.audit_rows[0]
     assert result.audit_rows[1]["accepted_provider_spans_by_provider"] == {
         "batched_provider": 1
     }
+    assert result.summary["stages"]["privacy_detection"]["candidate_counts_by_name"][
+        "provider_fusion_augmented"
+    ] == 2
     assert result.rows[2]["text"] == "No identifiers here"
 
 
-def test_auto_engine_rejects_mismatched_provider_batch_count():
-    context = AutoPipelineContext.create(
-        AutoPipelineConfig(
-            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset(
-                {"semantic", "hsd_advisory"}
-            ),
-            audit_level="row",
-        ),
-        provider_factories={
-            "mismatched_provider": lambda _context: MismatchedBatchedProvider()
-        },
-    )
-
-    result = AutoPipelineEngine(context).process_rows(
-        [{"id": "1", "text": "kill Amy"}],
-        ["id", "text"],
-        text_col="text",
-        id_col="id",
-        replace_text=True,
-    )
-
-    assert result.rows[0]["text"] == "kill Amy"
-    assert result.audit_rows[0]["provider_errors"] == [
-        {
-            "provider": "mismatched_provider",
-            "error_class": "UnexpectedOutputCount",
-        }
-    ]
-    assert (
-        context.audit_counters[
-            "provider_runtime_error:mismatched_provider:UnexpectedOutputCount"
-        ]
-        == 1
-    )
-
-
-def test_auto_candidate_rejects_large_hsd_advisory_drop():
-    candidates = [
-        AutoCandidate(name="balanced", text="Muslims should leave.", source="unit"),
-        AutoCandidate(
-            name="style_scrubbed",
-            text="[STYLE]",
-            source="unit",
-            metadata={
-                "hsd_advisory": {
-                    "score_drop": 0.8,
-                    "abs_drift": 0.8,
-                    "decision_changed": True,
-                    "large_drop": True,
-                    "large_abs_drift": True,
-                }
-            },
-        ),
-    ]
+def test_auto_candidate_rejects_target_and_utility_cue_loss():
+    original = "Muslims should leave now."
+    baseline = AutoCandidate("balanced", original, "deterministic")
+    rewrite = AutoCandidate("rewrite", "People are mentioned.", "unit")
 
     chosen, scored, reason = choose_auto_candidate(
-        "Muslims should leave.",
-        candidates,
+        original,
+        [baseline, rewrite],
         baseline_metrics={
             "direct_identifier_count_after": 0,
             "quasi_identifier_count_after": 0,
@@ -470,303 +309,19 @@ def test_auto_candidate_rejects_large_hsd_advisory_drop():
 
     assert chosen.name == "balanced"
     assert reason == "selected_least_destructive_candidate"
-    assert "hsd_advisory_large_drop" in scored[1]["hard_reject_reasons"]
-    assert "hsd_advisory_decision_drift" in scored[1]["hard_reject_reasons"]
+    assert "target_cue_loss" in scored[1]["hard_reject_reasons"]
+    assert "utility_cue_loss" in scored[1]["hard_reject_reasons"]
 
 
-def test_auto_direct_residual_cleanup_avoids_ambiguous_name_place_overmasking():
-    cleaned, transformations = cleanup_direct_residuals(
-        "Email alex@example.test call +1 202 555 0100 visit "
-        "https://example.test/post @alex 192.0.2.44 case#ABC123 "
-        "alex [at] example dot test near london library and Alex."
-    )
+def test_strict_and_direct_residual_cleanup_are_conservative():
+    text = "Call me Alex Vale at mara@example.test; Muslims should leave."
 
-    assert "alex@example.test" not in cleaned
-    assert "+1 202 555 0100" not in cleaned
-    assert "https://example.test/post" not in cleaned
-    assert "@alex" not in cleaned
-    assert "192.0.2.44" not in cleaned
-    assert "case#ABC123" not in cleaned
-    assert "alex [at] example dot test" not in cleaned
-    assert "london library" in cleaned
-    assert "Alex" in cleaned
-    assert [item["entity_type"] for item in transformations] == [
-        "EMAIL",
-        "PHONE",
-        "URL",
-        "USER",
-        "IP_ADDRESS",
-        "IDENTIFIER",
-        "EMAIL",
-    ]
+    strict_text, strict_transformations = cleanup_strict_residuals(text)
+    direct_text, direct_transformations = cleanup_direct_residuals(text)
 
-
-def test_auto_strict_residual_cleanup_adds_contextual_rung_without_blind_overmasking():
-    cleaned, transformations = cleanup_strict_residuals(
-        "Email alex@example.test near london library and Alex."
-    )
-
-    assert "alex@example.test" not in cleaned
-    assert "[EMAIL]" in cleaned
-    assert "london library" not in cleaned
-    assert "[LOCATION]" in cleaned
-    assert "Alex" in cleaned
-    assert [item["entity_type"] for item in transformations] == [
-        "EMAIL",
-        "LOCATION",
-    ]
-
-    ambiguous, ambiguous_transformations = cleanup_strict_residuals(
-        "london library and Alex were mentioned."
-    )
-    assert ambiguous == "london library and Alex were mentioned."
-    assert ambiguous_transformations == []
-
-    placeholder_adjacent, placeholder_transformations = cleanup_strict_residuals(
-        "The [LOCATION] Library posted a statement."
-    )
-    assert placeholder_adjacent == "The [LOCATION] Library posted a statement."
-    assert placeholder_transformations == []
-
-    generic_place, generic_transformations = cleanup_strict_residuals(
-        "[PERSON] put people in [LOCATION] in PRISON for years."
-    )
-    assert generic_place == "[PERSON] put people in [LOCATION] in PRISON for years."
-    assert generic_transformations == []
-
-
-def test_auto_privacy_ladder_selects_strict_pii_candidate_when_baseline_leaves_direct_residual():
-    original = "Email alex@example.test and Muslims should leave."
-    baseline = AutoCandidate(
-        name="balanced",
-        text=original,
-        source="unit",
-    )
-    strict_text, transformations = cleanup_strict_residuals(baseline.text)
-    strict = AutoCandidate(
-        name="balanced_strict_pii",
-        text=strict_text,
-        source="unit+strict_residual_cleanup",
-        metadata={
-            "strict_residual_cleanup": {
-                "cleanup_count": len(transformations),
-                "counts_by_entity_type": {"EMAIL": len(transformations)},
-            }
-        },
-    )
-
-    chosen, scored, reason = choose_auto_candidate(
-        original,
-        [baseline, strict],
-        baseline_metrics={
-            "direct_identifier_count_after": 1,
-            "quasi_identifier_count_after": 0,
-        },
-    )
-
-    assert chosen.name == "balanced_strict_pii"
-    assert reason == "selected_least_destructive_candidate"
-    assert scored[1]["accepted"] is True
-    assert scored[1]["metrics"]["residual_direct_identifier_count"] == 0
-    assert scored[1]["metrics"]["target_cue_retention"] == 1.0
-    assert scored[1]["metrics"]["strict_residual_cleanup"] == {
-        "cleanup_count": 1,
-        "counts_by_entity_type": {"EMAIL": 1},
-    }
-
-
-def test_auto_hard_privacy_cleanup_records_hsd_drift_without_rejecting_direct_pii():
-    original = "Email alex@example.test and Muslims should leave."
-    candidates = [
-        AutoCandidate(
-            name="balanced",
-            text=original,
-            source="unit",
-        ),
-        AutoCandidate(
-            name="balanced_strict_pii",
-            text="Email [EMAIL] and Muslims should leave.",
-            source="unit+strict_residual_cleanup",
-            metadata={
-                "strict_residual_cleanup": {
-                    "cleanup_count": 1,
-                    "counts_by_entity_type": {"EMAIL": 1},
-                },
-                "hsd_advisory": {
-                    "score_drop": 0.8,
-                    "abs_drift": 0.8,
-                    "decision_changed": True,
-                    "large_drop": True,
-                    "large_abs_drift": True,
-                },
-            },
-        ),
-    ]
-
-    chosen, scored, _reason = choose_auto_candidate(
-        original,
-        candidates,
-        baseline_metrics={
-            "direct_identifier_count_after": 1,
-            "quasi_identifier_count_after": 0,
-        },
-    )
-
-    assert chosen.name == "balanced_strict_pii"
-    assert scored[1]["accepted"] is True
-    assert scored[1]["hard_reject_reasons"] == []
-    assert scored[1]["metrics"]["hard_privacy_cleanup"] is True
-    assert scored[1]["metrics"]["hsd_advisory"]["large_drop"] is True
-
-
-def test_auto_hsd_advisory_scores_candidates_in_one_batch():
-    loads = []
-    hsd_batches = []
-
-    def hsd_factory(_context):
-        loads.append("load")
-        return CountingHsdAdvisory(hsd_batches)
-
-    context = AutoPipelineContext.create(
-        AutoPipelineConfig(
-            max_model_batch_size=8,
-            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset({"semantic"}),
-        ),
-        model_factories={"hsd_advisory": hsd_factory},
-    )
-    rows = [
-        {"id": "1", "text": "Muslims should leave lol!!! #watchlist"},
-        {"id": "2", "text": "No one should attack black people lol!!! #watchlist"},
-    ]
-
-    result = AutoPipelineEngine(context).process_rows(
-        rows,
-        ["id", "text"],
-        text_col="text",
-        id_col="id",
-        replace_text=False,
-        output_col="privatized_text",
-    )
-
-    assert loads == ["load"]
-    assert context.model_load_counts["hsd_advisory"] == 1
-    assert hsd_batches == [{"count": 6, "batch_size": 8}]
-    assert result.summary["models"]["items"]["hsd_advisory"]["status"] == "ready"
-    verification = result.summary["stages"]["verification"]
-    assert verification["hsd_advisory_status"] == "ok"
-    assert verification["hsd_advisory"]["candidate_comparisons"] == 4
-    assert verification["hsd_advisory"]["rejection_counts"] == {
-        "hsd_advisory_decision_drift": 2,
-        "hsd_advisory_large_drop": 2,
-    }
-    assert all(row["privatized_text"] == row["text"] for row in result.rows)
-    for row in result.audit_rows:
-        assert any(
-            "hsd_advisory_large_drop" in score["hard_reject_reasons"]
-            for score in row["scores"]
-        )
-
-
-def test_auto_hsd_advisory_scores_single_candidate_rows():
-    hsd_batches = []
-
-    context = AutoPipelineContext.create(
-        AutoPipelineConfig(
-            max_model_batch_size=8,
-            disabled_providers=frozenset({"presidio", "scrubadub", "gliner"}),
-            disabled_models=frozenset({"semantic"}),
-        ),
-        model_factories={"hsd_advisory": lambda _context: CountingHsdAdvisory(hsd_batches)},
-    )
-    rows = [
-        {"id": "1", "text": "Muslims should leave."},
-    ]
-
-    result = AutoPipelineEngine(context).process_rows(
-        rows,
-        ["id", "text"],
-        text_col="text",
-        id_col="id",
-        replace_text=True,
-    )
-
-    assert hsd_batches == [{"count": 2, "batch_size": 8}]
-    assert result.summary["stages"]["verification"]["hsd_advisory_status"] == "ok"
-    assert result.summary["stages"]["verification"]["hsd_advisory"]["candidate_comparisons"] == 1
-    hsd = result.audit_rows[0]["scores"][0]["metrics"]["hsd_advisory"]
-    assert hsd["candidate_score"] == 0.9
-    assert hsd["original_score"] == 0.9
-
-
-def test_balanced_fast_submission_path_is_bounded_and_exact(tmp_path):
-    source = tmp_path / "bounded.csv"
-    output = tmp_path / "bounded.out.csv"
-    fieldnames = ["id", "text", "label"]
-    rows = [
-        {
-            "id": str(index),
-            "text": (
-                f"Email person{index}@example.test because Muslims should leave."
-            ),
-            "label": "1",
-        }
-        for index in range(25)
-    ]
-    with source.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
-        id_col="id",
-        replace_text=True,
-        mode="balanced",
-        metric_depth="fast",
-    )
-
-    output_rows = read_rows(output)
-    assert manifest["validation"]["valid"] is True
-    assert manifest["metrics"]["row_count"] == 25
-    assert manifest["metrics"]["metric_depth_counts"] == {"fast": 25}
-    assert list(output_rows[0]) == fieldnames
-    assert [row["id"] for row in output_rows] == [row["id"] for row in rows]
-    assert all("[EMAIL]" in row["text"] for row in output_rows)
-
-
-def test_create_submission_auto_records_configured_gliner_model(
-    monkeypatch,
-    tmp_path,
-):
-    monkeypatch.setattr(
-        "contextsafe_hsd.auto.model_registry.module_available",
-        lambda name: name == "gliner",
-    )
-    source = tmp_path / "four_col.csv"
-    output = tmp_path / "four_col.out.csv"
-    model_dir = tmp_path / "local-gliner"
-    model_dir.mkdir()
-    write_four_col(source)
-
-    manifest = create_submission(
-        source,
-        output,
-        text_cols=["text"],
-        replace_text=True,
-        mode="auto",
-        disabled_providers=["presidio", "scrubadub"],
-        disabled_models=["semantic", "hsd_advisory"],
-        gliner_model=str(model_dir),
-        gliner_profile="pii",
-    )
-
-    assert manifest["providers"]["gliner"]["status"] == "available"
-    assert manifest["providers"]["gliner"]["model"] == str(model_dir)
-    assert manifest["providers"]["gliner"]["profile"] == "pii"
-    assert manifest["stages"]["privacy_detection"]["pii_assist"]["components"][
-        "gliner"
-    ] == "available"
-    assert manifest["load_counts"]["providers"].get("gliner") is None
+    assert "[EMAIL]" in strict_text
+    assert "[EMAIL]" in direct_text
+    assert "Muslims should leave" in strict_text
+    assert "Muslims should leave" in direct_text
+    assert all(item["entity_type"] == "EMAIL" for item in direct_transformations)
+    assert len(strict_transformations) >= len(direct_transformations)

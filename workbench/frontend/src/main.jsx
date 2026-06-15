@@ -797,7 +797,7 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
       <div className="detail-grid classification-grid">
         <div>
           <span>HSD backend</span>
-          <strong>{statusText(classification.backend || "ml")}</strong>
+          <strong>{statusText(classification.backend || "none")}</strong>
         </div>
         <div>
           <span>Parse</span>
@@ -1127,7 +1127,7 @@ function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownlo
         </div>
         <div>
           <span>HSD classification</span>
-          <strong>{classification.status || verification.hsd_advisory_status || "waiting"}</strong>
+          <strong>{classification.status || verification.local_llm_hsd_review?.status || "waiting"}</strong>
         </div>
       </div>
       <div className="audit-tags">
@@ -1225,7 +1225,7 @@ function csvRequestPayload({
     mode: "auto",
     style_scrub: false,
     disabled_providers: [],
-    disabled_models: ["semantic"],
+    disabled_models: ["local_llm"],
     metric_depth: "fast",
     hsd_classification_backend: hsdBackend,
     local_llm_endpoint: localLlmEndpoint,

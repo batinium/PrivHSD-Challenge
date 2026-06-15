@@ -1,9 +1,0 @@
-id,text,label,source,split,case_type
-S001,"My name is Alex Vale; @alex.v-77 emailed alex.vale+tip@example.test on Jan 4, 2024 saying refugees should leave.",hate,synthetic,train,direct_plus_quasi
-S002,"Call me Bri Stone at +1 (202) 555-0188 x44 or visit https://bri-stone.example.test/profile; women do not belong.",hate,synthetic,train,phone_url
-S003,"from East Ridge, Dana Kole posted from 192.0.2.44 near River City on 03/12/2025.",nothate,synthetic,train,ip_location_date
-S004,"Student case ID-STU-7781 at Northbridge University belongs to alias Night_Owl77.",nothate,synthetic,train,school_id_alias
-S005,"Known as CampusTruth, Morgan Hale wrote that immigrants should be deported from Lake Town.",hate,synthetic,dev,alias_target_location
-S006,"Ticket ref-ZX5519 says Riley Hart called while aged 31 in Silver City near Central Academy.",nothate,synthetic,dev,age_org_combo
-S007,"User user-QA990 said @qa--team should check www.qa-example.test because black people deserve respect.",nothate,synthetic,dev,noisy_handle_url
-S008,"I am Mira Stone from Harbor Point, age 29, school West Park School, case#ABC123.",nothate,synthetic,dev,direct_plus_quasi

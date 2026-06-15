@@ -18,8 +18,8 @@ from contextsafe_hsd.detectors import (
 )
 from contextsafe_hsd.metrics import aggregate_metrics, row_metric_fast, row_metric_for_depth
 from contextsafe_hsd.pipeline import PrivatizerConfig, apply_replacements, privatize_text
-from contextsafe_hsd.rerank import length_drift, style_risk_count
 from contextsafe_hsd.span_providers.base import SpanCandidate
+from contextsafe_hsd.style import length_drift, style_risk_count
 
 from .audit import (
     AUTHOR_COLUMN_NAMES,
@@ -67,6 +67,13 @@ def provider_count(metadata: dict[str, Any]) -> int:
     )
 
 
+def metric_float(metrics: dict[str, Any], key: str, default: float) -> float:
+    value = metrics.get(key, default)
+    if value is None:
+        return default
+    return float(value)
+
+
 def score_auto_candidate(
     original: str,
     candidate: AutoCandidate,
@@ -89,13 +96,9 @@ def score_auto_candidate(
     )
     accepted_provider_spans = provider_count(candidate.metadata)
     strict_cleanup = candidate.metadata.get("strict_residual_cleanup") or {}
-    character_retention = float(metrics.get("character_utility_retention", 1.0) or 1.0)
-    target_retention = float(metrics.get("target_cue_retention", 1.0) or 1.0)
-    utility_retention = float(metrics.get("utility_cue_retention", 1.0) or 1.0)
-    hsd_advisory = candidate.metadata.get("hsd_advisory") or {}
-    hsd_drop = float(hsd_advisory.get("score_drop", 0.0) or 0.0)
-    hsd_abs_drift = float(hsd_advisory.get("abs_drift", 0.0) or 0.0)
-    hsd_decision_changed = bool(hsd_advisory.get("decision_changed", False))
+    character_retention = metric_float(metrics, "character_utility_retention", 1.0)
+    target_retention = metric_float(metrics, "target_cue_retention", 1.0)
+    utility_retention = metric_float(metrics, "utility_cue_retention", 1.0)
     strict_cleanup_counts = strict_cleanup.get("counts_by_entity_type", {})
     hard_privacy_cleanup = direct_reduction > 0 and any(
         int(strict_cleanup_counts.get(entity_type, 0) or 0) > 0
@@ -118,19 +121,6 @@ def score_auto_candidate(
             hard_rejects.append("new_identifier_signal")
         if drift > 0.65:
             hard_rejects.append("length_drift")
-        if not hard_privacy_cleanup and bool(hsd_advisory.get("large_drop", False)):
-            hard_rejects.append("hsd_advisory_large_drop")
-        if (
-            not hard_privacy_cleanup
-            and hsd_decision_changed
-            and bool(hsd_advisory.get("large_abs_drift", False))
-        ):
-            hard_rejects.append("hsd_advisory_decision_drift")
-    hsd_penalty = (
-        hsd_drop * 2.0
-        + hsd_abs_drift * 1.0
-        + (0.75 if hsd_decision_changed else 0.0)
-    )
     score = (
         direct_reduction * 4.0
         + quasi_reduction * 1.5
@@ -141,7 +131,6 @@ def score_auto_candidate(
         + character_retention
         - drift * 0.7
         - max(0, original_style - style_reduction) * 0.05
-        - hsd_penalty
     )
     return {
         "name": candidate.name,
@@ -161,8 +150,6 @@ def score_auto_candidate(
             "provider_accepted_span_count": accepted_provider_spans,
             "strict_residual_cleanup": strict_cleanup or None,
             "hard_privacy_cleanup": hard_privacy_cleanup,
-            "hsd_advisory": hsd_advisory or None,
-            "hsd_advisory_penalty": round(hsd_penalty, 4),
         },
     }
 
@@ -387,11 +374,6 @@ class AutoPipelineEngine:
                 detail="Generated candidate masked outputs.",
                 row_id=state.row_id,
             )
-        self._run_hsd_advisory_batch(
-            candidate_groups,
-            progress_callback=progress_callback,
-        )
-
         selected_records: list[dict[str, Any]] = []
         chosen_counts: Counter[str] = Counter()
         fallback_counts: Counter[str] = Counter()
@@ -399,7 +381,6 @@ class AutoPipelineEngine:
         candidate_count = 0
         rejected_candidate_count = 0
         candidate_name_counts: Counter[str] = Counter()
-        hsd_advisory_comparison_count = 0
         residual_direct_cleanup_count = 0
         self._emit_progress(
             progress_callback,
@@ -421,8 +402,6 @@ class AutoPipelineEngine:
                     rejected_candidate_count += 1
                 for reject_reason in score.get("hard_reject_reasons", []):
                     rejection_counts[str(reject_reason)] += 1
-                if score.get("metrics", {}).get("hsd_advisory"):
-                    hsd_advisory_comparison_count += 1
             chosen_counts[chosen.name] += 1
             if reason.startswith("fallback"):
                 fallback_counts[reason] += 1
@@ -533,7 +512,6 @@ class AutoPipelineEngine:
             candidate_name_counts=candidate_name_counts,
             rejected_candidate_count=rejected_candidate_count,
             rejection_counts=rejection_counts,
-            hsd_advisory_comparison_count=hsd_advisory_comparison_count,
             residual_review_required_count=residual_review_required_count,
             residual_direct_cleanup_count=residual_direct_cleanup_count,
             author_group_masking=author_group_result.summary,
@@ -712,215 +690,6 @@ class AutoPipelineEngine:
                     continue
                 state.provider_outputs.append(output)
                 state.provider_candidates.extend(output.spans)
-
-    def _run_hsd_advisory_batch(
-        self,
-        candidate_groups: list[tuple[AutoRowState, list[AutoCandidate]]],
-        *,
-        progress_callback: ProgressCallback | None = None,
-    ) -> None:
-        advisory_groups = [
-            (state, candidates)
-            for state, candidates in candidate_groups
-            if candidates
-        ]
-        self._emit_progress(
-            progress_callback,
-            stage="hsd_advisory",
-            processed=0,
-            total=len(advisory_groups),
-            detail="Checking HSD preservation across masked candidates.",
-        )
-        if not advisory_groups:
-            self._emit_progress(
-                progress_callback,
-                stage="hsd_advisory",
-                processed=0,
-                total=0,
-                detail="No HSD advisory comparisons were needed.",
-            )
-            return
-        advisory = self.context.ensure_hsd_advisory()
-        if advisory is None:
-            self._emit_progress(
-                progress_callback,
-                stage="hsd_advisory",
-                processed=len(advisory_groups),
-                total=len(advisory_groups),
-                detail="HSD advisory model was unavailable.",
-            )
-            return
-
-        if progress_callback is not None:
-            chunk_size = min(self.context.config.max_model_batch_size, 8)
-            processed_rows = 0
-            for start in range(0, len(advisory_groups), max(1, chunk_size)):
-                chunk = advisory_groups[start : start + max(1, chunk_size)]
-                self._score_hsd_advisory_groups(advisory, chunk)
-                processed_rows += len(chunk)
-                self._emit_progress(
-                    progress_callback,
-                    stage="hsd_advisory",
-                    processed=processed_rows,
-                    total=len(advisory_groups),
-                    detail="Checked HSD preservation across masked candidates.",
-                )
-            return
-
-        self._score_hsd_advisory_groups(advisory, advisory_groups)
-
-    def _score_hsd_advisory_groups(
-        self,
-        advisory: Any,
-        advisory_groups: list[tuple[AutoRowState, list[AutoCandidate]]],
-    ) -> None:
-        texts: list[str] = []
-        for state, candidates in advisory_groups:
-            texts.append(state.original)
-            texts.extend(candidate.text for candidate in candidates)
-        try:
-            score_by_model = self._score_hsd_advisory(
-                advisory,
-                texts,
-            )
-        except Exception as exc:
-            self.context.audit_counters[
-                f"model_runtime_error:hsd_advisory:{type(exc).__name__}"
-            ] += 1
-            for state, _candidates in advisory_groups:
-                state.model_errors.append(
-                    {
-                        "model": "hsd_advisory",
-                        "error_class": type(exc).__name__,
-                    }
-                )
-            return
-        if any(len(scores) != len(texts) for scores in score_by_model.values()):
-            self.context.audit_counters[
-                "model_runtime_error:hsd_advisory:UnexpectedScoreCount"
-            ] += 1
-            for state, _candidates in advisory_groups:
-                state.model_errors.append(
-                    {
-                        "model": "hsd_advisory",
-                        "error_class": "UnexpectedScoreCount",
-                    }
-                )
-            return
-
-        cursor = 0
-        for _state, candidates in advisory_groups:
-            original_scores = {
-                model_id: scores[cursor]
-                for model_id, scores in score_by_model.items()
-            }
-            cursor += 1
-            for candidate in candidates:
-                candidate_scores = {
-                    model_id: scores[cursor]
-                    for model_id, scores in score_by_model.items()
-                }
-                cursor += 1
-                candidate.metadata["hsd_advisory"] = self._compare_hsd_advisory(
-                    advisory,
-                    original_scores,
-                    candidate_scores,
-                )
-
-    def _score_hsd_advisory(
-        self,
-        advisory: Any,
-        texts: list[str],
-    ) -> dict[str, list[float]]:
-        score_by_model = getattr(advisory, "score_texts_by_model", None)
-        if callable(score_by_model):
-            return score_by_model(
-                texts,
-                batch_size=self.context.config.max_model_batch_size,
-            )
-        return {
-            "hsd_advisory": advisory.score_texts(
-                texts,
-                batch_size=self.context.config.max_model_batch_size,
-            )
-        }
-
-    def _compare_hsd_advisory(
-        self,
-        advisory: Any,
-        original_scores: dict[str, float],
-        candidate_scores: dict[str, float],
-    ) -> dict[str, Any]:
-        compare_by_model = getattr(advisory, "compare_scores_by_model", None)
-        if callable(compare_by_model):
-            return compare_by_model(original_scores, candidate_scores)
-        common_models = [
-            model_id
-            for model_id in original_scores
-            if model_id in candidate_scores
-        ]
-        if not common_models:
-            common_models = ["hsd_advisory"]
-            original_scores = {"hsd_advisory": 0.0}
-            candidate_scores = {"hsd_advisory": 0.0}
-        original_score = sum(
-            float(original_scores[model_id]) for model_id in common_models
-        ) / len(common_models)
-        candidate_score = sum(
-            float(candidate_scores[model_id]) for model_id in common_models
-        ) / len(common_models)
-        compare = getattr(advisory, "compare", None)
-        if callable(compare):
-            return compare(original_score, candidate_score)
-        decision_threshold = float(getattr(advisory, "decision_threshold", 0.5))
-        large_drop_threshold = float(getattr(advisory, "large_drop_threshold", 0.20))
-        max_abs_drift = float(getattr(advisory, "max_abs_drift", 0.35))
-        delta = candidate_score - original_score
-        abs_drift = abs(delta)
-        score_drop = max(0.0, original_score - candidate_score)
-        original_decision = original_score >= decision_threshold
-        candidate_decision = candidate_score >= decision_threshold
-        return {
-            "model_id": "hsd_advisory",
-            "original_score": round(float(original_score), 4),
-            "candidate_score": round(float(candidate_score), 4),
-            "score_delta": round(float(delta), 4),
-            "score_drop": round(float(score_drop), 4),
-            "abs_drift": round(float(abs_drift), 4),
-            "original_decision": "positive" if original_decision else "negative",
-            "candidate_decision": "positive" if candidate_decision else "negative",
-            "decision_changed": original_decision != candidate_decision,
-            "large_drop": original_decision and score_drop >= large_drop_threshold,
-            "large_abs_drift": abs_drift >= max_abs_drift,
-            "decision_threshold": decision_threshold,
-            "large_drop_threshold": large_drop_threshold,
-            "max_abs_drift": max_abs_drift,
-            "model_count": len(common_models),
-            "models": {
-                model_id: {
-                    "model_id": model_id,
-                    "original_score": round(float(original_scores[model_id]), 4),
-                    "candidate_score": round(float(candidate_scores[model_id]), 4),
-                }
-                for model_id in common_models
-            },
-            "original_positive_model_count": sum(
-                float(original_scores[model_id]) >= decision_threshold
-                for model_id in common_models
-            ),
-            "candidate_positive_model_count": sum(
-                float(candidate_scores[model_id]) >= decision_threshold
-                for model_id in common_models
-            ),
-            "original_max_score": round(
-                max(float(original_scores[model_id]) for model_id in common_models),
-                4,
-            ),
-            "candidate_max_score": round(
-                max(float(candidate_scores[model_id]) for model_id in common_models),
-                4,
-            ),
-        }
 
     def _candidates_for_state(self, state: AutoRowState) -> list[AutoCandidate]:
         candidates = [

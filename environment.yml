@@ -5,7 +5,5 @@ dependencies:
   - python=3.12
   - pip
   - nodejs
-  - matplotlib
-  - pandas
   - pip:
-      - "-e .[author-risk,benchmark,classifier,dpmlm,hf-utility,presidio,gliner,scrubadub,token-actions,workbench,dev,spacy-models]"
+      - "-e .[presidio,scrubadub,workbench,dev,spacy-models]"
