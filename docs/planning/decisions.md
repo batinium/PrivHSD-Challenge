@@ -2,7 +2,7 @@
 
 Status: active
 Owner area: architectural decisions
-Last verified: 2026-06-14
+Last verified: 2026-06-15
 Primary code: repository-wide
 
 Use this file for short decisions that multiple agents need to respect.
@@ -62,3 +62,19 @@ drift.
 
 Implication: do not present appended `is_hate_speech`, `hate_speech_score`, or
 `hate_speech_model_count` columns as upload-ready unless challenge rules change.
+
+## ADR-006: Local LLM HSD Review Is Post-PII And Advisory
+
+Decision: deterministic PII removal remains the required first stage. Local LLM
+HSD review may be added as an opt-in post-cleaning backend alongside the current
+ML classifier, and may emit residual PII suggestions for traceable review
+metadata only.
+
+Reason: benchmark evidence shows deterministic PII removal is safer than
+LLM-only scrubbing, while local LLM HSD classification can improve strict
+hate/not-hate recall. Residual PII suggestions are useful but too noisy for
+automatic removal.
+
+Implication: local LLM review must receive cleaned text only, must not rewrite
+or apply removals, and must keep ML classification available as an alternative.
+See `docs/planning/llm_hsd_review_integration/plan.md`.
