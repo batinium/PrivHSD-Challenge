@@ -127,7 +127,7 @@ exact parser contract. These are intentionally not part of `protect`:
 --gliner-model MODEL_ID_OR_LOCAL_PATH
 --gliner-profile general|pii
 --hsd-advisory-model APPROVED_MODEL_ID
---device auto|cpu|cuda
+--device cpu|auto|cuda  # defaults to cpu; opt in to cuda/auto explicitly
 --max-model-batch-size N
 --max-provider-rows N
 --disable-provider NAME

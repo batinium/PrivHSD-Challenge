@@ -545,3 +545,139 @@ def test_workbench_text_endpoint_can_return_hsd_classifier(monkeypatch):
     body = response.json()
     assert body["hsd_classifier"]["status"] == "ok"
     assert body["hsd_classifier"]["model_id"] == "fake-hsd"
+
+
+def test_workbench_csv_cache_key_includes_hsd_backend_options():
+    base = workbench_app.CsvPrivatizeRequest(
+        csv_text="id,text\n1,hello\n",
+        text_col="text",
+        id_col="id",
+        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+    )
+    local = workbench_app.CsvPrivatizeRequest(
+        csv_text="id,text\n1,hello\n",
+        text_col="text",
+        id_col="id",
+        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        hsd_classification_backend="local_llm",
+        local_llm_model="fake-local-llm",
+    )
+
+    base_key, base_options = workbench_app.csv_result_cache_key(base)
+    local_key, local_options = workbench_app.csv_result_cache_key(local)
+
+    assert base_key != local_key
+    assert base_options["hsd_classification_backend"] == "ml"
+    assert local_options["hsd_classification_backend"] == "local_llm"
+    assert "local_llm" not in local_options["disabled_models"]
+
+
+def test_workbench_csv_endpoint_can_select_local_llm_review(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.setattr(workbench_app, "CSV_RESULT_CACHE_DIR", tmp_path / "csv_results")
+
+    seen_payloads = []
+
+    def fake_post_chat_completion(*, endpoint, payload, timeout):
+        seen_payloads.append(
+            {
+                "endpoint": endpoint,
+                "payload": payload,
+                "timeout": timeout,
+            }
+        )
+        content = payload["messages"][1]["content"]
+        assert "alex@example.test" not in content
+        rows = json.loads(content)["items"]
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "tool_calls": [
+                            {
+                                "function": {
+                                    "name": "record_hsd_review",
+                                    "arguments": json.dumps(
+                                        {
+                                            "items": [
+                                                {
+                                                    "id": rows[0]["id"],
+                                                    "hate": True,
+                                                    "hsd_reasons": [
+                                                        "protected_target",
+                                                        "exclusion",
+                                                    ],
+                                                    "pii_leftover": [
+                                                        "[EMAIL]",
+                                                        "Muslims",
+                                                    ],
+                                                    "review_needed": True,
+                                                }
+                                            ]
+                                        }
+                                    ),
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "contextsafe_hsd.models.local_llm_hsd_review_runtime.post_chat_completion",
+        fake_post_chat_completion,
+    )
+    client = TestClient(workbench_app.app)
+    response = client.post(
+        "/api/csv/privatize",
+        json={
+            "csv_text": (
+                "id,text\n"
+                "1,Email alex@example.test because Muslims should leave.\n"
+            ),
+            "text_col": "text",
+            "id_col": "id",
+            "mode": "auto",
+            "replace_text": True,
+            "disabled_providers": ["presidio", "scrubadub", "gliner"],
+            "disabled_models": ["token_policy_ensemble", "semantic", "hsd_advisory"],
+            "hsd_classification_backend": "local_llm",
+            "local_llm_endpoint": "http://local.test/v1/chat/completions",
+            "local_llm_model": "fake-local-llm",
+            "local_llm_batch_size": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert seen_payloads
+    output_rows = list(csv.DictReader(io.StringIO(body["output_csv"])))
+    assert "__contextsafe_hsd_label" not in output_rows[0]
+    assert "alex@example.test" not in output_rows[0]["text"]
+    classification = body["manifest"]["classification"]
+    assert classification["backend"] == "local_llm"
+    assert classification["model_id"] == "fake-local-llm"
+    assert classification["parse_count"] == 1
+    assert classification["pii_suggestion_status_counts"] == {
+        "rejected_placeholder": 1,
+        "rejected_protected_or_hsd_cue": 1,
+    }
+    insights = body["platform_insights"]
+    assert insights["classification"]["source"] == "local_llm_hsd_review"
+    assert insights["classification"]["reason_tag_counts"] == {
+        "exclusion": 1,
+        "protected_target": 1,
+    }
+    queue_item = insights["ngo_review"]["queue_items"][0]
+    assert queue_item["hsd_backend"] == "local_llm"
+    assert queue_item["hsd_reasons"] == ["protected_target", "exclusion"]
+    assert queue_item["pii_suggestion_count"] == 2
+    serialized_review = json.dumps(
+        body["platform_insights"]["ngo_review"]["queue_items"]
+    )
+    assert "alex@example.test" not in serialized_review
+    serialized_classification = json.dumps(classification)
+    assert "[EMAIL]" not in serialized_classification

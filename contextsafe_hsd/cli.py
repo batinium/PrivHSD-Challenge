@@ -180,8 +180,11 @@ def add_auto_runtime_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--device",
         choices=["auto", "cpu", "cuda"],
-        default="auto",
-        help="Device policy for optional neural advisory models.",
+        default="cpu",
+        help=(
+            "Device policy for optional neural advisory models. Defaults to CPU; "
+            "pass cuda or auto explicitly to use a GPU."
+        ),
     )
     parser.add_argument("--max-model-batch-size", type=int, default=16)
     parser.add_argument(
@@ -297,7 +300,38 @@ def build_parser() -> argparse.ArgumentParser:
     sanitize_classify.add_argument(
         "--require-hate-classification",
         action="store_true",
-        help="Fail if the OSS HSD advisory classifier ensemble cannot run.",
+        help="Fail if the selected HSD classification backend cannot complete.",
+    )
+    sanitize_classify.add_argument(
+        "--hsd-classification-backend",
+        choices=["ml", "local-llm"],
+        default="ml",
+        help="Post-cleaning HSD classifier backend. Default preserves the local ML path.",
+    )
+    sanitize_classify.add_argument(
+        "--local-llm-endpoint",
+        default="http://localhost:1234/v1/chat/completions",
+        help="OpenAI-compatible local chat completions URL for --hsd-classification-backend local-llm.",
+    )
+    sanitize_classify.add_argument(
+        "--local-llm-model",
+        default="openai/gpt-oss-20b",
+        help="Local LLM model identifier to request from the OpenAI-compatible server.",
+    )
+    sanitize_classify.add_argument(
+        "--local-llm-timeout-seconds",
+        type=float,
+        default=120.0,
+    )
+    sanitize_classify.add_argument(
+        "--local-llm-batch-size",
+        type=int,
+        default=10,
+    )
+    sanitize_classify.add_argument(
+        "--disable-local-llm-pii-suggestions",
+        action="store_true",
+        help="Disable advisory residual PII suggestions from the local LLM backend.",
     )
     add_auto_runtime_arguments(sanitize_classify)
     sanitize_targets = sanitize_classify.add_mutually_exclusive_group()
@@ -953,7 +987,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=DEFAULT_TOKEN_POLICY_MAX_CLASS_WEIGHT,
     )
-    train_policy.add_argument("--device", default="auto")
+    train_policy.add_argument("--device", default="cpu")
     train_policy.add_argument(
         "--no-metadata-prefix",
         action="store_true",
@@ -1208,6 +1242,17 @@ def main(argv: list[str] | None = None) -> int:
                 gliner_profile=args.gliner_profile,
                 enable_token_policy=args.enable_token_policy,
                 hsd_advisory_models=args.hsd_advisory_models,
+                hsd_classification_backend=args.hsd_classification_backend.replace(
+                    "-",
+                    "_",
+                ),
+                local_llm_endpoint=args.local_llm_endpoint,
+                local_llm_model=args.local_llm_model,
+                local_llm_timeout_seconds=args.local_llm_timeout_seconds,
+                local_llm_batch_size=args.local_llm_batch_size,
+                local_llm_enable_pii_suggestions=(
+                    not args.disable_local_llm_pii_suggestions
+                ),
                 generalize_targets=generalize_targets,
                 style_scrub=args.style_scrub,
                 hate_label_col=args.hate_label_col,

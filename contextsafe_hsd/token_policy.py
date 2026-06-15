@@ -1313,7 +1313,7 @@ def train_token_policy(
     fold_index: int | None = None,
     class_weighting: str = DEFAULT_CLASS_WEIGHTING,
     max_class_weight: float = DEFAULT_MAX_CLASS_WEIGHT,
-    device: str = "auto",
+    device: str = "cpu",
     metadata_prefix: bool = True,
     log_steps: int = 25,
     max_train_steps: int | None = None,
@@ -1440,7 +1440,9 @@ def train_token_policy(
         max_class_weight=max_class_weight,
         device=device,
     )
-    collate = lambda batch: collate_batch(torch, batch)
+    def collate(batch):
+        return collate_batch(torch, batch)
+
     train_loader = stack["DataLoader"](
         train_encoded,
         batch_size=batch_size,

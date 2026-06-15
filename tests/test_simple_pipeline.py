@@ -4,6 +4,10 @@ import json
 import pytest
 
 from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
+    LocalLlmReviewResult,
+    LocalLlmRowReview,
+)
 from contextsafe_hsd.simple_pipeline import SimplifiedPipelineError, run_sanitize_classify
 
 
@@ -58,6 +62,57 @@ class FakeHsdAdvisory:
         }
 
 
+class FakeLocalLlmReview:
+    def __init__(self, *, skip_all=False):
+        self.calls = []
+        self.skip_all = skip_all
+
+    def status_metadata(self):
+        return {
+            "model_id": "fake-local-llm",
+            "endpoint": "http://local.test/v1/chat/completions",
+        }
+
+    def review_texts(self, rows, *, batch_size):
+        self.calls.append({"rows": rows, "batch_size": batch_size})
+        reviews = []
+        for row in rows:
+            if self.skip_all:
+                reviews.append(
+                    LocalLlmRowReview(
+                        row_id=row["id"],
+                        label="",
+                        hate=None,
+                        hsd_reasons=(),
+                        review_needed=True,
+                        pii_suggestions=(),
+                        parse_status="skipped",
+                        error_class="FakeParseError",
+                    )
+                )
+                continue
+            hate = "leave" in row["text"]
+            reviews.append(
+                LocalLlmRowReview(
+                    row_id=row["id"],
+                    label="1" if hate else "0",
+                    hate=hate,
+                    hsd_reasons=("protected_target",) if hate else ("none",),
+                    review_needed=hate,
+                    pii_suggestions=(),
+                    parse_status="ok",
+                )
+            )
+        return LocalLlmReviewResult(
+            rows=tuple(reviews),
+            model_id="fake-local-llm",
+            endpoint="http://local.test/v1/chat/completions",
+            elapsed_seconds=0.01,
+            request_count=1,
+            fallback_count=0,
+        )
+
+
 def test_sanitize_classify_command_is_registered():
     parser = build_parser()
 
@@ -80,10 +135,29 @@ def test_sanitize_classify_command_is_registered():
 
     assert args.command == "sanitize-classify"
     assert args.text_col == "body"
+    assert args.device == "cpu"
     assert args.hsd_advisory_models == [
         "facebook/roberta-hate-speech-dynabench-r4-target",
         "cardiffnlp/twitter-roberta-base-hate-latest",
     ]
+
+
+def test_sanitize_classify_command_maps_local_llm_backend():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "sanitize-classify",
+            "--input",
+            "input.csv",
+            "--output",
+            "output.csv",
+            "--hsd-classification-backend",
+            "local-llm",
+        ]
+    )
+
+    assert args.hsd_classification_backend.replace("-", "_") == "local_llm"
 
 
 def test_sanitize_classify_replaces_text_and_appends_predictions(tmp_path):
@@ -176,6 +250,62 @@ def test_sanitize_classify_adds_default_label_col_when_missing(tmp_path):
     rows = read_rows(output)
     assert "is_hate_speech" in rows[0]
     assert rows[0]["is_hate_speech"] == "1"
+
+
+def test_sanitize_classify_local_llm_receives_sanitized_text_only(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    fake_runtime = FakeLocalLlmReview()
+    write_rows(source, include_label=False)
+
+    manifest = run_sanitize_classify(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        disabled_providers=["presidio", "scrubadub", "gliner"],
+        disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+        hsd_classification_backend="local_llm",
+        local_llm_batch_size=3,
+        model_factories={"local_llm": lambda _context: fake_runtime},
+    )
+
+    rows = read_rows(output)
+    assert rows[0]["is_hate_speech"] == "1"
+    assert rows[1]["is_hate_speech"] == "0"
+    assert manifest["classification"]["backend"] == "local_llm"
+    assert manifest["classification"]["model_id"] == "fake-local-llm"
+    assert manifest["classification"]["parse_count"] == 2
+    assert manifest["stages"]["verification"]["hsd_classification"]["backend"] == (
+        "local_llm"
+    )
+    assert fake_runtime.calls[0]["batch_size"] == 3
+    sent_texts = [row["text"] for row in fake_runtime.calls[0]["rows"]]
+    assert all("mara@example.test" not in text for text in sent_texts)
+    assert "[EMAIL]" in sent_texts[0]
+    serialized = json.dumps(manifest)
+    assert "mara@example.test" not in serialized
+
+
+def test_sanitize_classify_local_llm_required_fails_on_parse_skip(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    write_rows(source, include_label=False)
+
+    with pytest.raises(SimplifiedPipelineError, match="could not be parsed"):
+        run_sanitize_classify(
+            source,
+            output,
+            text_col="text",
+            id_col="id",
+            require_hate_classification=True,
+            disabled_providers=["presidio", "scrubadub", "gliner"],
+            disabled_models=["token_policy_ensemble", "semantic", "hsd_advisory"],
+            hsd_classification_backend="local_llm",
+            model_factories={
+                "local_llm": lambda _context: FakeLocalLlmReview(skip_all=True)
+            },
+        )
 
 
 def test_sanitize_classify_can_require_classifier(tmp_path):

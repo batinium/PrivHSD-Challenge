@@ -45,7 +45,7 @@ class TokenPolicyRuntime:
         model_dirs: list[Path],
         *,
         mode: str = "mean_prob",
-        device: str = "auto",
+        device: str = "cpu",
         model_weights: list[float] | None = None,
     ) -> "TokenPolicyRuntime":
         members = load_token_policy_ensemble(model_dirs)

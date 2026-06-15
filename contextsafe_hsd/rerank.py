@@ -532,7 +532,7 @@ def run_candidate_reranking(
     mode: str = "rerank",
     metric_depth: str = "fast",
     allow_model_download: bool = False,
-    device: str = "auto",
+    device: str = "cpu",
     max_model_batch_size: int = 16,
     max_provider_rows: int | None = None,
     disabled_providers: list[str] | None = None,

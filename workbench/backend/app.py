@@ -27,6 +27,7 @@ from contextsafe_hsd.cue_checks import row_cue_report
 from contextsafe_hsd.detectors import Span, target_group_spans
 from contextsafe_hsd.metrics import row_metric
 from contextsafe_hsd.pipeline import MODES, PrivatizerConfig, privatize_text
+from contextsafe_hsd.simple_pipeline import append_hate_classification
 from contextsafe_hsd.span_providers.base import SpanProvider
 from contextsafe_hsd.span_providers.registry import (
     SUPPORTED_PROVIDER_NAMES,
@@ -38,7 +39,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v4"
+CSV_CACHE_VERSION = "workbench_csv_result_v5"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -138,6 +139,12 @@ class CsvPrivatizeRequest(BaseModel):
     metric_depth: Literal["fast", "sampled", "deep"] = "fast"
     gliner_model: str | None = None
     gliner_profile: Literal["general", "pii"] = "general"
+    hsd_classification_backend: Literal["ml", "local_llm"] = "ml"
+    local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions"
+    local_llm_model: str = "openai/gpt-oss-20b"
+    local_llm_timeout_seconds: float = 120.0
+    local_llm_batch_size: int = 10
+    local_llm_enable_pii_suggestions: bool = True
 
 
 class CsvPrivatizeResponse(BaseModel):
@@ -410,11 +417,7 @@ def build_review_csv(
 
 
 def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]:
-    disabled_models = (
-        sorted(request.disabled_models)
-        if request.disabled_models
-        else sorted(CSV_INSIGHT_DEFAULT_DISABLED_MODELS)
-    )
+    disabled_models = sorted(csv_disabled_models_for_request(request))
     return {
         "version": CSV_CACHE_VERSION,
         "csv_sha256": hashlib.sha256(request.csv_text.encode("utf-8")).hexdigest(),
@@ -435,6 +438,14 @@ def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]
         "metric_depth": request.metric_depth,
         "gliner_model": request.gliner_model or "",
         "gliner_profile": request.gliner_profile,
+        "hsd_classification_backend": request.hsd_classification_backend,
+        "local_llm_endpoint": request.local_llm_endpoint,
+        "local_llm_model": request.local_llm_model,
+        "local_llm_timeout_seconds": request.local_llm_timeout_seconds,
+        "local_llm_batch_size": request.local_llm_batch_size,
+        "local_llm_enable_pii_suggestions": (
+            request.local_llm_enable_pii_suggestions
+        ),
     }
 
 
@@ -877,6 +888,18 @@ CSV_INSIGHT_DEFAULT_DISABLED_MODELS = frozenset(
 )
 
 
+def csv_disabled_models_for_request(request: CsvPrivatizeRequest) -> frozenset[str]:
+    disabled = set(
+        request.disabled_models
+        if request.disabled_models
+        else CSV_INSIGHT_DEFAULT_DISABLED_MODELS
+    )
+    if request.hsd_classification_backend == "local_llm":
+        disabled.discard("local_llm")
+        disabled.discard("local-llm")
+    return frozenset(disabled)
+
+
 def current_auto_pipeline_profile(
     *,
     disabled_models: set[str] | frozenset[str] | None = None,
@@ -924,6 +947,8 @@ def current_auto_pipeline_profile(
                 CARDIFF_HATE_MODEL_ID,
             ],
             "hsd_advisory_enabled_for_this_profile": "hsd_advisory" not in disabled,
+            "hsd_classification_backends": ["ml", "local_llm"],
+            "local_llm_review_default": "disabled_until_selected",
             "post_classification_hatred_columns": list(POST_CLASSIFICATION_LABEL_COLUMNS),
             "post_classification_score_columns": list(POST_CLASSIFICATION_SCORE_COLUMNS),
         },
@@ -1037,6 +1062,64 @@ def pipeline_hsd_classification(audit_row: dict[str, Any] | None) -> dict[str, A
         "positive_model_count": positive_model_count,
         "model_count": model_count,
         "source": "pipeline_hsd_advisory",
+    }
+
+
+def local_llm_hsd_classification(
+    review: dict[str, Any] | None,
+    *,
+    classification_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    summary = classification_summary or {}
+    if not review or review.get("parse_status") != "ok":
+        return {
+            "classified": False,
+            "is_hatred": None,
+            "score": None,
+            "original_score": None,
+            "source": "local_llm_hsd_review",
+            "backend": "local_llm",
+            "model_id": summary.get("model_id"),
+            "parse_status": (review or {}).get("parse_status", "missing"),
+            "hsd_reasons": [],
+            "review_needed": True,
+            "pii_suggestion_count": 0,
+            "accepted_pii_suggestion_count": 0,
+            "pii_suggestion_status_counts": {},
+        }
+    hate = review.get("hate")
+    return {
+        "classified": isinstance(hate, bool),
+        "is_hatred": hate if isinstance(hate, bool) else None,
+        "score": None,
+        "original_score": None,
+        "source": "local_llm_hsd_review",
+        "backend": "local_llm",
+        "model_id": summary.get("model_id"),
+        "parse_status": review.get("parse_status"),
+        "hsd_reasons": list(review.get("hsd_reasons") or []),
+        "review_needed": bool(review.get("review_needed", hate)),
+        "pii_suggestion_count": int(review.get("pii_suggestion_count", 0) or 0),
+        "accepted_pii_suggestion_count": int(
+            review.get("accepted_pii_suggestion_count", 0) or 0
+        ),
+        "pii_suggestion_status_counts": review.get(
+            "pii_suggestion_status_counts",
+            {},
+        ),
+    }
+
+
+def local_llm_reviews_by_id(
+    classification: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if not classification or classification.get("backend") != "local_llm":
+        return {}
+    reviews = classification.get("row_reviews") or []
+    return {
+        str(review.get("id")): review
+        for review in reviews
+        if isinstance(review, dict) and review.get("id") is not None
     }
 
 
@@ -1293,10 +1376,13 @@ def platform_insight_report(
     aggregate: dict[str, Any],
     audit_rows: list[dict[str, Any]] | None = None,
     id_col: str | None = None,
+    classification_reviews: dict[str, dict[str, Any]] | None = None,
+    classification_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     label_col = first_present_column(output_rows, POST_CLASSIFICATION_LABEL_COLUMNS)
     score_col = first_present_column(output_rows, POST_CLASSIFICATION_SCORE_COLUMNS)
     uses_explicit_classification = label_col is not None or score_col is not None
+    uses_local_llm_reviews = bool(classification_reviews)
     target_rows = 0
     classified_rows = 0
     hatred_rows = 0
@@ -1308,7 +1394,6 @@ def platform_insight_report(
     category_cue_counts_before: Counter[str] = Counter()
     category_cue_counts_after: Counter[str] = Counter()
     queue_items: list[dict[str, Any]] = []
-    queue_preview: list[dict[str, Any]] = []
     leakage_status_counts: Counter[str] = Counter()
     context_status_counts: Counter[str] = Counter()
     harm_risk_counts: Counter[str] = Counter()
@@ -1324,6 +1409,11 @@ def platform_insight_report(
         original_text = str(original_row.get(text_col, "") or "")
         protected_text = str(output_row.get(output_col, "") or "")
         audit_row = audit_rows[row_index] if row_index < len(audit_rows) else None
+        row_id = review_row_id(
+            output_row,
+            row_index=row_index + 1,
+            id_col=id_col,
+        )
         metric = metric_for_insight_row(
             audit_row=audit_row,
             original_text=original_text,
@@ -1349,7 +1439,12 @@ def platform_insight_report(
         categories = sorted(before_counts)
         if categories:
             target_rows += 1
-        if uses_explicit_classification:
+        if uses_local_llm_reviews:
+            classification = local_llm_hsd_classification(
+                (classification_reviews or {}).get(str(row_id)),
+                classification_summary=classification_summary,
+            )
+        elif uses_explicit_classification:
             classification = hatred_classification(
                 output_row,
                 label_col=label_col,
@@ -1378,15 +1473,27 @@ def platform_insight_report(
                 hatred_rows += 1
                 queue_items.append(
                     {
-                        "row_id": review_row_id(
-                            output_row,
-                            row_index=row_index + 1,
-                            id_col=id_col,
-                        ),
+                        "row_id": row_id,
                         "status": "needs_review",
                         "target_categories": categories,
                         "protected_preview": preview_text(protected_text),
                         "score": classification.get("score"),
+                        "hsd_backend": classification.get("backend"),
+                        "hsd_model_id": classification.get("model_id"),
+                        "hsd_reasons": classification.get("hsd_reasons", []),
+                        "review_needed": classification.get("review_needed"),
+                        "pii_suggestion_count": classification.get(
+                            "pii_suggestion_count",
+                            0,
+                        ),
+                        "accepted_pii_suggestion_count": classification.get(
+                            "accepted_pii_suggestion_count",
+                            0,
+                        ),
+                        "pii_suggestion_status_counts": classification.get(
+                            "pii_suggestion_status_counts",
+                            {},
+                        ),
                         "positive_model_count": classification.get(
                             "positive_model_count"
                         ),
@@ -1460,19 +1567,44 @@ def platform_insight_report(
         "classification": {
             "label": "post_classification_hatred",
             "source": (
+                "local_llm_hsd_review"
+                if uses_local_llm_reviews
+                else
                 "csv_post_classification_columns"
                 if uses_explicit_classification
                 else "pipeline_hsd_advisory"
             ),
             "display_name": (
+                "Local LLM HSD review"
+                if uses_local_llm_reviews
+                else
                 "Post-classification hatred"
                 if uses_explicit_classification
                 else "HSD model flags"
             ),
             "score_basis": (
+                "binary_structured_hsd_label_no_confidence"
+                if uses_local_llm_reviews
+                else
                 "csv_score_or_label_columns"
                 if uses_explicit_classification
                 else "any_registered_hsd_model_positive_for_chosen_candidate"
+            ),
+            "backend": (classification_summary or {}).get(
+                "backend",
+                "local_llm" if uses_local_llm_reviews else "ml",
+            ),
+            "model_id": (classification_summary or {}).get("model_id"),
+            "parse_count": (classification_summary or {}).get("parse_count"),
+            "fallback_count": (classification_summary or {}).get("fallback_count"),
+            "skipped_count": (classification_summary or {}).get("skipped_count"),
+            "reason_tag_counts": (classification_summary or {}).get(
+                "reason_tag_counts",
+                {},
+            ),
+            "pii_suggestion_status_counts": (classification_summary or {}).get(
+                "pii_suggestion_status_counts",
+                {},
             ),
             "label_column": label_col,
             "score_column": score_col,
@@ -1486,7 +1618,7 @@ def platform_insight_report(
             "total_positive_model_votes": sum(positive_model_counts),
             "total_model_votes": sum(model_counts),
             "model_vote_rule": None
-            if uses_explicit_classification
+            if uses_explicit_classification or uses_local_llm_reviews
             else "one_or_more_registered_hsd_models_positive",
         },
         "target_groups": {
@@ -1524,6 +1656,9 @@ def platform_insight_report(
             "queue_items": queue_items,
             "queue_preview": queue_items[:MAX_PREVIEW_ROWS],
             "routing_rule": (
+                "local_llm_hsd_review_positive"
+                if uses_local_llm_reviews
+                else
                 "post_classification_hatred_positive"
                 if uses_explicit_classification
                 else "pipeline_hsd_advisory_positive"
@@ -1559,11 +1694,7 @@ def read_ensemble_metrics() -> dict[str, Any] | None:
 
 
 def presidio_available() -> bool:
-    try:
-        import presidio_analyzer  # noqa: F401
-    except ModuleNotFoundError:
-        return False
-    return True
+    return importlib.util.find_spec("presidio_analyzer") is not None
 
 
 def module_available(module_name: str) -> bool:
@@ -1606,6 +1737,18 @@ def model_status() -> dict[str, Any]:
             "role": (
                 "Lazy auto-pipeline HSD preservation check. It compares "
                 "candidate rewrites and rejects large hatred-score drift."
+            ),
+        },
+        "local_llm": {
+            "available": True,
+            "active_by_default": False,
+            "pipeline_role": "post_cleaning_hsd_review",
+            "model_id": "openai/gpt-oss-20b",
+            "endpoint": "http://localhost:1234/v1/chat/completions",
+            "status": "disabled_until_selected",
+            "role": (
+                "Optional OpenAI-compatible local LLM review. It only receives "
+                "post-cleaning text and does not run during status checks."
             ),
         },
         "hsd_classifiers": {
@@ -1756,7 +1899,7 @@ def load_hsd_classifier() -> Any:
     return HsdAdvisoryRuntime.from_model_id(
         HSD_ADVISORY_MODEL_ID,
         allow_model_download=False,
-        device="auto",
+        device="cpu",
         decision_threshold=0.5,
         large_drop_threshold=0.25,
         max_abs_drift=0.35,
@@ -2118,11 +2261,7 @@ def build_csv_privatize_response(
 
     from contextsafe_hsd.auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 
-    disabled_models = (
-        frozenset(request.disabled_models)
-        if request.disabled_models
-        else CSV_INSIGHT_DEFAULT_DISABLED_MODELS
-    )
+    disabled_models = csv_disabled_models_for_request(request)
 
     if progress_callback is not None:
         progress_callback(
@@ -2147,6 +2286,13 @@ def build_csv_privatize_response(
             ),
             gliner_model=request.gliner_model,
             gliner_profile=request.gliner_profile,
+            hsd_classification_backend=request.hsd_classification_backend,
+            local_llm_endpoint=request.local_llm_endpoint,
+            local_llm_model=request.local_llm_model,
+            local_llm_timeout_seconds=request.local_llm_timeout_seconds,
+            local_llm_batch_size=request.local_llm_batch_size,
+            local_llm_enable_pii_suggestions=request.local_llm_enable_pii_suggestions,
+            official_mode=False,
         )
     )
     processing_rows, processing_id_col, review_id_synthetic, review_id_strategy = (
@@ -2165,6 +2311,36 @@ def build_csv_privatize_response(
         replace_text=request.replace_text,
         progress_callback=progress_callback,
     )
+    insight_output_col = request.text_col if request.replace_text else request.output_col
+    classification: dict[str, Any] = {
+        "backend": request.hsd_classification_backend,
+        "status": "using_pipeline_hsd_advisory",
+        "source": "pipeline_hsd_advisory",
+        "pii_suggestions_applied": False,
+    }
+    if request.hsd_classification_backend == "local_llm":
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "stage": "hsd_advisory",
+                    "processed": 0,
+                    "total": len(engine_result.rows),
+                    "detail": "Running local LLM HSD review on protected text.",
+                }
+            )
+        classification = append_hate_classification(
+            context=context,
+            original_rows=processing_rows,
+            output_rows=engine_result.rows,
+            text_col=insight_output_col,
+            columns={
+                "label": "__contextsafe_hsd_label",
+                "score": "__contextsafe_hsd_score",
+                "model_count": "__contextsafe_hsd_model_count",
+            },
+            require_hate_classification=False,
+            id_col=processing_id_col,
+        )
     if progress_callback is not None:
         progress_callback(
             {
@@ -2201,6 +2377,7 @@ def build_csv_privatize_response(
         **engine_result.summary,
         "artifact_type": "workbench_csv_audit",
         "validation": validation,
+        "classification": classification,
     }
     summary["id_col"] = request.id_col
     summary["case_key_col"] = request.id_col
@@ -2234,11 +2411,11 @@ def build_csv_privatize_response(
         },
         "validation": validation,
         "metrics": summary["metrics"],
+        "classification": classification,
         "pipeline_profile": current_auto_pipeline_profile(
             disabled_models=disabled_models
         ),
     }
-    insight_output_col = request.text_col if request.replace_text else request.output_col
     review_csv = build_review_csv(
         engine_result.rows,
         output_col=insight_output_col,
@@ -2252,6 +2429,8 @@ def build_csv_privatize_response(
         aggregate=summary["metrics"],
         audit_rows=engine_result.audit_rows,
         id_col=processing_id_col,
+        classification_reviews=local_llm_reviews_by_id(classification),
+        classification_summary=classification,
     )
     preview_rows = [
         csv_preview_row(

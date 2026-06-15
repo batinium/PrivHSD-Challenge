@@ -66,7 +66,9 @@ const CATEGORY_LABELS = {
 };
 const AUTO_DASHBOARD_DISABLED_MODELS = ["semantic", "local_llm"];
 const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub", "gliner"];
-const AUTO_MODEL_ORDER = ["token_policy_ensemble", "hsd_advisory"];
+const AUTO_MODEL_ORDER = ["token_policy_ensemble", "hsd_advisory", "local_llm"];
+const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
+const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
 const RISK_FILTERS = [
   { id: "all", label: "All" },
   { id: "high", label: "High" },
@@ -240,7 +242,11 @@ function ReviewQueuePanel({ ngoReview }) {
                 <span>{formatScoreValue(item.score)}</span>
               </div>
               <p>{item.protected_preview}</p>
-              <Tags values={(item.target_categories || []).map(categoryLabel)} />
+              <Tags values={[
+                ...(item.target_categories || []).map(categoryLabel),
+                ...(item.hsd_reasons || []).map(statusText),
+                item.pii_suggestion_count ? `${item.pii_suggestion_count} PII cues` : null
+              ].filter(Boolean)} />
             </article>
           ))}
         </div>
@@ -630,8 +636,19 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewCaseChange, reviewDecisions
                 <p>{item.protected_preview}</p>
                 <Tags values={[
                   ...(item.target_categories || []).map(categoryLabel),
-                  ...(item.context_tags || []).map(statusText)
-                ]} />
+                  ...(item.context_tags || []).map(statusText),
+                  ...(item.hsd_reasons || []).map(statusText),
+                  item.hsd_backend ? `backend: ${statusText(item.hsd_backend)}` : null,
+                  item.pii_suggestion_count ? `${item.pii_suggestion_count} PII suggestions` : null,
+                  item.accepted_pii_suggestion_count ? `${item.accepted_pii_suggestion_count} review cues` : null
+                ].filter(Boolean)} />
+                {item.pii_suggestion_status_counts && Object.keys(item.pii_suggestion_status_counts).length ? (
+                  <div className="suggestion-status-strip">
+                    {Object.entries(item.pii_suggestion_status_counts).map(([status, count]) => (
+                      <span key={status}><strong>{formatCount(count)}</strong> {statusText(status)}</span>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="context-retention-strip">
                   <span><strong>{formatPercentRate(item.context_preservation?.retention?.target_cue ?? null)}</strong> target refs</span>
                   <span><strong>{formatPercentRate(item.context_preservation?.retention?.utility_cue ?? null)}</strong> HSD signals</span>
@@ -732,6 +749,7 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
   const summary = result?.audit?.summary || {};
   const validation = summary.validation || {};
   const manifest = result?.manifest || {};
+  const classification = manifest.classification || summary.classification || {};
   return (
     <section className="portal-panel report-summary">
       <div className="portal-panel-head">
@@ -777,6 +795,24 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
           <strong>{result?.cache?.hit ? "Loaded" : result ? "Saved" : "None"}</strong>
         </div>
       </div>
+      <div className="detail-grid classification-grid">
+        <div>
+          <span>HSD backend</span>
+          <strong>{statusText(classification.backend || "ml")}</strong>
+        </div>
+        <div>
+          <span>Parse</span>
+          <strong>{classification.parse_count ?? "n/a"}</strong>
+        </div>
+        <div>
+          <span>Fallback</span>
+          <strong>{classification.fallback_count ?? 0}</strong>
+        </div>
+        <div>
+          <span>PII cues</span>
+          <strong>{Object.values(classification.pii_suggestion_status_counts || {}).reduce((total, value) => total + Number(value || 0), 0)}</strong>
+        </div>
+      </div>
     </section>
   );
 }
@@ -791,7 +827,9 @@ function NgoDashboard({ result }) {
     ? "HSD advisory model flags"
     : classification.source === "csv_post_classification_columns"
       ? "CSV classification labels"
-      : "Awaiting CSV run";
+      : classification.source === "local_llm_hsd_review"
+        ? "local LLM review"
+        : "Awaiting CSV run";
 
   return (
     <>
@@ -879,9 +917,21 @@ function DataIntakePanel({
   csvName,
   csvText,
   headers,
+  hsdBackend,
   idCol,
+  localLlmBatchSize,
+  localLlmEnablePiiSuggestions,
+  localLlmEndpoint,
+  localLlmModel,
+  localLlmTimeout,
+  onHsdBackend,
   onFile,
   onIdCol,
+  onLocalLlmBatchSize,
+  onLocalLlmEnablePiiSuggestions,
+  onLocalLlmEndpoint,
+  onLocalLlmModel,
+  onLocalLlmTimeout,
   onReplaceText,
   onRunCsv,
   onTextCol,
@@ -931,6 +981,43 @@ function DataIntakePanel({
           <span>PII masking, meaning checks, and HSD preservation run automatically.</span>
         </div>
       </div>
+      <div className="backend-control">
+        <span>HSD Review Backend</span>
+        <div className="segmented-control backend-selector">
+          <button className={hsdBackend === "ml" ? "active" : ""} onClick={() => onHsdBackend("ml")} type="button">
+            ML classifier
+          </button>
+          <button className={hsdBackend === "local_llm" ? "active" : ""} onClick={() => onHsdBackend("local_llm")} type="button">
+            Local LLM
+          </button>
+        </div>
+      </div>
+      {hsdBackend === "local_llm" ? (
+        <div className="llm-options">
+          <div className="form-grid">
+            <label>
+              <span>Endpoint</span>
+              <input value={localLlmEndpoint} onChange={(event) => onLocalLlmEndpoint(event.target.value)} />
+            </label>
+            <label>
+              <span>Model</span>
+              <input value={localLlmModel} onChange={(event) => onLocalLlmModel(event.target.value)} />
+            </label>
+            <label>
+              <span>Batch Size</span>
+              <input min="1" type="number" value={localLlmBatchSize} onChange={(event) => onLocalLlmBatchSize(event.target.value)} />
+            </label>
+            <label>
+              <span>Timeout Seconds</span>
+              <input min="1" type="number" value={localLlmTimeout} onChange={(event) => onLocalLlmTimeout(event.target.value)} />
+            </label>
+          </div>
+          <label className="check">
+            <input checked={localLlmEnablePiiSuggestions} onChange={(event) => onLocalLlmEnablePiiSuggestions(event.target.checked)} type="checkbox" />
+            <span>Capture residual PII suggestions for review metadata</span>
+          </label>
+        </div>
+      ) : null}
       <label className="check">
         <input checked={replaceText} onChange={(event) => onReplaceText(event.target.checked)} type="checkbox" />
         <span>Replace text column</span>
@@ -1008,6 +1095,7 @@ function orderedStatusItems(items, order, options = {}) {
 function modelStatusFromSummary(modelStatus) {
   const hsd = modelStatus?.hsd_advisory;
   const tokenPolicy = modelStatus?.token_policy_ensemble;
+  const localLlm = modelStatus?.local_llm;
   return {
     token_policy_ensemble: tokenPolicy
       ? {
@@ -1019,6 +1107,12 @@ function modelStatusFromSummary(modelStatus) {
       ? {
           status: hsd.available ? "available" : "missing_dependency",
           ...hsd
+        }
+      : undefined,
+    local_llm: localLlm
+      ? {
+          status: localLlm.status || "disabled_until_selected",
+          ...localLlm
         }
       : undefined
   };
@@ -1041,6 +1135,7 @@ function providerStatusFromSummary(modelStatus) {
 
 function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownloadCsv, onDownloadAudit, onDownloadManifest }) {
   const verification = result?.audit?.summary?.stages?.verification || {};
+  const classification = result?.manifest?.classification || result?.audit?.summary?.classification || verification.hsd_classification || {};
   const providers = result?.manifest?.providers || providerStatusFromSummary(modelStatus);
   const models = result?.manifest?.models || modelStatusFromSummary(modelStatus);
   const providerItems = orderedStatusItems(providers, AUTO_PROVIDER_ORDER);
@@ -1057,15 +1152,18 @@ function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownlo
           <strong>{csvGauges.cue}%</strong>
         </div>
         <div>
-          <span>HSD preservation</span>
-          <strong>{verification.hsd_advisory_status || "waiting"}</strong>
+          <span>HSD classification</span>
+          <strong>{classification.status || verification.hsd_advisory_status || "waiting"}</strong>
         </div>
       </div>
       <div className="audit-tags">
         <Tags values={[
+          classification.backend ? `classification: ${statusText(classification.backend)}` : null,
+          classification.model_id ? `model: ${classification.model_id}` : null,
+          classification.parse_count !== undefined ? `parsed: ${classification.parse_count}` : null,
           ...providerItems.map(([name, item]) => `${name}: ${item.status || "unknown"}`),
           ...modelItems.map(([name, item]) => `${name}: ${item.status || "unknown"}`)
-        ]} />
+        ].filter(Boolean)} />
       </div>
       <div className="audit-actions">
         <button className="ghost" disabled={!result} onClick={onDownloadCsv} type="button">
@@ -1132,7 +1230,18 @@ function delay(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function csvRequestPayload({ csvText, idCol, replaceText, textCol }) {
+function csvRequestPayload({
+  csvText,
+  hsdBackend,
+  idCol,
+  localLlmBatchSize,
+  localLlmEnablePiiSuggestions,
+  localLlmEndpoint,
+  localLlmModel,
+  localLlmTimeout,
+  replaceText,
+  textCol
+}) {
   return {
     csv_text: csvText,
     text_col: textCol,
@@ -1142,8 +1251,14 @@ function csvRequestPayload({ csvText, idCol, replaceText, textCol }) {
     mode: "auto",
     style_scrub: false,
     disabled_providers: [],
-    disabled_models: AUTO_DASHBOARD_DISABLED_MODELS,
-    metric_depth: "fast"
+    disabled_models: hsdBackend === "local_llm" ? ["semantic"] : AUTO_DASHBOARD_DISABLED_MODELS,
+    metric_depth: "fast",
+    hsd_classification_backend: hsdBackend,
+    local_llm_endpoint: localLlmEndpoint,
+    local_llm_model: localLlmModel,
+    local_llm_timeout_seconds: Number(localLlmTimeout) || 120,
+    local_llm_batch_size: Number(localLlmBatchSize) || 10,
+    local_llm_enable_pii_suggestions: Boolean(localLlmEnablePiiSuggestions)
   };
 }
 
@@ -1154,6 +1269,12 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [textCol, setTextCol] = useState("");
   const [idCol, setIdCol] = useState("");
   const [replaceText, setReplaceText] = useState(true);
+  const [hsdBackend, setHsdBackend] = useState("ml");
+  const [localLlmEndpoint, setLocalLlmEndpoint] = useState(DEFAULT_LOCAL_LLM_ENDPOINT);
+  const [localLlmModel, setLocalLlmModel] = useState(DEFAULT_LOCAL_LLM_MODEL);
+  const [localLlmBatchSize, setLocalLlmBatchSize] = useState("10");
+  const [localLlmTimeout, setLocalLlmTimeout] = useState("120");
+  const [localLlmEnablePiiSuggestions, setLocalLlmEnablePiiSuggestions] = useState(true);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [cacheBusy, setCacheBusy] = useState(false);
@@ -1212,9 +1333,21 @@ function CsvWorkbench({ activeView, modelStatus }) {
       csvName={csvName}
       csvText={csvText}
       headers={headers}
+      hsdBackend={hsdBackend}
       idCol={idCol}
+      localLlmBatchSize={localLlmBatchSize}
+      localLlmEnablePiiSuggestions={localLlmEnablePiiSuggestions}
+      localLlmEndpoint={localLlmEndpoint}
+      localLlmModel={localLlmModel}
+      localLlmTimeout={localLlmTimeout}
+      onHsdBackend={handleHsdBackendChange}
       onFile={handleFile}
       onIdCol={handleIdColChange}
+      onLocalLlmBatchSize={handleLocalLlmBatchSizeChange}
+      onLocalLlmEnablePiiSuggestions={handleLocalLlmPiiSuggestionChange}
+      onLocalLlmEndpoint={handleLocalLlmEndpointChange}
+      onLocalLlmModel={handleLocalLlmModelChange}
+      onLocalLlmTimeout={handleLocalLlmTimeoutChange}
       onReplaceText={handleReplaceTextChange}
       onRunCsv={runCsv}
       onTextCol={handleTextColChange}
@@ -1311,6 +1444,52 @@ function CsvWorkbench({ activeView, modelStatus }) {
     }
   };
 
+  function refreshCachedCsv(optionOverrides = {}) {
+    setResult(null);
+    setProcessingProgress(null);
+    if (csvText && textCol) {
+      void lookupCachedCsv({
+        csvTextValue: csvText,
+        idColValue: idCol,
+        replaceTextValue: replaceText,
+        textColValue: textCol,
+        optionOverrides
+      });
+    } else {
+      setCacheNotice("HSD backend setting changed. Run CSV to process with these settings.");
+    }
+  }
+
+  function handleHsdBackendChange(value) {
+    setHsdBackend(value);
+    refreshCachedCsv({ hsdBackend: value });
+  }
+
+  function handleLocalLlmEndpointChange(value) {
+    setLocalLlmEndpoint(value);
+    refreshCachedCsv({ localLlmEndpoint: value });
+  }
+
+  function handleLocalLlmModelChange(value) {
+    setLocalLlmModel(value);
+    refreshCachedCsv({ localLlmModel: value });
+  }
+
+  function handleLocalLlmBatchSizeChange(value) {
+    setLocalLlmBatchSize(value);
+    refreshCachedCsv({ localLlmBatchSize: value });
+  }
+
+  function handleLocalLlmTimeoutChange(value) {
+    setLocalLlmTimeout(value);
+    refreshCachedCsv({ localLlmTimeout: value });
+  }
+
+  function handleLocalLlmPiiSuggestionChange(value) {
+    setLocalLlmEnablePiiSuggestions(value);
+    refreshCachedCsv({ localLlmEnablePiiSuggestions: value });
+  }
+
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1387,16 +1566,37 @@ function CsvWorkbench({ activeView, modelStatus }) {
     }
   }
 
-  async function lookupCachedCsv({ csvTextValue, idColValue, replaceTextValue, textColValue }) {
+  async function lookupCachedCsv({
+    csvTextValue,
+    idColValue,
+    optionOverrides = {},
+    replaceTextValue,
+    textColValue
+  }) {
     setCacheBusy(true);
     setCacheNotice("");
+    const options = {
+      hsdBackend,
+      localLlmBatchSize,
+      localLlmEnablePiiSuggestions,
+      localLlmEndpoint,
+      localLlmModel,
+      localLlmTimeout,
+      ...optionOverrides
+    };
     try {
       const response = await fetch("/api/csv/cache", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(csvRequestPayload({
           csvText: csvTextValue,
+          hsdBackend: options.hsdBackend,
           idCol: idColValue,
+          localLlmBatchSize: options.localLlmBatchSize,
+          localLlmEnablePiiSuggestions: options.localLlmEnablePiiSuggestions,
+          localLlmEndpoint: options.localLlmEndpoint,
+          localLlmModel: options.localLlmModel,
+          localLlmTimeout: options.localLlmTimeout,
           replaceText: replaceTextValue,
           textCol: textColValue
         }))
@@ -1436,7 +1636,13 @@ function CsvWorkbench({ activeView, modelStatus }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(csvRequestPayload({
           csvText,
+          hsdBackend,
           idCol,
+          localLlmBatchSize,
+          localLlmEnablePiiSuggestions,
+          localLlmEndpoint,
+          localLlmModel,
+          localLlmTimeout,
           replaceText,
           textCol
         }))

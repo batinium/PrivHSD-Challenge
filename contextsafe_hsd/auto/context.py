@@ -209,6 +209,18 @@ class AutoPipelineContext:
                 large_drop_threshold=self.config.hsd_advisory_large_drop_threshold,
                 max_abs_drift=self.config.hsd_advisory_max_abs_drift,
             )
+        if name == "local_llm":
+            from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
+                LocalLlmHsdReviewRuntime,
+            )
+
+            return LocalLlmHsdReviewRuntime(
+                endpoint=self.config.local_llm_endpoint,
+                model_id=self.config.local_llm_model,
+                timeout_seconds=self.config.local_llm_timeout_seconds,
+                enable_pii_suggestions=self.config.local_llm_enable_pii_suggestions,
+                require_structured_output=self.config.local_llm_require_structured_output,
+            )
         raise ValueError(f"unknown auto model {name!r}")
 
     def ensure_token_policy_provider(self) -> Any | None:
@@ -216,6 +228,9 @@ class AutoPipelineContext:
 
     def ensure_hsd_advisory(self) -> Any | None:
         return self.ensure_model("hsd_advisory")
+
+    def ensure_local_llm_review(self) -> Any | None:
+        return self.ensure_model("local_llm")
 
     def audit_status(self) -> dict[str, Any]:
         return {

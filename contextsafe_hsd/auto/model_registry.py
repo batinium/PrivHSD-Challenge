@@ -202,11 +202,13 @@ def discover_hsd_advisory(config: AutoPipelineConfig) -> dict[str, Any]:
 
 
 def discover_local_llm(config: AutoPipelineConfig) -> dict[str, Any]:
-    if not config.local_llm_enabled:
+    if "local_llm" in config.disabled_models or "local-llm" in config.disabled_models:
+        return disabled_status("model")
+    if config.hsd_classification_backend != "local_llm" and not config.local_llm_enabled:
         return {
             "status": "disabled",
             "kind": "model",
-            "detail": "Local LLM structured review is disabled for official auto mode.",
+            "detail": "Local LLM structured review is disabled unless selected.",
         }
     if config.official_mode:
         return {
@@ -215,7 +217,14 @@ def discover_local_llm(config: AutoPipelineConfig) -> dict[str, Any]:
             "detail": "Local LLM review is not enabled for official mode.",
         }
     return {
-        "status": "not_configured",
+        "status": "available",
         "kind": "model",
-        "detail": "No local-only structured LLM reviewer is configured.",
+        "load": "lazy",
+        "model_id": config.local_llm_model,
+        "endpoint": config.local_llm_endpoint,
+        "batch_size": config.local_llm_batch_size,
+        "timeout_seconds": config.local_llm_timeout_seconds,
+        "pii_suggestions_enabled": config.local_llm_enable_pii_suggestions,
+        "require_structured_output": config.local_llm_require_structured_output,
+        "detail": "Local OpenAI-compatible structured review; no live call made during discovery.",
     }

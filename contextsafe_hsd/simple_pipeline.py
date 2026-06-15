@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 from .csv_pipeline import read_csv, write_csv, write_json
+from .row_ids import report_row_id
 from .submission import git_commit, sha256_file, validation_report
 
 
@@ -135,6 +136,7 @@ def skipped_classification_result(
     reason: str,
     output_rows: list[dict[str, Any]],
     columns: dict[str, str],
+    backend: str = "ml",
 ) -> dict[str, Any]:
     for row in output_rows:
         row[columns["label"]] = ""
@@ -142,13 +144,14 @@ def skipped_classification_result(
         row[columns["model_count"]] = "0"
     return {
         "status": "skipped",
+        "backend": backend,
         "skip_reason": reason,
         "row_count": len(output_rows),
         "columns": columns,
     }
 
 
-def append_hate_classification(
+def append_ml_hate_classification(
     *,
     context: AutoPipelineContext,
     original_rows: list[dict[str, str]],
@@ -162,6 +165,7 @@ def append_hate_classification(
             reason="empty_input",
             output_rows=output_rows,
             columns=columns,
+            backend="ml",
         )
     runtime = context.ensure_hsd_advisory()
     if runtime is None:
@@ -171,6 +175,7 @@ def append_hate_classification(
             reason="hsd_advisory_unavailable",
             output_rows=output_rows,
             columns=columns,
+            backend="ml",
         )
 
     original_texts = [str(row.get(text_col, "") or "") for row in original_rows]
@@ -195,6 +200,7 @@ def append_hate_classification(
             row[columns["model_count"]] = "0"
         return {
             "status": "skipped",
+            "backend": "ml",
             "skip_reason": "model_inference_failed",
             "error_class": type(exc).__name__,
             "row_count": len(output_rows),
@@ -229,6 +235,7 @@ def append_hate_classification(
     ]
     return {
         "status": "ok",
+        "backend": "ml",
         "row_count": len(output_rows),
         "columns": columns,
         "decision_threshold": threshold,
@@ -246,6 +253,117 @@ def append_hate_classification(
             threshold=threshold,
         ),
     }
+
+
+def append_local_llm_hate_classification(
+    *,
+    context: AutoPipelineContext,
+    output_rows: list[dict[str, Any]],
+    text_col: str,
+    id_col: str | None,
+    columns: dict[str, str],
+    require_hate_classification: bool,
+) -> dict[str, Any]:
+    if not output_rows:
+        return skipped_classification_result(
+            reason="empty_input",
+            output_rows=output_rows,
+            columns=columns,
+            backend="local_llm",
+        )
+    runtime = context.ensure_local_llm_review()
+    if runtime is None:
+        if require_hate_classification:
+            raise SimplifiedPipelineError(
+                "Local LLM HSD classification was required but unavailable"
+            )
+        return skipped_classification_result(
+            reason="local_llm_unavailable",
+            output_rows=output_rows,
+            columns=columns,
+            backend="local_llm",
+        )
+
+    review_rows = [
+        {
+            "id": report_row_id(row, row_index=index, id_col=id_col),
+            "text": str(row.get(text_col, "") or ""),
+        }
+        for index, row in enumerate(output_rows, start=1)
+    ]
+    try:
+        result = runtime.review_texts(
+            review_rows,
+            batch_size=context.config.local_llm_batch_size,
+        )
+    except Exception as exc:
+        if require_hate_classification:
+            raise
+        skipped = skipped_classification_result(
+            reason="model_inference_failed",
+            output_rows=output_rows,
+            columns=columns,
+            backend="local_llm",
+        )
+        return {**skipped, "error_class": type(exc).__name__}
+
+    if require_hate_classification and result.skipped_count:
+        raise SimplifiedPipelineError(
+            "Local LLM HSD classification was required but one or more rows "
+            "could not be parsed"
+        )
+
+    review_by_id = result.by_id()
+    for row, review_row in zip(output_rows, review_rows):
+        review = review_by_id.get(review_row["id"])
+        if review is None or review.parse_status != "ok":
+            row[columns["label"]] = ""
+            row[columns["score"]] = ""
+            row[columns["model_count"]] = "0"
+            continue
+        row[columns["label"]] = review.label
+        row[columns["score"]] = ""
+        row[columns["model_count"]] = "1"
+
+    summary = result.summary(include_suggestion_text=False)
+    return {
+        **summary,
+        "columns": columns,
+        "model_ids": [result.model_id],
+        "model_count": 1 if result.parsed_count else 0,
+        "score_basis": "binary_structured_hsd_label_no_confidence",
+        "pii_suggestions_applied": False,
+    }
+
+
+def append_hate_classification(
+    *,
+    context: AutoPipelineContext,
+    original_rows: list[dict[str, str]],
+    output_rows: list[dict[str, Any]],
+    text_col: str,
+    columns: dict[str, str],
+    require_hate_classification: bool,
+    id_col: str | None = None,
+) -> dict[str, Any]:
+    backend = context.config.hsd_classification_backend
+    if backend == "local_llm":
+        return append_local_llm_hate_classification(
+            context=context,
+            output_rows=output_rows,
+            text_col=text_col,
+            id_col=id_col,
+            columns=columns,
+            require_hate_classification=require_hate_classification,
+        )
+    return append_ml_hate_classification(
+        context=context,
+        original_rows=original_rows,
+        output_rows=output_rows,
+        text_col=text_col,
+        columns=columns,
+        require_hate_classification=require_hate_classification,
+    )
 
 
 def tradeoff_summary(
@@ -272,6 +390,7 @@ def tradeoff_summary(
         ),
         "rows_with_overmasking_warnings": metrics.get("rows_with_overmasking_warnings"),
         "classification_status": classification.get("status"),
+        "classification_backend": classification.get("backend"),
         "classification_mean_delta": classification.get("mean_delta"),
         "classification_decision_changed_count": classification.get(
             "decision_changed_count"
@@ -301,6 +420,24 @@ def analysis_stage_summary(
         "decision_changed_count": classification.get("decision_changed_count"),
         "candidate_drift_check": candidate_drift_check,
     }
+    verification["hsd_classification"] = {
+        "status": classification_status,
+        "backend": classification.get("backend", "ml"),
+        "columns": classification.get("columns", {}),
+        "skip_reason": classification.get("skip_reason"),
+        "model_count": classification.get("model_count", 0),
+        "model_ids": classification.get("model_ids", []),
+        "parse_count": classification.get("parse_count"),
+        "fallback_count": classification.get("fallback_count"),
+        "skipped_count": classification.get("skipped_count"),
+        "prediction_counts": classification.get("prediction_counts", {}),
+        "reason_tag_counts": classification.get("reason_tag_counts", {}),
+        "pii_suggestion_status_counts": classification.get(
+            "pii_suggestion_status_counts",
+            {},
+        ),
+        "pii_suggestions_applied": classification.get("pii_suggestions_applied"),
+    }
     return stages
 
 
@@ -315,7 +452,7 @@ def run_sanitize_classify(
     command: list[str] | None = None,
     metric_depth: str = "fast",
     allow_model_download: bool = False,
-    device: str = "auto",
+    device: str = "cpu",
     max_model_batch_size: int = 16,
     max_provider_rows: int | None = None,
     disabled_providers: list[str] | None = None,
@@ -325,6 +462,12 @@ def run_sanitize_classify(
     gliner_profile: str = "pii",
     enable_token_policy: bool = False,
     hsd_advisory_models: list[str] | None = None,
+    hsd_classification_backend: str = "ml",
+    local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions",
+    local_llm_model: str = "openai/gpt-oss-20b",
+    local_llm_timeout_seconds: float = 120.0,
+    local_llm_batch_size: int = 10,
+    local_llm_enable_pii_suggestions: bool = True,
     generalize_targets: bool | None = False,
     style_scrub: bool = False,
     hate_label_col: str = DEFAULT_HATE_LABEL_COL,
@@ -353,6 +496,12 @@ def run_sanitize_classify(
         "gliner_model": gliner_model,
         "gliner_profile": gliner_profile,
         "enable_token_policy": enable_token_policy,
+        "hsd_classification_backend": hsd_classification_backend,
+        "local_llm_endpoint": local_llm_endpoint,
+        "local_llm_model": local_llm_model,
+        "local_llm_timeout_seconds": local_llm_timeout_seconds,
+        "local_llm_batch_size": local_llm_batch_size,
+        "local_llm_enable_pii_suggestions": local_llm_enable_pii_suggestions,
         "generalize_targets": generalize_targets,
         "style_scrub": style_scrub,
         "official_mode": False,
@@ -388,6 +537,7 @@ def run_sanitize_classify(
         text_col=text_col,
         columns=classification_columns,
         require_hate_classification=require_hate_classification,
+        id_col=id_col,
     )
 
     write_csv(output_path, output_rows, output_fieldnames)

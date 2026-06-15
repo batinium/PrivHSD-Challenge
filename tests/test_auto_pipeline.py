@@ -23,6 +23,27 @@ def read_rows(path):
         return list(csv.DictReader(handle))
 
 
+def test_default_auto_config_uses_ml_hsd_backend():
+    config = AutoPipelineConfig()
+
+    assert config.hsd_classification_backend == "ml"
+    assert config.local_llm_enabled is False
+    assert config.device == "cpu"
+
+
+def test_local_llm_backend_enables_lazy_local_model_status():
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            hsd_classification_backend="local-llm",
+            official_mode=False,
+        )
+    )
+
+    assert context.config.hsd_classification_backend == "local_llm"
+    assert context.model_status["local_llm"]["status"] == "available"
+    assert context.model_load_counts["local_llm"] == 0
+
+
 def write_four_col(path):
     rows = [
         {
