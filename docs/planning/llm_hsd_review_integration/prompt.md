@@ -55,6 +55,11 @@ default until Qwen gets a prompt or validator pass, especially because Qwen
 emitted 49 accepted residual PII suggestions versus 1 for the GPT-OSS final
 run.
 
+One additional Qwen candidate, `qwen/qwen3-4b-2507`, was tested only on the
+99-row failure-focused gate. It parsed 99/99 rows but needed 20 fallback rows,
+fixed only 38 prior failures, and scored F1 0.1867 on the failure subset, so no
+full 800-row run was executed.
+
 ```text
 Classify cleaned text for a hate-speech dataset. Hate speech means the text
 itself endorses, advocates, commands, or asserts abuse, inferiority, exclusion,
@@ -330,6 +335,10 @@ Live prompt-tuning artifacts:
   records the `qwen3.5-4b` failure-subset and full-run comparison.
 - `docs/planning/llm_hsd_review_integration/qwen35_4b_full_predictions.csv`
   records the cleaned-text-only full-run Qwen predictions.
+- `docs/planning/llm_hsd_review_integration/qwen3_4b_2507_results.json`
+  records the stopped-at-gate `qwen/qwen3-4b-2507` subset comparison.
+- `docs/planning/llm_hsd_review_integration/qwen3_4b_2507_failure_subset_predictions.csv`
+  records the cleaned-text-only gated subset predictions.
 
 The selected default is `v1_endorsement_rule`, not `v2_context_first`, because
 the latter won on accuracy but gave up too much HSD recall.

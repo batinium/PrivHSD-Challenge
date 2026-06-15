@@ -133,6 +133,10 @@ Failure artifacts committed for tuning:
     prompt.
 - `docs/planning/llm_hsd_review_integration/qwen35_4b_full_predictions.csv`
   - Cleaned-text-only per-row Qwen predictions for the 800-row run.
+- `docs/planning/llm_hsd_review_integration/qwen3_4b_2507_results.json`
+  - Gated `qwen/qwen3-4b-2507` failure-subset comparison.
+- `docs/planning/llm_hsd_review_integration/qwen3_4b_2507_failure_subset_predictions.csv`
+  - Cleaned-text-only per-row predictions for the gated subset.
 
 ## Selected Prompt Version
 
@@ -174,19 +178,28 @@ Reasoning:
 - The final CLI run with the selected prompt parsed 800/800 rows, skipped 0,
   and reached 0.9186 accuracy on the 86 manual edge rows.
 
-## Qwen 3.5 4B Follow-Up
+## Qwen Follow-Ups
 
 The Unsloth Qwen 3.5 4B checkpoint was loaded in LM Studio under model id
 `qwen3.5-4b` and tested with the selected endorsement prompt. The LM Studio
 context length was set to 8k; runtime temperature remained `0`.
 
-The 99-row failure-focused subset looked promising:
+The 99-row failure-focused subset was used as a gate before spending time on a
+full 800-row run:
 
 | Model | Rows | Accuracy On Prior Failures | Fixed Prior Failures | Still Wrong | Fallback Rows |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `qwen3.5-4b` | 99 | 0.4949 | 49 | 50 | 0 |
+| `qwen/qwen3-4b-2507` | 99 | 0.3838 | 38 | 61 | 20 |
 
-On the full 800-row `sanitize-classify` run:
+`qwen/qwen3-4b-2507` was stopped at the gate. It fixed fewer prior failures
+than both `qwen3.5-4b` and the selected GPT-OSS prompt sweep, left 39 false
+positives and 22 false negatives on the failure-focused subset, and required
+20 fallback rows across 30 requests. No full 800-row run was executed for that
+candidate.
+
+For `qwen3.5-4b`, the subset gate was strong enough to justify a full 800-row
+`sanitize-classify` run:
 
 | Model | Accuracy | Precision | Recall | F1 | FP | FN | Parse | Fallback Rows | Time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
