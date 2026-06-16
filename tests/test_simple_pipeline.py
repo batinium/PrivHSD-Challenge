@@ -97,6 +97,7 @@ def test_protect_parser_is_small_and_defaults_to_local_llm_review():
         "protect",
         "validate-submission",
         "profile-dataset",
+        "mini-4b-verifier-ablation",
     }
     args = parser.parse_args(
         [

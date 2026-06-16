@@ -5,12 +5,14 @@ __pycache__/
 .venv/
 build/
 dist/
+.vscode/
 *.egg-info/
 data/public_dev/
 data/outputs/
 data/external_unseen/
 data/evaluation/
 data/temp/
+data/train/
 node_modules/
 workbench/frontend/dist/
 workbench/.cache/

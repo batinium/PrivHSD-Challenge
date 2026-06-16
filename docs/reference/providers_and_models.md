@@ -1,7 +1,7 @@
 # Providers And Models
 
 Status: active
-Last verified: 2026-06-15
+Last verified: 2026-06-16
 
 The final runtime has a small provider/model story.
 
@@ -36,6 +36,20 @@ sidecar metadata:
 - validated residual PII suggestions
 
 It must not rewrite whole comments and must not append columns to exact output.
+
+## Research Verifier Candidate
+
+`mini-4b-verifier-ablation` is an isolated research command for comparing small
+local HSD verifier models against the current `openai/gpt-oss-20b` sidecar
+review. It is not part of the exact CSV runtime and does not modify protected
+text or append output columns.
+
+The 2026-06-16 mini run selected `qwen/qwen3-4b` as the next safer candidate to
+test on full samples. The intended role is sidecar-only positive verification
+of main-model predicted positives. Recall routing, combined routing, and the
+uncensored/aggressive probe are not ready for default use.
+
+Keep generated verifier artifacts under ignored `data/outputs/` paths.
 
 ## Removed Runtime Families
 

@@ -1,7 +1,7 @@
 # Quickstart
 
 Status: active
-Last verified: 2026-06-15
+Last verified: 2026-06-16
 
 ## Install
 
@@ -64,6 +64,23 @@ python -m contextsafe_hsd.cli profile-dataset \
 
 The profile command reports schema and aggregate counts without printing raw row
 text.
+
+## Research: Mini 4B Verifier Ablation
+
+This command is for local research runs only. It does not change the official
+exact CSV output path.
+
+```bash
+python -m contextsafe_hsd.cli mini-4b-verifier-ablation \
+  --endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --timeout-seconds 180 \
+  --batch-size 10 \
+  --progress
+```
+
+Current handoff: `qwen/qwen3-4b` is the small-model candidate to compare on full
+samples as a sidecar-only positive verifier. See
+`docs/planning/mini_4b_verifier_ablation/prompt.md`.
 
 ## Data Handling
 

@@ -63,6 +63,12 @@ Raw author/user IDs should not be treated as review case IDs.
 - `validate-submission`: row/order/column contract validation.
 - `profile-dataset`: raw-text-free incoming CSV profile.
 
+Research-only:
+
+- `mini-4b-verifier-ablation`: isolated local-model verifier experiment. It
+  writes ignored artifacts under `data/outputs/` and does not alter the exact
+  CSV runtime.
+
 Python callers can use:
 
 ```python
@@ -106,13 +112,16 @@ contextsafe_hsd/     Final Python package
 tests/               Regression tests for exact output, cue preservation, LLM sidecars
 docs/reference/      Stable contracts
 docs/runbooks/       Operating commands
-docs/planning/       Current status only
+docs/planning/       Current status and active research handoffs
 workbench/           Optional local FastAPI + React demo
 data/                Ignored local data, models, outputs, and run notes
 ```
 
 Start with `docs/reference/pipeline.md`,
 `docs/reference/data_contract.md`, and `docs/runbooks/quickstart.md`.
+
+The current small-model verifier handoff is
+`docs/planning/mini_4b_verifier_ablation/prompt.md`.
 
 ## Data Policy
 

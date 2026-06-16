@@ -1,7 +1,7 @@
 # Pipeline Reference
 
 Status: active
-Last verified: 2026-06-15
+Last verified: 2026-06-16
 
 The final public story is one command and one backend path:
 
@@ -74,6 +74,16 @@ Verification:
 - LLM labels, reason tags, parse/fallback counts, and PII suggestions go to
   sidecars only.
 - Normal logs and reports do not print raw row text.
+
+Research-only verifier work:
+
+- `mini-4b-verifier-ablation` compares small local verifier models around the
+  sidecar HSD reviewer.
+- It writes ignored artifacts under `data/outputs/mini_4b_verifier_ablation/`.
+- It does not change the exact CSV path, the production prompt, or the manifest
+  contract.
+- The current candidate for a larger sidecar-only comparison is
+  `qwen/qwen3-4b` as a positive verifier.
 
 ## Manifest Shape
 

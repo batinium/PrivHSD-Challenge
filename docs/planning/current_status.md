@@ -1,7 +1,7 @@
 # Current Status
 
 Status: active
-Last verified: 2026-06-15
+Last verified: 2026-06-16
 
 ContextSafe-HSD is now reduced to the final exact CSV pipeline plus a compact
 optional workbench demo.
@@ -30,6 +30,30 @@ python -m contextsafe_hsd.cli protect \
 
 `--llm-review off` is supported for offline exact runs.
 
+## Research-Only Verifier Ablation
+
+The mini 4B verifier ablation is implemented as an isolated research command,
+not part of the public hand-in runtime:
+
+```bash
+python -m contextsafe_hsd.cli mini-4b-verifier-ablation \
+  --endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --timeout-seconds 180 \
+  --batch-size 10 \
+  --progress
+```
+
+Current result:
+
+- Best safer small candidate: `qwen/qwen3-4b`
+- Recommended next step: full-sample comparison as a sidecar-only positive
+  verifier candidate
+- Do not promote recall-router, combined-router, or uncensored-probe behavior to
+  the default runtime yet
+
+The detailed handoff is in
+`docs/planning/mini_4b_verifier_ablation/prompt.md`.
+
 ## Cleanup Completed
 
 Removed from the public package:
@@ -38,9 +62,9 @@ Removed from the public package:
 - classifier module and tests
 - HSD advisory runtime
 - GLiNER provider
-- semantic triage, source reports, utility benchmarks, ablation helpers
+- semantic triage, source reports, utility benchmarks
 - dataset prep helpers and scripts
-- research planning docs and generated experiment artifacts
+- generated experiment artifacts
 
 Retained:
 
@@ -49,6 +73,7 @@ Retained:
 - span fusion and residual cleanup
 - cue safeguards
 - local LLM sidecar review
+- isolated mini 4B verifier ablation CLI for research only
 - exact CSV validation
 - author-group masking off by default
 - optional workbench demo
