@@ -4,6 +4,8 @@ Status: active
 Last verified: 2026-06-17
 
 Two compact diagrams cover the core data flow and the civilian review platform.
+For the current Expo screen-by-screen flow, see
+[mobile_user_flow.md](mobile_user_flow.md).
 
 ## Core Pipeline
 
