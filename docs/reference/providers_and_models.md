@@ -15,6 +15,22 @@ The final runtime has a small provider/model story.
 - Cue-safe style scrubbing and repeated author-group residual masking.
 - HSD cue safeguards.
 
+## Frozen MVP Baseline
+
+The mobile-app handoff baseline is:
+
+`data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv`
+
+This is a byte-identical copy of the scored #17 no-simplify artifact. It keeps
+deterministic PII, Presidio/scrubadub PII Assist, strict residual cleanup,
+cue-safe style scrubbing, and author-group detector-backed residual masking. It
+disables language simplification with `--no-style-simplify-language`.
+
+Do not default to GPT/local LLM verification, DPMLM, broad TF-IDF author
+masking, or semantic clustering. Recent private runs showed no reliable gain:
+the guarded semantic-cluster run scored `0.3696` versus the frozen baseline
+`0.3721`, while the ranked semantic-cluster run fell to `0.2524`.
+
 ## Optional PII Assist
 
 Presidio and scrubadub are local optional helpers. They add span evidence only;

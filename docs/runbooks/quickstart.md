@@ -33,15 +33,30 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
+  --hsd-classifier off \
+  --llm-verifier off \
+  --no-style-simplify-language \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
-This defaults to the fine-tuned HF sidecar classifier with `--llm-review off`
-and `--llm-verifier off`. GPT/local LLM sidecars are optional backup/audit
-extensions; enable them explicitly only when you want second-pass evidence, not
-for the default submission path. Use `--hsd-classifier off` for a privacy-only
-run without sidecar labels.
+This is the frozen MVP upload path. It keeps deterministic PII masking,
+Presidio/scrubadub PII Assist, strict residual cleanup, cue-safe style
+scrubbing, and author-group detector-backed residual masking. It disables
+language simplification because the no-simplify run was the best fast
+leaderboard baseline.
+
+Use the fine-tuned HF sidecar classifier only when you want local audit evidence:
+
+```bash
+--hsd-classifier hf \
+--hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+--hf-hsd-threshold 0.850469
+```
+
+GPT/local LLM sidecars are optional backup/audit extensions; enable them
+explicitly only when you want second-pass evidence, not for the default
+submission path.
 
 ## Validate
 

@@ -1,6 +1,6 @@
 # Current Status
 
-Status: active
+Status: frozen MVP baseline selected
 Last verified: 2026-06-17
 
 ContextSafe-HSD is now reduced to the final exact CSV pipeline plus a compact
@@ -9,13 +9,67 @@ privacy protection plus classifier-friendly utility preservation, with a
 fine-tuned local HF classifier as the scalable HSD sidecar and GPT/local LLM
 kept as backup/audit tooling.
 
+## Frozen MVP Baseline
+
+The competition baseline is frozen for the mobile-application handoff. Use the
+final copied upload artifact:
+
+`data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv`
+
+It is byte-identical to the scored #17 artifact:
+
+`data/outputs/style_tradeoff_no_simplify_20260617/train_split.no_simplify.protected.csv`
+
+The corresponding reproducible command is:
+
+```bash
+python -m contextsafe_hsd.cli protect \
+  --input data/train/train_split.csv \
+  --output data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv \
+  --text-col text \
+  --id-col ID \
+  --preset exact \
+  --hsd-classifier off \
+  --llm-verifier off \
+  --no-style-simplify-language \
+  --manifest data/outputs/frozen_final_baseline_20260617/protect_result.json \
+  --audit data/outputs/frozen_final_baseline_20260617/audit.json \
+  --progress
+```
+
+Frozen behavior:
+
+- deterministic direct/technical PII masking stays on
+- Presidio and scrubadub PII Assist stay enabled when installed
+- strict residual PII cleanup stays on
+- cue-safe style scrubbing stays on
+- language simplification stays off
+- author-group detector-backed residual masking stays on
+- GPT/local LLM verifier, DPMLM, TF-IDF masking, and semantic clustering stay
+  out of the default path
+
+Private leaderboard context from 2026-06-17:
+
+| Run | Candidate | Score | Decision |
+| --- | --- | ---: | --- |
+| #17 | `train_split.no_simplify.protected` | `0.3721` | frozen MVP |
+| #18 | `train_split.full_style.protected` | `0.3702` | no gain |
+| #23 | `train_split.semantic_cluster_guarded.protected` | `0.3696` | no gain, more complexity |
+| #24 | `train_split.semantic_cluster_ranked.protected` | `0.2524` | too destructive |
+| #21 | broad low-impact token masking | `0.3524` | worse than baseline |
+| #14 | LLM/checker run | `0.3835` | research only, too slow for MVP |
+
+The freeze decision is to preserve the fastest explainable deterministic path
+and move product work to the mobile application. Experiments remain useful
+notes, but they should not be promoted without a clear private-score gain.
+
 ## Public Runtime
 
 - `protect`
 - `validate-submission`
 - `profile-dataset`
 
-The final command is:
+The frozen upload command is:
 
 ```bash
 python -m contextsafe_hsd.cli protect \
@@ -24,16 +78,18 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
+  --hsd-classifier off \
+  --llm-verifier off \
+  --no-style-simplify-language \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
-This defaults to the fine-tuned HF sidecar classifier with `--llm-review off`
-and `--llm-verifier off`. The sidecar verifier is available for positive labels
-from a selected sidecar classifier; it records disagreement and uncertainty in
-the sidecars only and does not change labels or CSV text.
+This is the selected MVP path for upload generation. It disables sidecar
+classification because sidecar labels do not affect the exact CSV output and
+the official evaluator supplies the trade-off score.
 
-Recommended scalable classifier path:
+Optional local audit classifier path:
 
 ```bash
 python -m contextsafe_hsd.cli protect \
@@ -48,6 +104,10 @@ python -m contextsafe_hsd.cli protect \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
+
+The sidecar verifier is available for positive labels from a selected sidecar
+classifier; it records disagreement and uncertainty in the sidecars only and
+does not change labels or CSV text.
 
 Current score context:
 
