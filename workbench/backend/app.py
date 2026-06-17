@@ -40,7 +40,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v8"
+CSV_CACHE_VERSION = "workbench_csv_result_v9"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -54,8 +54,10 @@ CSV_PROGRESS_PHASES = {
     "baseline": (7, 22, "Privacy baseline"),
     "providers": (22, 40, "PII provider scan"),
     "candidates": (52, 64, "Candidate generation"),
-    "local_llm_review": (64, 82, "Local LLM review"),
-    "selection": (82, 96, "Final row audit"),
+    "local_llm_review": (64, 80, "Local LLM review"),
+    "local_llm_verifier": (80, 88, "Second verifier"),
+    "citizen_restatement": (88, 95, "Citizen restatement"),
+    "selection": (95, 97, "Final row audit"),
     "summary": (96, 98, "Aggregating report"),
     "packaging": (98, 100, "Preparing dashboard"),
 }
@@ -111,6 +113,7 @@ DIRECT_RESTATEMENT_PATTERNS = (
     ),
     (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "a network address"),
 )
+SEMANTIC_RESTATEMENT_MIN_SCORE = 0.72
 
 
 class PrivatizeRequest(BaseModel):
@@ -160,6 +163,12 @@ class CsvPrivatizeRequest(BaseModel):
     local_llm_timeout_seconds: float = 120.0
     local_llm_batch_size: int = 10
     local_llm_enable_pii_suggestions: bool = True
+    hsd_verifier_backend: Literal["off", "local_llm"] = "local_llm"
+    local_llm_verifier_model: str | None = None
+    local_llm_verifier_batch_size: int | None = None
+    local_llm_verifier_timeout_seconds: float | None = None
+    local_llm_verifier_prompt_style: Literal["current", "human_review_router"] = "current"
+    local_llm_verifier_reasoning_effort: str | None = "minimal"
     citizen_restatement_backend: Literal["off", "local_llm"] = "off"
     citizen_restatement_model: str = "openai/gpt-oss-20b"
     citizen_restatement_batch_size: int = 10
@@ -442,6 +451,12 @@ def sanitize_llm_restatement(restatement: str) -> str:
     return text
 
 
+def redacted_citizen_fallback(protected_text: str) -> str:
+    text = sanitize_llm_restatement(protected_text)
+    text = re.sub(r"\bcase[-_ ]?[0-9a-f]{6,}\b", "a case reference", text, flags=re.I)
+    return preview_text(text, max_chars=260)
+
+
 def restatement_schema() -> dict[str, Any]:
     return {
         "type": "object",
@@ -647,6 +662,7 @@ def build_citizen_restatements(
     text_col: str,
     output_col: str,
     id_col: str | None,
+    candidate_ids: set[str] | None = None,
     backend: str,
     endpoint: str,
     model_id: str,
@@ -657,6 +673,7 @@ def build_citizen_restatements(
 ) -> dict[str, dict[str, Any]]:
     if backend == "off":
         return {}
+    allowed_ids = {str(item) for item in candidate_ids or set()}
     inputs = [
         {
             "id": review_row_id(row, row_index=index + 1, id_col=id_col),
@@ -667,6 +684,8 @@ def build_citizen_restatements(
         }
         for index, row in enumerate(rows)
     ]
+    if allowed_ids:
+        inputs = [row for row in inputs if str(row["id"]) in allowed_ids]
     results: dict[str, dict[str, Any]] = {}
     chunk_size = max(1, int(batch_size or 1))
     for start in range(0, len(inputs), chunk_size):
@@ -682,9 +701,10 @@ def build_citizen_restatements(
         except Exception as exc:
             for row in batch:
                 results[row["id"]] = {
-                    "text": "",
+                    "text": redacted_citizen_fallback(row.get("protected_text", "")),
                     "backend": backend,
-                    "parse_status": "skipped",
+                    "parse_status": "fallback_redacted",
+                    "evidence_source": "fallback_redacted_protected_text",
                     "error_class": type(exc).__name__,
                     "error": str(exc),
                 }
@@ -697,6 +717,21 @@ def build_citizen_restatements(
             backend=semantic_backend,
             model_id=semantic_model,
         )
+        semantic = item["semantic_similarity"]
+        score = semantic.get("score") if isinstance(semantic, dict) else None
+        if (
+            isinstance(score, (int, float))
+            and semantic.get("status") == "ok"
+            and float(score) < SEMANTIC_RESTATEMENT_MIN_SCORE
+        ):
+            item["llm_restatement_text"] = item.get("text", "")
+            item["text"] = redacted_citizen_fallback(
+                str(source.get("protected_text", "") or "")
+            )
+            item["parse_status"] = "semantic_fallback"
+            item["evidence_source"] = "semantic_fallback_redacted_protected_text"
+        else:
+            item.setdefault("evidence_source", "llm_protected_text_restatement")
     return results
 
 
@@ -711,22 +746,49 @@ def build_review_csv(
     review_rows = [
         {
             "case_id": review_row_id(row, row_index=index, id_col=id_col),
-            "citizen_restatement": str(
-                (
-                    restatements.get(
-                        review_row_id(row, row_index=index, id_col=id_col),
-                        {},
-                    )
-                    or {}
-                ).get("text", "")
+            "citizen_evidence": str(
+                (restatements.get(review_row_id(row, row_index=index, id_col=id_col), {}) or {}).get(
+                    "text",
+                    "",
+                )
             ),
-            "protected_text": str(row.get(output_col, "") or ""),
+            "evidence_source": str(
+                (restatements.get(review_row_id(row, row_index=index, id_col=id_col), {}) or {}).get(
+                    "evidence_source",
+                    "not_generated",
+                )
+            ),
+            "restatement_status": str(
+                (restatements.get(review_row_id(row, row_index=index, id_col=id_col), {}) or {}).get(
+                    "parse_status",
+                    "not_generated",
+                )
+            ),
+            "semantic_similarity_score": (
+                (restatements.get(review_row_id(row, row_index=index, id_col=id_col), {}) or {})
+                .get("semantic_similarity", {})
+                .get("score")
+            ),
+            "semantic_similarity_status": str(
+                (
+                    (restatements.get(review_row_id(row, row_index=index, id_col=id_col), {}) or {})
+                    .get("semantic_similarity", {})
+                    or {}
+                ).get("status", "not_generated")
+            ),
         }
         for index, row in enumerate(rows, start=1)
     ]
     return write_csv_text(
         review_rows,
-        ["case_id", "citizen_restatement", "protected_text"],
+        [
+            "case_id",
+            "citizen_evidence",
+            "evidence_source",
+            "restatement_status",
+            "semantic_similarity_score",
+            "semantic_similarity_status",
+        ],
     )
 
 
@@ -757,6 +819,16 @@ def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]
         "local_llm_batch_size": request.local_llm_batch_size,
         "local_llm_enable_pii_suggestions": (
             request.local_llm_enable_pii_suggestions
+        ),
+        "hsd_verifier_backend": request.hsd_verifier_backend,
+        "local_llm_verifier_model": request.local_llm_verifier_model or "",
+        "local_llm_verifier_batch_size": request.local_llm_verifier_batch_size,
+        "local_llm_verifier_timeout_seconds": (
+            request.local_llm_verifier_timeout_seconds
+        ),
+        "local_llm_verifier_prompt_style": request.local_llm_verifier_prompt_style,
+        "local_llm_verifier_reasoning_effort": (
+            request.local_llm_verifier_reasoning_effort or ""
         ),
         "citizen_restatement_backend": request.citizen_restatement_backend,
         "citizen_restatement_model": request.citizen_restatement_model,
@@ -875,8 +947,9 @@ def csv_cache_record_summary(record: dict[str, Any]) -> dict[str, Any] | None:
         return None
     manifest = result.get("manifest") or {}
     insights = result.get("platform_insights") or {}
-    review = insights.get("ngo_review") or {}
+    review = insights.get("citizen_jury") or {}
     citizen = manifest.get("citizen_validation") or {}
+    verifier = manifest.get("classification_verifier") or {}
     return {
         "cache_key": cache_key,
         "created_at": record.get("created_at"),
@@ -887,6 +960,10 @@ def csv_cache_record_summary(record: dict[str, Any]) -> dict[str, Any] | None:
         "replace_text": options.get("replace_text"),
         "hsd_classification_backend": options.get("hsd_classification_backend"),
         "local_llm_model": options.get("local_llm_model"),
+        "hsd_verifier_backend": options.get("hsd_verifier_backend"),
+        "local_llm_verifier_model": verifier.get("model_id")
+        or options.get("local_llm_verifier_model")
+        or options.get("local_llm_model"),
         "citizen_restatement_backend": options.get("citizen_restatement_backend"),
         "citizen_restatement_model": citizen.get("restatement_model"),
         "semantic_similarity_backend": options.get("semantic_similarity_backend"),
@@ -969,7 +1046,7 @@ def queue_items_for_cache(cache_key: str) -> list[dict[str, Any]]:
         raise HTTPException(status_code=404, detail="Processed CSV result not found.")
     result = record.get("result") or {}
     insights = result.get("platform_insights") or {}
-    review = insights.get("ngo_review") or {}
+    review = insights.get("citizen_jury") or {}
     return list(review.get("queue_items") or review.get("queue_preview") or [])
 
 
@@ -1311,12 +1388,14 @@ def current_auto_pipeline_profile(
         },
         "verification": {
             "hsd_classification_backends": ["local_llm"],
-            "local_llm_review_default": "disabled_until_selected",
+            "local_llm_review_default": "local_llm",
+            "local_llm_verifier_default": "local_llm",
             "post_classification_hatred_columns": list(POST_CLASSIFICATION_LABEL_COLUMNS),
             "post_classification_score_columns": list(POST_CLASSIFICATION_SCORE_COLUMNS),
         },
         "citizen_validation": {
-            "evidence_source": "protected_text_restatement",
+            "evidence_field": "citizen_evidence",
+            "evidence_source": "search_proof_restatement_with_semantic_fallback",
             "raw_text_visible": False,
             "vote_field": "final_hsd_label",
             "allowed_votes": ["confirmed_hatred", "not_hatred", "uncertain"],
@@ -1442,6 +1521,75 @@ def local_llm_reviews_by_id(
         str(review.get("id")): review
         for review in reviews
         if isinstance(review, dict) and review.get("id") is not None
+    }
+
+
+def citizen_restatement_candidate_ids(
+    rows: list[dict[str, Any]],
+    *,
+    id_col: str | None,
+    classification: dict[str, Any],
+) -> set[str]:
+    if classification.get("backend") == "local_llm":
+        return {
+            str(review.get("id"))
+            for review in classification.get("row_reviews") or []
+            if isinstance(review, dict)
+            and review.get("parse_status") == "ok"
+            and (str(review.get("label", "") or "") == "1" or review.get("hate") is True)
+        }
+    label_col = first_present_column(rows, POST_CLASSIFICATION_LABEL_COLUMNS)
+    score_col = first_present_column(rows, POST_CLASSIFICATION_SCORE_COLUMNS)
+    if not label_col and not score_col:
+        return set()
+    candidate_ids: set[str] = set()
+    for index, row in enumerate(rows, start=1):
+        classification_row = hatred_classification(
+            row,
+            label_col=label_col,
+            score_col=score_col,
+        )
+        if classification_row["classified"] and classification_row["is_hatred"]:
+            candidate_ids.add(str(review_row_id(row, row_index=index, id_col=id_col)))
+    return candidate_ids
+
+
+def local_llm_verifier_reviews_by_id(
+    verifier: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    if not verifier or verifier.get("backend") != "local_llm_verifier":
+        return {}
+    reviews = verifier.get("row_reviews") or []
+    return {
+        str(review.get("id")): review
+        for review in reviews
+        if isinstance(review, dict) and review.get("id") is not None
+    }
+
+
+def local_llm_verifier_metadata(
+    review: dict[str, Any] | None,
+    *,
+    verifier_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    summary = verifier_summary or {}
+    if not review:
+        return {
+            "status": "not_reviewed",
+            "decision": None,
+            "reason": None,
+            "action": None,
+            "model_id": summary.get("model_id"),
+            "prompt_style": summary.get("prompt_style"),
+        }
+    return {
+        "status": review.get("parse_status", "missing"),
+        "decision": review.get("decision"),
+        "suggested_label": review.get("suggested_label"),
+        "reason": review.get("reason"),
+        "action": review.get("action"),
+        "model_id": summary.get("model_id"),
+        "prompt_style": summary.get("prompt_style"),
     }
 
 
@@ -1675,12 +1823,12 @@ def safeguard_card(
         },
         "human_review": {
             "required": human_review_required,
-            "label": "NGO review required" if human_review_required else "No review queue route",
+            "label": "citizen jury review required" if human_review_required else "No review queue route",
         },
         "proportionate_response": {
             "auto_moderation": False,
             "label": "Human assessment only",
-            "message": "Use protected text and aggregate evidence for NGO assessment; this is not an automatic moderation decision.",
+            "message": "Use restated evidence and aggregate signals for citizen jury review; this is not an automatic moderation decision.",
         },
     }
 
@@ -1696,6 +1844,8 @@ def platform_insight_report(
     id_col: str | None = None,
     classification_reviews: dict[str, dict[str, Any]] | None = None,
     classification_summary: dict[str, Any] | None = None,
+    verifier_reviews: dict[str, dict[str, Any]] | None = None,
+    verifier_summary: dict[str, Any] | None = None,
     citizen_restatements: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     label_col = first_present_column(output_rows, POST_CLASSIFICATION_LABEL_COLUMNS)
@@ -1724,6 +1874,7 @@ def platform_insight_report(
     context_tag_counts: Counter[str] = Counter()
     audit_rows = audit_rows or []
     restatements = citizen_restatements or {}
+    verifier_reviews = verifier_reviews or {}
 
     for row_index, (original_row, output_row) in enumerate(zip(original_rows, output_rows)):
         original_text = str(original_row.get(text_col, "") or "")
@@ -1773,6 +1924,10 @@ def platform_insight_report(
             )
         else:
             classification = skipped_hsd_classification(audit_row)
+        verifier = local_llm_verifier_metadata(
+            verifier_reviews.get(str(row_id)),
+            verifier_summary=verifier_summary,
+        )
         safeguard = safeguard_card(
             classification=classification,
             leakage=leakage,
@@ -1797,6 +1952,15 @@ def platform_insight_report(
                         "row_id": row_id,
                         "status": "needs_review",
                         "target_categories": categories,
+                        "citizen_evidence": str(
+                            citizen_restatement.get("text", "") or ""
+                        ),
+                        "evidence_source": str(
+                            citizen_restatement.get(
+                                "evidence_source",
+                                "not_generated",
+                            )
+                        ),
                         "citizen_restatement": str(
                             citizen_restatement.get("text", "") or ""
                         ),
@@ -1807,9 +1971,12 @@ def platform_insight_report(
                                 "not_hatred",
                                 "uncertain",
                             ],
-                            "source": "llm_protected_text_restatement"
-                            if citizen_restatement
-                            else "not_generated",
+                            "source": citizen_restatement.get(
+                                "evidence_source",
+                                "llm_protected_text_restatement"
+                                if citizen_restatement
+                                else "not_generated",
+                            ),
                             "raw_text_retained": False,
                             "restatement_status": citizen_restatement.get(
                                 "parse_status",
@@ -1825,6 +1992,11 @@ def platform_insight_report(
                         "hsd_model_id": classification.get("model_id"),
                         "hsd_reasons": classification.get("hsd_reasons", []),
                         "review_needed": classification.get("review_needed"),
+                        "verifier": verifier,
+                        "verifier_decision": verifier.get("decision"),
+                        "verifier_reason": verifier.get("reason"),
+                        "verifier_action": verifier.get("action"),
+                        "verifier_model_id": verifier.get("model_id"),
                         "pii_suggestion_count": classification.get(
                             "pii_suggestion_count",
                             0,
@@ -1968,6 +2140,27 @@ def platform_insight_report(
             if uses_explicit_classification or uses_local_llm_reviews
             else None,
         },
+        "classification_verifier": {
+            "enabled": bool(verifier_reviews),
+            "backend": (verifier_summary or {}).get("backend", "local_llm_verifier"),
+            "model_id": (verifier_summary or {}).get("model_id"),
+            "prompt_style": (verifier_summary or {}).get("prompt_style"),
+            "status": (verifier_summary or {}).get(
+                "status",
+                "ok" if verifier_reviews else "skipped",
+            ),
+            "parse_count": (verifier_summary or {}).get("parse_count"),
+            "fallback_count": (verifier_summary or {}).get("fallback_count"),
+            "decision_counts": (verifier_summary or {}).get("decision_counts", {}),
+            "human_review_candidate_count": (verifier_summary or {}).get(
+                "human_review_candidate_count",
+                0,
+            ),
+            "label_override_applied": (verifier_summary or {}).get(
+                "label_override_applied",
+                False,
+            ),
+        },
         "target_groups": {
             "rows_with_target_group": target_rows,
             "target_group_row_rate": round_rate(target_rows, len(original_rows)),
@@ -1997,17 +2190,17 @@ def platform_insight_report(
                 "label": "Human assessment only",
             },
         },
-        "ngo_review": {
+        "citizen_jury": {
             "queue_rows": hatred_rows,
             "queue_rate": round_rate(hatred_rows, len(original_rows)),
             "queue_items": queue_items,
             "queue_preview": queue_items[:MAX_PREVIEW_ROWS],
             "citizen_validation": {
                 "enabled": bool(restatements),
-                "evidence_field": "citizen_restatement",
+                "evidence_field": "citizen_evidence",
                 "vote_field": "final_hsd_label",
                 "raw_text_retained": False,
-                "source": "llm_protected_text_restatement"
+                "source": "search_proof_restatement_with_semantic_fallback"
                 if restatements
                 else "not_generated",
             },
@@ -2021,8 +2214,8 @@ def platform_insight_report(
             ),
             "auto_moderation": False,
             "message": (
-                "Rows classified as hatred are routed to NGO review with protected "
-                "text and aggregate context; this report is not an automatic "
+                "Rows classified as hatred are routed to citizen jury review with "
+                "restated evidence and aggregate context; this report is not an automatic "
                 "moderation decision."
             ),
         },
@@ -2047,14 +2240,26 @@ def model_status() -> dict[str, Any]:
         },
         "local_llm": {
             "available": True,
-            "active_by_default": False,
+            "active_by_default": True,
             "pipeline_role": "post_cleaning_hsd_review",
             "model_id": "openai/gpt-oss-20b",
             "endpoint": "http://localhost:1234/v1/chat/completions",
-            "status": "disabled_until_selected",
+            "status": "available_when_selected",
             "role": (
                 "Optional OpenAI-compatible local LLM review. It only receives "
                 "post-cleaning text and does not run during status checks."
+            ),
+        },
+        "local_llm_verifier": {
+            "available": True,
+            "active_by_default": True,
+            "pipeline_role": "post_classification_positive_label_verifier",
+            "model_id": "openai/gpt-oss-20b",
+            "endpoint": "http://localhost:1234/v1/chat/completions",
+            "status": "available_when_selected",
+            "role": (
+                "Second-pass local verifier for positive HSD labels. It writes "
+                "audit metadata and does not override labels automatically."
             ),
         },
         "llm_guidance": {
@@ -2475,6 +2680,23 @@ def build_csv_privatize_response(
             local_llm_enable_pii_suggestions=(
                 request.local_llm_enable_pii_suggestions
             ),
+            llm_verifier=(
+                "local_llm"
+                if request.hsd_classification_backend == "local_llm"
+                and request.hsd_verifier_backend == "local_llm"
+                else "off"
+            ),
+            local_llm_verifier_model=(
+                request.local_llm_verifier_model or request.local_llm_model
+            ),
+            local_llm_verifier_timeout_seconds=(
+                request.local_llm_verifier_timeout_seconds
+            ),
+            local_llm_verifier_batch_size=request.local_llm_verifier_batch_size,
+            local_llm_verifier_prompt_style=request.local_llm_verifier_prompt_style,
+            local_llm_verifier_reasoning_effort=(
+                request.local_llm_verifier_reasoning_effort
+            ),
             generalize_targets=(
                 request.generalize_targets
                 if request.generalize_targets is not None
@@ -2491,6 +2713,7 @@ def build_csv_privatize_response(
         model_status = final_result["models"]
         load_counts = final_result["load_counts"]
         classification = final_result["classification"]
+        classification_verifier = final_result["classification_verifier"]
     else:
         engine_result = AutoPipelineEngine(context).process_rows(
             processing_rows,
@@ -2517,6 +2740,13 @@ def build_csv_privatize_response(
             "source": "not_classified",
             "reason": "no_csv_labels_or_local_llm_review",
             "pii_suggestions_applied": False,
+        }
+        classification_verifier = {
+            "backend": "local_llm_verifier",
+            "status": "skipped",
+            "skip_reason": "replace_text_disabled",
+            "row_reviews": [],
+            "label_override_applied": False,
         }
         if request.hsd_classification_backend == "local_llm":
             classification = append_hate_classification(
@@ -2569,6 +2799,7 @@ def build_csv_privatize_response(
         "artifact_type": "workbench_csv_audit",
         "validation": validation,
         "classification": classification,
+        "classification_verifier": classification_verifier,
     }
     summary["id_col"] = request.id_col
     summary["case_key_col"] = request.id_col
@@ -2600,16 +2831,22 @@ def build_csv_privatize_response(
         "validation": validation,
         "metrics": summary["metrics"],
         "classification": classification,
+        "classification_verifier": classification_verifier,
         "pipeline_profile": current_auto_pipeline_profile(
             disabled_models=disabled_models
         ),
     }
+    citizen_candidate_ids = citizen_restatement_candidate_ids(
+        engine_rows,
+        id_col=processing_id_col,
+        classification=classification,
+    )
     if progress_callback is not None and request.citizen_restatement_backend != "off":
         progress_callback(
             {
-                "stage": "packaging",
+                "stage": "citizen_restatement",
                 "processed": 0,
-                "total": len(engine_rows),
+                "total": len(citizen_candidate_ids),
                 "detail": "Generating citizen review restatements from protected text.",
             }
         )
@@ -2619,6 +2856,7 @@ def build_csv_privatize_response(
         text_col=request.text_col,
         output_col=insight_output_col,
         id_col=processing_id_col,
+        candidate_ids=citizen_candidate_ids,
         backend=request.citizen_restatement_backend,
         endpoint=request.local_llm_endpoint,
         model_id=request.citizen_restatement_model,
@@ -2633,13 +2871,18 @@ def build_csv_privatize_response(
     )
     manifest["citizen_validation"] = {
         "enabled": request.citizen_restatement_backend != "off",
+        "evidence_field": "citizen_evidence",
         "review_csv_columns": [
             "case_id",
-            "citizen_restatement",
-            "protected_text",
+            "citizen_evidence",
+            "evidence_source",
+            "restatement_status",
+            "semantic_similarity_score",
+            "semantic_similarity_status",
         ],
+        "candidate_row_count": len(citizen_candidate_ids),
         "raw_text_visible": False,
-        "evidence_source": "llm_protected_text_restatement"
+        "evidence_source": "search_proof_restatement_with_semantic_fallback"
         if request.citizen_restatement_backend != "off"
         else "not_generated",
         "restatement_backend": request.citizen_restatement_backend,
@@ -2673,6 +2916,8 @@ def build_csv_privatize_response(
         id_col=processing_id_col,
         classification_reviews=local_llm_reviews_by_id(classification),
         classification_summary=classification,
+        verifier_reviews=local_llm_verifier_reviews_by_id(classification_verifier),
+        verifier_summary=classification_verifier,
         citizen_restatements=citizen_restatements,
     )
     preview_rows = [
@@ -2688,7 +2933,12 @@ def build_csv_privatize_response(
     response = {
         "output_csv": output_csv,
         "review_csv": review_csv,
-        "audit": {"summary": summary, "rows": engine_audit_rows},
+        "audit": {
+            "summary": summary,
+            "rows": engine_audit_rows,
+            "classification_reviews": classification.get("row_reviews", []),
+            "verifier_reviews": classification_verifier.get("row_reviews", []),
+        },
         "manifest": manifest,
         "platform_insights": platform_insights,
         "preview_rows": preview_rows,

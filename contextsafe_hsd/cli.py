@@ -9,14 +9,14 @@ import time
 from pathlib import Path
 
 from .dataset_profile import DatasetProfileError, profile_dataset
-from .mini_verifier_ablation import (
+from .mini_verifier import (
     DEFAULT_ENDPOINT as MINI_VERIFIER_DEFAULT_ENDPOINT,
     DEFAULT_MAIN_MODEL as MINI_VERIFIER_DEFAULT_MAIN_MODEL,
     DEFAULT_OUTPUT_DIR as MINI_VERIFIER_DEFAULT_OUTPUT_DIR,
     DEFAULT_RUN_DIR as MINI_VERIFIER_DEFAULT_RUN_DIR,
     DEFAULT_SOURCE_CSV as MINI_VERIFIER_DEFAULT_SOURCE_CSV,
-    MiniVerifierAblationError,
-    run_ablation,
+    MiniVerifierError,
+    run_verifier_eval,
 )
 from .simple_pipeline import SimplifiedPipelineError, run_final_csv_pipeline
 from .submission import SubmissionError, validate_submission
@@ -121,6 +121,31 @@ def build_parser() -> argparse.ArgumentParser:
     protect.add_argument("--local-llm-timeout-seconds", type=float, default=120.0)
     protect.add_argument("--local-llm-batch-size", type=int, default=10)
     protect.add_argument(
+        "--llm-verifier",
+        choices=["off", "local-llm"],
+        default="local-llm",
+        help="Run optional second-pass local LLM verifier on main positive labels.",
+    )
+    protect.add_argument(
+        "--local-llm-verifier-model",
+        help=(
+            "Model identifier for --llm-verifier local-llm. Defaults to "
+            "--local-llm-model when omitted."
+        ),
+    )
+    protect.add_argument("--local-llm-verifier-timeout-seconds", type=float)
+    protect.add_argument("--local-llm-verifier-batch-size", type=int)
+    protect.add_argument(
+        "--local-llm-verifier-prompt-style",
+        choices=["current", "human-review-router"],
+        default="current",
+        help="Prompt style for the optional second-pass verifier.",
+    )
+    protect.add_argument(
+        "--local-llm-verifier-reasoning-effort",
+        help="Optional model-specific reasoning effort, for example 'minimal'.",
+    )
+    protect.add_argument(
         "--disable-local-llm-pii-suggestions",
         action="store_true",
         help="Disable advisory residual PII suggestions from local LLM review.",
@@ -167,31 +192,39 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("--split-col")
     profile.add_argument("--top-k", type=int, default=20)
 
-    ablation = subparsers.add_parser(
-        "mini-4b-verifier-ablation",
-        help="Run the 160-row local 3B-4B HSD verifier/router ablation.",
+    verifier_eval = subparsers.add_parser(
+        "mini-verifier-eval",
+        help="Run the 160-row local small-model HSD verifier/router evaluation.",
     )
-    ablation.add_argument("--source-csv", type=Path, default=MINI_VERIFIER_DEFAULT_SOURCE_CSV)
-    ablation.add_argument("--run-dir", type=Path, default=MINI_VERIFIER_DEFAULT_RUN_DIR)
-    ablation.add_argument("--output-dir", type=Path, default=MINI_VERIFIER_DEFAULT_OUTPUT_DIR)
-    ablation.add_argument("--endpoint", default=MINI_VERIFIER_DEFAULT_ENDPOINT)
-    ablation.add_argument("--main-model", default=MINI_VERIFIER_DEFAULT_MAIN_MODEL)
-    ablation.add_argument("--batch-size", type=int, default=10)
-    ablation.add_argument("--timeout-seconds", type=float, default=120.0)
-    ablation.add_argument("--candidate", action="append", dest="candidates", default=[])
-    ablation.add_argument("--shortlist-size", type=int, default=3)
-    ablation.add_argument("--rebuild-eval-set", action="store_true")
-    ablation.add_argument("--include-cost-floor", action="store_true")
-    ablation.add_argument(
+    verifier_eval.add_argument(
+        "--source-csv",
+        type=Path,
+        default=MINI_VERIFIER_DEFAULT_SOURCE_CSV,
+    )
+    verifier_eval.add_argument("--run-dir", type=Path, default=MINI_VERIFIER_DEFAULT_RUN_DIR)
+    verifier_eval.add_argument(
+        "--output-dir",
+        type=Path,
+        default=MINI_VERIFIER_DEFAULT_OUTPUT_DIR,
+    )
+    verifier_eval.add_argument("--endpoint", default=MINI_VERIFIER_DEFAULT_ENDPOINT)
+    verifier_eval.add_argument("--main-model", default=MINI_VERIFIER_DEFAULT_MAIN_MODEL)
+    verifier_eval.add_argument("--batch-size", type=int, default=10)
+    verifier_eval.add_argument("--timeout-seconds", type=float, default=120.0)
+    verifier_eval.add_argument("--candidate", action="append", dest="candidates", default=[])
+    verifier_eval.add_argument("--shortlist-size", type=int, default=3)
+    verifier_eval.add_argument("--rebuild-eval-set", action="store_true")
+    verifier_eval.add_argument("--include-cost-floor", action="store_true")
+    verifier_eval.add_argument(
         "--skip-uncensored-probe",
         action="store_true",
         help="Do not run the aggressive uncensored probe even if present.",
     )
-    ablation.add_argument("--min-screen-parse-success", type=float, default=0.95)
-    ablation.add_argument(
+    verifier_eval.add_argument("--min-screen-parse-success", type=float, default=0.95)
+    verifier_eval.add_argument(
         "--progress",
         action="store_true",
-        help="Print ablation progress to stderr.",
+        help="Print verifier evaluation progress to stderr.",
     )
 
     return parser
@@ -222,6 +255,18 @@ def main(argv: list[str] | None = None) -> int:
                 local_llm_batch_size=args.local_llm_batch_size,
                 local_llm_enable_pii_suggestions=(
                     not args.disable_local_llm_pii_suggestions
+                ),
+                llm_verifier=args.llm_verifier.replace("-", "_"),
+                local_llm_verifier_model=args.local_llm_verifier_model,
+                local_llm_verifier_timeout_seconds=(
+                    args.local_llm_verifier_timeout_seconds
+                ),
+                local_llm_verifier_batch_size=args.local_llm_verifier_batch_size,
+                local_llm_verifier_prompt_style=(
+                    args.local_llm_verifier_prompt_style.replace("-", "_")
+                ),
+                local_llm_verifier_reasoning_effort=(
+                    args.local_llm_verifier_reasoning_effort
                 ),
                 require_hate_classification=args.require_llm_review,
                 author_group_masking=args.enable_author_group_masking,
@@ -254,8 +299,8 @@ def main(argv: list[str] | None = None) -> int:
                 split_col=args.split_col,
                 top_k=args.top_k,
             )
-        elif args.command == "mini-4b-verifier-ablation":
-            result = run_ablation(
+        elif args.command == "mini-verifier-eval":
+            result = run_verifier_eval(
                 source_csv=args.source_csv,
                 run_dir=args.run_dir,
                 output_dir=args.output_dir,
@@ -271,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
                 min_screen_parse_success=args.min_screen_parse_success,
                 progress_callback=(
                     lambda message: print(
-                        f"[ablation] {message}",
+                        f"[verifier-eval] {message}",
                         file=sys.stderr,
                         flush=True,
                     )
@@ -285,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     except (
         DatasetProfileError,
-        MiniVerifierAblationError,
+        MiniVerifierError,
         OSError,
         SimplifiedPipelineError,
         SubmissionError,

@@ -50,6 +50,35 @@ def skipped_review_result(
     return result
 
 
+def skipped_verifier_result(
+    *,
+    reason: str,
+    row_count: int,
+    backend: str = "local_llm_verifier",
+    error_class: str | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "status": "skipped",
+        "backend": backend,
+        "skip_reason": reason,
+        "row_count": row_count,
+        "reviewed_scope": "main_local_llm_positive_rows_only",
+        "parse_count": 0,
+        "fallback_count": 0,
+        "skipped_count": row_count,
+        "decision_counts": {},
+        "reason_counts": {},
+        "action_counts": {},
+        "human_review_candidate_count": 0,
+        "label_override_applied": False,
+        "approved_use": "optional audit safeguard only; no label overrides",
+        "row_reviews": [],
+    }
+    if error_class:
+        result["error_class"] = error_class
+    return result
+
+
 def local_llm_hsd_review(
     *,
     context: AutoPipelineContext,
@@ -149,6 +178,88 @@ def append_local_llm_hate_classification(
     }
 
 
+def local_llm_hsd_verifier(
+    *,
+    context: AutoPipelineContext,
+    output_rows: list[dict[str, Any]],
+    classification: dict[str, Any],
+    text_col: str,
+    id_col: str | None,
+    endpoint: str,
+    model_id: str,
+    timeout_seconds: float,
+    batch_size: int,
+    prompt_style: str,
+    reasoning_effort: str | None,
+    model_factories: Mapping[str, Any] | None = None,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    if classification.get("backend") != "local_llm":
+        return skipped_verifier_result(
+            reason="classification_backend_not_local_llm",
+            row_count=0,
+        )
+    review_by_id = {
+        str(review.get("id")): review
+        for review in classification.get("row_reviews", [])
+        if isinstance(review, dict) and review.get("id") is not None
+    }
+    verifier_rows: list[dict[str, str]] = []
+    for index, row in enumerate(output_rows, start=1):
+        row_id = report_row_id(row, row_index=index, id_col=id_col)
+        review = review_by_id.get(row_id)
+        if not review or review.get("parse_status") != "ok":
+            continue
+        if str(review.get("label", "") or "") != "1" and review.get("hate") is not True:
+            continue
+        verifier_rows.append(
+            {
+                "id": row_id,
+                "text": str(row.get(text_col, "") or ""),
+            }
+        )
+    if not verifier_rows:
+        return skipped_verifier_result(
+            reason="no_main_positive_rows",
+            row_count=0,
+        )
+
+    factory = (model_factories or {}).get("local_llm_verifier")
+    if factory is not None:
+        runtime = factory(context)
+    else:
+        from .models.local_llm_hsd_verifier_runtime import (
+            LocalLlmHsdVerifierRuntime,
+        )
+
+        runtime = LocalLlmHsdVerifierRuntime(
+            endpoint=endpoint,
+            model_id=model_id,
+            timeout_seconds=timeout_seconds,
+            prompt_style=prompt_style,
+            reasoning_effort=reasoning_effort,
+        )
+    try:
+        result = runtime.verify_texts(
+            verifier_rows,
+            batch_size=batch_size,
+            progress_callback=progress_callback,
+        )
+    except Exception as exc:
+        return skipped_verifier_result(
+            reason="model_inference_failed",
+            row_count=len(verifier_rows),
+            error_class=type(exc).__name__,
+        )
+
+    summary = result.summary()
+    return {
+        **summary,
+        "model_ids": [result.model_id],
+        "model_count": 1 if result.parsed_count else 0,
+    }
+
+
 def append_hate_classification(
     *,
     context: AutoPipelineContext,
@@ -189,6 +300,7 @@ def append_hate_classification(
 def final_stage_summary(
     sanitization: dict[str, Any],
     classification: dict[str, Any],
+    verifier: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     stages = deepcopy(sanitization.get("stages", {}))
     verification = stages.setdefault("verification", {})
@@ -221,6 +333,31 @@ def final_stage_summary(
     }
     verification["local_llm_hsd_review"] = review_summary
     verification["hsd_classification"] = review_summary
+    if verifier is not None:
+        verification["local_llm_hsd_verifier"] = {
+            "status": verifier.get("status", "skipped"),
+            "backend": verifier.get("backend", "local_llm_verifier"),
+            "skip_reason": verifier.get("skip_reason"),
+            "model_count": verifier.get("model_count", 0),
+            "model_ids": verifier.get("model_ids", []),
+            "prompt_style": verifier.get("prompt_style"),
+            "reviewed_scope": verifier.get(
+                "reviewed_scope",
+                "main_local_llm_positive_rows_only",
+            ),
+            "parse_count": verifier.get("parse_count"),
+            "fallback_count": verifier.get("fallback_count"),
+            "skipped_count": verifier.get("skipped_count"),
+            "decision_counts": verifier.get("decision_counts", {}),
+            "reason_counts": verifier.get("reason_counts", {}),
+            "action_counts": verifier.get("action_counts", {}),
+            "human_review_candidate_count": verifier.get(
+                "human_review_candidate_count",
+                0,
+            ),
+            "label_override_applied": verifier.get("label_override_applied", False),
+            "approved_use": verifier.get("approved_use"),
+        }
     return stages
 
 
@@ -244,6 +381,12 @@ def build_final_pipeline_rows(
     local_llm_timeout_seconds: float = 120.0,
     local_llm_batch_size: int = 10,
     local_llm_enable_pii_suggestions: bool = True,
+    llm_verifier: str = "local_llm",
+    local_llm_verifier_model: str | None = None,
+    local_llm_verifier_timeout_seconds: float | None = None,
+    local_llm_verifier_batch_size: int | None = None,
+    local_llm_verifier_prompt_style: str = "current",
+    local_llm_verifier_reasoning_effort: str | None = None,
     require_hate_classification: bool = False,
     author_group_masking: bool = False,
     author_group_col: str | None = None,
@@ -262,6 +405,9 @@ def build_final_pipeline_rows(
     normalized_llm_review = llm_review.strip().lower().replace("-", "_")
     if normalized_llm_review not in {"local_llm", "off"}:
         raise SimplifiedPipelineError("llm_review must be local_llm or off")
+    normalized_llm_verifier = llm_verifier.strip().lower().replace("-", "_")
+    if normalized_llm_verifier not in {"local_llm", "off"}:
+        raise SimplifiedPipelineError("llm_verifier must be local_llm or off")
 
     disabled_model_set = set(disabled_models or [])
     if normalized_llm_review == "off":
@@ -320,16 +466,69 @@ def build_final_pipeline_rows(
             reason="disabled",
             row_count=len(output_rows),
         )
+    if normalized_llm_verifier == "local_llm":
+        verifier = local_llm_hsd_verifier(
+            context=context,
+            output_rows=output_rows,
+            classification=classification,
+            text_col=text_col,
+            id_col=id_col,
+            endpoint=local_llm_endpoint,
+            model_id=local_llm_verifier_model or local_llm_model,
+            timeout_seconds=(
+                local_llm_verifier_timeout_seconds
+                if local_llm_verifier_timeout_seconds is not None
+                else local_llm_timeout_seconds
+            ),
+            batch_size=(
+                local_llm_verifier_batch_size
+                if local_llm_verifier_batch_size is not None
+                else local_llm_batch_size
+            ),
+            prompt_style=local_llm_verifier_prompt_style,
+            reasoning_effort=local_llm_verifier_reasoning_effort,
+            model_factories=model_factories,
+            progress_callback=progress_callback,
+        )
+    else:
+        verifier = skipped_verifier_result(
+            reason="disabled",
+            row_count=0,
+        )
+
+    model_status = dict(context.model_status)
+    if normalized_llm_verifier == "local_llm":
+        model_status["local_llm_verifier"] = {
+            "status": "available",
+            "model_id": local_llm_verifier_model or local_llm_model,
+            "endpoint": local_llm_endpoint,
+            "timeout_seconds": (
+                local_llm_verifier_timeout_seconds
+                if local_llm_verifier_timeout_seconds is not None
+                else local_llm_timeout_seconds
+            ),
+            "batch_size": (
+                local_llm_verifier_batch_size
+                if local_llm_verifier_batch_size is not None
+                else local_llm_batch_size
+            ),
+            "prompt_style": local_llm_verifier_prompt_style,
+            "reasoning_effort": local_llm_verifier_reasoning_effort,
+            "approved_use": "optional audit metadata only; no label overrides",
+        }
+    else:
+        model_status["local_llm_verifier"] = {"status": "disabled"}
 
     return {
         "rows": output_rows,
         "fieldnames": list(fieldnames),
         "sanitization": engine_result.summary,
         "classification": classification,
-        "stages": final_stage_summary(engine_result.summary, classification),
+        "classification_verifier": verifier,
+        "stages": final_stage_summary(engine_result.summary, classification, verifier),
         "audit_rows": engine_result.audit_rows,
         "providers": context.provider_status,
-        "models": context.model_status,
+        "models": model_status,
         "load_counts": {
             "providers": dict(sorted(context.provider_load_counts.items())),
             "models": dict(sorted(context.model_load_counts.items())),
@@ -338,6 +537,7 @@ def build_final_pipeline_rows(
             "baseline_mode": config.baseline_mode,
             "metric_depth": config.metric_depth,
             "llm_review": normalized_llm_review,
+            "llm_verifier": normalized_llm_verifier,
             "device": config.device,
             "author_group_masking": config.author_group_masking,
         },
@@ -368,6 +568,12 @@ def run_final_csv_pipeline(
     local_llm_timeout_seconds: float = 120.0,
     local_llm_batch_size: int = 10,
     local_llm_enable_pii_suggestions: bool = True,
+    llm_verifier: str = "local_llm",
+    local_llm_verifier_model: str | None = None,
+    local_llm_verifier_timeout_seconds: float | None = None,
+    local_llm_verifier_batch_size: int | None = None,
+    local_llm_verifier_prompt_style: str = "current",
+    local_llm_verifier_reasoning_effort: str | None = None,
     require_hate_classification: bool = False,
     author_group_masking: bool = False,
     author_group_col: str | None = None,
@@ -399,6 +605,12 @@ def run_final_csv_pipeline(
         local_llm_timeout_seconds=local_llm_timeout_seconds,
         local_llm_batch_size=local_llm_batch_size,
         local_llm_enable_pii_suggestions=local_llm_enable_pii_suggestions,
+        llm_verifier=llm_verifier,
+        local_llm_verifier_model=local_llm_verifier_model,
+        local_llm_verifier_timeout_seconds=local_llm_verifier_timeout_seconds,
+        local_llm_verifier_batch_size=local_llm_verifier_batch_size,
+        local_llm_verifier_prompt_style=local_llm_verifier_prompt_style,
+        local_llm_verifier_reasoning_effort=local_llm_verifier_reasoning_effort,
         require_hate_classification=require_hate_classification,
         author_group_masking=author_group_masking,
         author_group_col=author_group_col,
@@ -454,9 +666,11 @@ def run_final_csv_pipeline(
         "replace_text": True,
         "exact_format_submission": True,
         "llm_review": result["config"]["llm_review"],
+        "llm_verifier": result["config"]["llm_verifier"],
         "stages": result["stages"],
         "sanitization": result["sanitization"],
         "classification": result["classification"],
+        "classification_verifier": result["classification_verifier"],
         "metrics": result["sanitization"].get("metrics", {}),
         "providers": result["providers"],
         "models": result["models"],
@@ -472,6 +686,10 @@ def run_final_csv_pipeline(
                 "summary": manifest,
                 "rows": result["audit_rows"],
                 "classification_reviews": result["classification"].get(
+                    "row_reviews",
+                    [],
+                ),
+                "verifier_reviews": result["classification_verifier"].get(
                     "row_reviews",
                     [],
                 ),

@@ -1,6 +1,6 @@
 import json
 
-from contextsafe_hsd.mini_verifier_ablation import (
+from contextsafe_hsd.mini_verifier import (
     ClassificationItem,
     EvalRow,
     TaskRun,

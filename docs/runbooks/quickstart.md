@@ -1,7 +1,7 @@
 # Quickstart
 
 Status: active
-Last verified: 2026-06-16
+Last verified: 2026-06-17
 
 ## Install
 
@@ -36,11 +36,14 @@ python -m contextsafe_hsd.cli protect \
   --llm-review local-llm \
   --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
   --local-llm-model openai/gpt-oss-20b \
+  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
-Use `--llm-review off` when no local OpenAI-compatible server is available.
+Use `--llm-review off --llm-verifier off` when no local OpenAI-compatible server
+is available. The AI-audits-AI verifier is default-on for local LLM runs and
+reviews main positive HSD labels without changing the CSV.
 
 ## Validate
 
@@ -65,22 +68,22 @@ python -m contextsafe_hsd.cli profile-dataset \
 The profile command reports schema and aggregate counts without printing raw row
 text.
 
-## Research: Mini 4B Verifier Ablation
+## Research: Mini Verifier Evaluation
 
-This command is for local research runs only. It does not change the official
-exact CSV output path.
+This command is for local verifier comparison runs. It does not change the
+official exact CSV output path.
 
 ```bash
-python -m contextsafe_hsd.cli mini-4b-verifier-ablation \
+python -m contextsafe_hsd.cli mini-verifier-eval \
   --endpoint http://100.120.207.64:1234/v1/chat/completions \
   --timeout-seconds 180 \
   --batch-size 10 \
   --progress
 ```
 
-Current handoff: small-model verifier runs are research-only offline audit
-evidence. Do not promote the Qwen verifier path to automatic label changes
-without a substantially better precision/recall and latency profile.
+Current handoff: the runtime verifier is default-on as sidecar audit evidence
+for local LLM review runs. Do not promote any verifier path to automatic label
+changes without a substantially better precision/recall and latency profile.
 
 ## Data Handling
 

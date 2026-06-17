@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Target,
   UploadCloud,
+  UsersRound,
 } from "lucide-react";
 import "./styles.css";
 
@@ -65,7 +66,7 @@ const CATEGORY_LABELS = {
   sexual_orientation: "Sexual orientation"
 };
 const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub"];
-const AUTO_MODEL_ORDER = ["local_llm"];
+const AUTO_MODEL_ORDER = ["local_llm", "local_llm_verifier"];
 const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
 const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
 const DEFAULT_RESTATEMENT_MODEL = "openai/gpt-oss-20b";
@@ -142,15 +143,15 @@ const NAV_ITEMS = [
     id: "dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
-    title: "NGO Admin Dashboard",
-    eyebrow: "Privacy-preserving review operations"
+    title: "Citizen Jury Dashboard",
+    eyebrow: "Zero-trust community review"
   },
   {
     id: "review",
-    label: "Review queue",
-    icon: ShieldAlert,
-    title: "Review Queue",
-    eyebrow: "Protected human review"
+    label: "Citizen jury",
+    icon: UsersRound,
+    title: "Citizen Jury",
+    eyebrow: "Search-proof review evidence"
   },
   {
     id: "targets",
@@ -223,14 +224,14 @@ function TargetImpactPanel({ targetGroups }) {
   );
 }
 
-function ReviewQueuePanel({ ngoReview }) {
-  const queue = ngoReview?.queue_preview || [];
+function ReviewQueuePanel({ citizenJury }) {
+  const queue = citizenJury?.queue_preview || [];
   return (
     <section className="portal-panel">
       <div className="portal-panel-head">
         <div>
           <h2>Review Queue</h2>
-          <p>Protected cases routed for NGO assessment.</p>
+          <p>Search-proof cases routed for citizen jury review.</p>
         </div>
         <ShieldAlert size={20} />
       </div>
@@ -242,17 +243,18 @@ function ReviewQueuePanel({ ngoReview }) {
                 <strong>{item.row_id}</strong>
                 <span>{formatScoreValue(item.score)}</span>
               </div>
-              <p>{item.citizen_restatement || item.protected_preview}</p>
+              <p>{item.citizen_evidence || item.citizen_restatement || "Citizen evidence pending."}</p>
               <Tags values={[
                 ...(item.target_categories || []).map(categoryLabel),
                 ...(item.hsd_reasons || []).map(statusText),
+                item.verifier_decision ? `verifier: ${statusText(item.verifier_decision)}` : null,
                 item.pii_suggestion_count ? `${item.pii_suggestion_count} PII cues` : null
               ].filter(Boolean)} />
             </article>
           ))}
         </div>
       ) : (
-        <div className="empty-state">No protected cases are currently queued for NGO review.</div>
+        <div className="empty-state">No cases are currently queued for citizen jury review.</div>
       )}
     </section>
   );
@@ -565,9 +567,9 @@ function ReviewFeedbackPanel({ labels, onChange }) {
   );
 }
 
-function ReviewQueueDetailPanel({ ngoReview, onReviewCaseChange, reviewDecisions, reviewSaving }) {
+function ReviewQueueDetailPanel({ citizenJury, onReviewCaseChange, reviewDecisions, reviewSaving }) {
   const [riskFilter, setRiskFilter] = useState("all");
-  const queue = ngoReview?.queue_items || ngoReview?.queue_preview || [];
+  const queue = citizenJury?.queue_items || citizenJury?.queue_preview || [];
   const riskCounts = queue.reduce(
     (counts, item) => {
       const level = itemRiskLevel(item);
@@ -635,20 +637,21 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewCaseChange, reviewDecisions
                   <span>{item.safeguard?.harm_risk?.label || "Low harm signal"}</span>
                 </div>
                 <div className="citizen-evidence">
-                  <span>Citizen Restatement</span>
-                  <p>{item.citizen_restatement || item.protected_preview}</p>
+                  <span>Citizen Evidence</span>
+                  <p>{item.citizen_evidence || item.citizen_restatement || "Citizen evidence pending."}</p>
                 </div>
-                {item.protected_preview && item.citizen_restatement ? (
-                  <details className="protected-evidence">
-                    <summary>Protected text</summary>
-                    <p>{item.protected_preview}</p>
-                  </details>
-                ) : null}
+                <div className="evidence-status-strip">
+                  <span><strong>{statusText(item.citizen_validation?.restatement_status || "not generated")}</strong> restatement</span>
+                  <span><strong>{statusText(item.citizen_validation?.semantic_similarity?.status || "not checked")}</strong> meaning check</span>
+                  <span><strong>{item.citizen_validation?.semantic_similarity?.score ?? "n/a"}</strong> similarity</span>
+                </div>
                 <Tags values={[
                   ...(item.target_categories || []).map(categoryLabel),
                   ...(item.context_tags || []).map(statusText),
                   ...(item.hsd_reasons || []).map(statusText),
                   item.hsd_backend ? `backend: ${statusText(item.hsd_backend)}` : null,
+                  item.verifier_decision ? `verifier: ${statusText(item.verifier_decision)}` : null,
+                  item.verifier_reason ? `verifier reason: ${statusText(item.verifier_reason)}` : null,
                   item.pii_suggestion_count ? `${item.pii_suggestion_count} PII suggestions` : null,
                   item.accepted_pii_suggestion_count ? `${item.accepted_pii_suggestion_count} review cues` : null
                 ].filter(Boolean)} />
@@ -702,7 +705,7 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewCaseChange, reviewDecisions
           </section>
         ) : (
           <section className="portal-panel">
-            <div className="empty-state">No protected cases are currently queued for NGO review.</div>
+            <div className="empty-state">No cases are currently queued for citizen jury review.</div>
           </section>
         )}
       </section>
@@ -760,6 +763,7 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
   const validation = summary.validation || {};
   const manifest = result?.manifest || {};
   const classification = manifest.classification || summary.classification || {};
+  const verifier = manifest.classification_verifier || summary.classification_verifier || {};
   return (
     <section className="portal-panel report-summary">
       <div className="portal-panel-head">
@@ -823,15 +827,33 @@ function ReportSummaryPanel({ result, onDownloadAudit, onDownloadCsv, onDownload
           <strong>{Object.values(classification.pii_suggestion_status_counts || {}).reduce((total, value) => total + Number(value || 0), 0)}</strong>
         </div>
       </div>
+      <div className="detail-grid classification-grid">
+        <div>
+          <span>Verifier</span>
+          <strong>{statusText(verifier.status || "skipped")}</strong>
+        </div>
+        <div>
+          <span>Verifier parsed</span>
+          <strong>{verifier.parse_count ?? "n/a"}</strong>
+        </div>
+        <div>
+          <span>Human candidates</span>
+          <strong>{verifier.human_review_candidate_count ?? 0}</strong>
+        </div>
+        <div>
+          <span>Override policy</span>
+          <strong>{verifier.label_override_applied ? "On" : "Off"}</strong>
+        </div>
+      </div>
     </section>
   );
 }
 
-function NgoDashboard({ result }) {
+function CitizenJuryDashboard({ result }) {
   const insight = result?.platform_insights || {};
   const classification = insight.classification || {};
   const targetGroups = insight.target_groups || {};
-  const ngoReview = insight.ngo_review || {};
+  const citizenJury = insight.citizen_jury || {};
   const rowCount = insight.row_count || result?.manifest?.row_count || 0;
   const sourceLabel = classification.source === "csv_post_classification_columns"
       ? "CSV classification labels"
@@ -843,7 +865,7 @@ function NgoDashboard({ result }) {
     <>
       <section className="portal-hero">
         <div>
-          <span className="eyebrow">NGO operations portal</span>
+          <span className="eyebrow">Zero-Trust Citizen Jury</span>
           <h1>Platform Review Desk</h1>
           <p>Aggregate hate-speech monitoring, protected case intake, and privacy-preserving review evidence.</p>
         </div>
@@ -853,7 +875,7 @@ function NgoDashboard({ result }) {
         </div>
       </section>
 
-      <section className="portal-metrics" aria-label="NGO review summary">
+      <section className="portal-metrics" aria-label="Citizen jury summary">
         <PortalMetric
           icon={FileCheck2}
           label="Cases analyzed"
@@ -863,9 +885,9 @@ function NgoDashboard({ result }) {
         <PortalMetric
           icon={ShieldAlert}
           label="Needs review"
-          meta={`${formatPercentRate(ngoReview.queue_rate || 0)} of analyzed cases`}
+          meta={`${formatPercentRate(citizenJury.queue_rate || 0)} of analyzed cases`}
           tone="attention"
-          value={formatCount(ngoReview.queue_rows || 0)}
+          value={formatCount(citizenJury.queue_rows || 0)}
         />
         <PortalMetric
           icon={Target}
@@ -877,7 +899,7 @@ function NgoDashboard({ result }) {
         <PortalMetric
           icon={Database}
           label="Raw text retained"
-          meta="Insight report stores aggregate counts and protected previews only."
+          meta="Citizen jury screens use restated evidence and aggregate counts."
           tone="safe"
           value="0"
         />
@@ -934,6 +956,8 @@ function DataIntakePanel({
   localLlmEndpoint,
   localLlmModel,
   localLlmTimeout,
+  hsdVerifierEnabled,
+  localLlmVerifierModel,
   citizenRestatementEnabled,
   citizenRestatementModel,
   semanticSimilarityEnabled,
@@ -949,6 +973,8 @@ function DataIntakePanel({
   onLocalLlmEndpoint,
   onLocalLlmModel,
   onLocalLlmTimeout,
+  onHsdVerifierEnabled,
+  onLocalLlmVerifierModel,
   onSemanticSimilarityEnabled,
   onSemanticEmbeddingModel,
   onSavedResults,
@@ -995,7 +1021,8 @@ function DataIntakePanel({
               >
                 <span>{formatCount(item.row_count || 0)} rows</span>
                 <strong>{item.local_llm_model || statusText(item.hsd_classification_backend || "none")}</strong>
-                <small>{formatCount(item.review_queue_rows || 0)} review cases</small>
+                <small>{formatCount(item.review_queue_rows || 0)} jury cases</small>
+                <small>{statusText(item.hsd_verifier_backend || "off")} verifier</small>
               </button>
             ))}
           </div>
@@ -1056,8 +1083,24 @@ function DataIntakePanel({
             <span>Capture residual PII suggestions for review metadata</span>
           </label>
           <label className="check">
+            <input checked={hsdVerifierEnabled} onChange={(event) => onHsdVerifierEnabled(event.target.checked)} type="checkbox" />
+            <span>Run second AI verifier on positive HSD labels</span>
+          </label>
+          {hsdVerifierEnabled ? (
+            <div className="form-grid compact-grid">
+              <label>
+                <span>Verifier Model</span>
+                <input value={localLlmVerifierModel} onChange={(event) => onLocalLlmVerifierModel(event.target.value)} />
+              </label>
+              <div className="readonly-control">
+                <span>Verifier Action</span>
+                <strong>Audit only</strong>
+              </div>
+            </div>
+          ) : null}
+          <label className="check">
             <input checked={citizenRestatementEnabled} onChange={(event) => onCitizenRestatementEnabled(event.target.checked)} type="checkbox" />
-            <span>Generate LLM citizen restatements from protected text</span>
+            <span>Generate search-proof citizen evidence with LLM restatement</span>
           </label>
           {citizenRestatementEnabled ? (
             <div className="form-grid">
@@ -1111,14 +1154,14 @@ function ProtectedCasePreviewPanel({ csvGauges, result }) {
           <thead>
             <tr>
               <th>Case</th>
-              <th>Protected Preview</th>
+              <th>Citizen Evidence</th>
             </tr>
           </thead>
           <tbody>
             {(result?.preview_rows || []).map((row) => (
               <tr key={row.row_id}>
                 <td>{row.row_id}</td>
-                <td>{row.output}</td>
+                <td>{row.citizen_restatement || "Citizen evidence is generated for routed cases."}</td>
               </tr>
             ))}
             {!result?.preview_rows?.length ? (
@@ -1147,11 +1190,18 @@ function orderedStatusItems(items, order, options = {}) {
 
 function modelStatusFromSummary(modelStatus) {
   const localLlm = modelStatus?.local_llm;
+  const verifier = modelStatus?.local_llm_verifier;
   return {
     local_llm: localLlm
       ? {
           status: localLlm.status || "disabled_until_selected",
           ...localLlm
+        }
+      : undefined,
+    local_llm_verifier: verifier
+      ? {
+          status: verifier.status || "disabled_until_selected",
+          ...verifier
         }
       : undefined
   };
@@ -1175,6 +1225,7 @@ function providerStatusFromSummary(modelStatus) {
 function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownloadCsv, onDownloadAudit, onDownloadManifest }) {
   const verification = result?.audit?.summary?.stages?.verification || {};
   const classification = result?.manifest?.classification || result?.audit?.summary?.classification || verification.hsd_classification || {};
+  const verifier = result?.manifest?.classification_verifier || result?.audit?.summary?.classification_verifier || verification.local_llm_hsd_verifier || {};
   const providers = result?.manifest?.providers || providerStatusFromSummary(modelStatus);
   const models = result?.manifest?.models || modelStatusFromSummary(modelStatus);
   const providerItems = orderedStatusItems(providers, AUTO_PROVIDER_ORDER);
@@ -1194,12 +1245,17 @@ function TechnicalAuditStrip({ result, modelStatus, metrics, csvGauges, onDownlo
           <span>HSD classification</span>
           <strong>{classification.status || verification.local_llm_hsd_review?.status || "waiting"}</strong>
         </div>
+        <div>
+          <span>Verifier</span>
+          <strong>{verifier.status || "waiting"}</strong>
+        </div>
       </div>
       <div className="audit-tags">
         <Tags values={[
           classification.backend ? `classification: ${statusText(classification.backend)}` : null,
           classification.model_id ? `model: ${classification.model_id}` : null,
           classification.parse_count !== undefined ? `parsed: ${classification.parse_count}` : null,
+          verifier.decision_counts ? `verifier decisions: ${Object.values(verifier.decision_counts).reduce((total, value) => total + Number(value || 0), 0)}` : null,
           ...providerItems.map(([name, item]) => `${name}: ${item.status || "unknown"}`),
           ...modelItems.map(([name, item]) => `${name}: ${item.status || "unknown"}`)
         ].filter(Boolean)} />
@@ -1278,6 +1334,8 @@ function csvRequestPayload({
   localLlmEndpoint,
   localLlmModel,
   localLlmTimeout,
+  hsdVerifierEnabled,
+  localLlmVerifierModel,
   citizenRestatementEnabled,
   citizenRestatementModel,
   semanticSimilarityEnabled,
@@ -1302,6 +1360,12 @@ function csvRequestPayload({
     local_llm_timeout_seconds: Number(localLlmTimeout) || 120,
     local_llm_batch_size: Number(localLlmBatchSize) || 10,
     local_llm_enable_pii_suggestions: Boolean(localLlmEnablePiiSuggestions),
+    hsd_verifier_backend: hsdVerifierEnabled ? "local_llm" : "off",
+    local_llm_verifier_model: localLlmVerifierModel || localLlmModel,
+    local_llm_verifier_batch_size: Number(localLlmBatchSize) || 10,
+    local_llm_verifier_timeout_seconds: Number(localLlmTimeout) || 120,
+    local_llm_verifier_prompt_style: "current",
+    local_llm_verifier_reasoning_effort: "minimal",
     citizen_restatement_backend: citizenRestatementEnabled ? "local_llm" : "off",
     citizen_restatement_model: citizenRestatementModel || localLlmModel,
     citizen_restatement_batch_size: Number(localLlmBatchSize) || 10,
@@ -1324,6 +1388,8 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [localLlmBatchSize, setLocalLlmBatchSize] = useState("10");
   const [localLlmTimeout, setLocalLlmTimeout] = useState("120");
   const [localLlmEnablePiiSuggestions, setLocalLlmEnablePiiSuggestions] = useState(true);
+  const [hsdVerifierEnabled, setHsdVerifierEnabled] = useState(true);
+  const [localLlmVerifierModel, setLocalLlmVerifierModel] = useState(DEFAULT_LOCAL_LLM_MODEL);
   const [citizenRestatementEnabled, setCitizenRestatementEnabled] = useState(true);
   const [citizenRestatementModel, setCitizenRestatementModel] = useState(DEFAULT_RESTATEMENT_MODEL);
   const [semanticSimilarityEnabled, setSemanticSimilarityEnabled] = useState(true);
@@ -1378,7 +1444,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   };
   const insight = result?.platform_insights || {};
   const targetGroups = insight.target_groups || {};
-  const ngoReview = insight.ngo_review || {};
+  const citizenJury = insight.citizen_jury || {};
 
   const intakePanel = (
     <DataIntakePanel
@@ -1397,6 +1463,8 @@ function CsvWorkbench({ activeView, modelStatus }) {
       localLlmEndpoint={localLlmEndpoint}
       localLlmModel={localLlmModel}
       localLlmTimeout={localLlmTimeout}
+      hsdVerifierEnabled={hsdVerifierEnabled}
+      localLlmVerifierModel={localLlmVerifierModel}
       citizenRestatementEnabled={citizenRestatementEnabled}
       citizenRestatementModel={citizenRestatementModel}
       semanticSimilarityEnabled={semanticSimilarityEnabled}
@@ -1412,6 +1480,8 @@ function CsvWorkbench({ activeView, modelStatus }) {
       onLocalLlmEndpoint={handleLocalLlmEndpointChange}
       onLocalLlmModel={handleLocalLlmModelChange}
       onLocalLlmTimeout={handleLocalLlmTimeoutChange}
+      onHsdVerifierEnabled={handleHsdVerifierEnabledChange}
+      onLocalLlmVerifierModel={handleLocalLlmVerifierModelChange}
       onSemanticSimilarityEnabled={handleSemanticSimilarityEnabledChange}
       onSemanticEmbeddingModel={handleSemanticEmbeddingModelChange}
       onSavedResults={loadSavedResults}
@@ -1557,6 +1627,16 @@ function CsvWorkbench({ activeView, modelStatus }) {
     refreshCachedCsv({ localLlmEnablePiiSuggestions: value });
   }
 
+  function handleHsdVerifierEnabledChange(value) {
+    setHsdVerifierEnabled(value);
+    refreshCachedCsv({ hsdVerifierEnabled: value });
+  }
+
+  function handleLocalLlmVerifierModelChange(value) {
+    setLocalLlmVerifierModel(value);
+    refreshCachedCsv({ localLlmVerifierModel: value });
+  }
+
   function handleCitizenRestatementEnabledChange(value) {
     setCitizenRestatementEnabled(value);
     refreshCachedCsv({ citizenRestatementEnabled: value });
@@ -1669,6 +1749,8 @@ function CsvWorkbench({ activeView, modelStatus }) {
       localLlmEndpoint,
       localLlmModel,
       localLlmTimeout,
+      hsdVerifierEnabled,
+      localLlmVerifierModel,
       citizenRestatementEnabled,
       citizenRestatementModel,
       semanticSimilarityEnabled,
@@ -1688,6 +1770,8 @@ function CsvWorkbench({ activeView, modelStatus }) {
           localLlmEndpoint: options.localLlmEndpoint,
           localLlmModel: options.localLlmModel,
           localLlmTimeout: options.localLlmTimeout,
+          hsdVerifierEnabled: options.hsdVerifierEnabled,
+          localLlmVerifierModel: options.localLlmVerifierModel,
           citizenRestatementEnabled: options.citizenRestatementEnabled,
           citizenRestatementModel: options.citizenRestatementModel,
           semanticSimilarityEnabled: options.semanticSimilarityEnabled,
@@ -1783,6 +1867,8 @@ function CsvWorkbench({ activeView, modelStatus }) {
           localLlmEndpoint,
           localLlmModel,
           localLlmTimeout,
+          hsdVerifierEnabled,
+          localLlmVerifierModel,
           citizenRestatementEnabled,
           citizenRestatementModel,
           semanticSimilarityEnabled,
@@ -1835,7 +1921,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
     <>
       {activeView === "dashboard" ? (
         <>
-          <NgoDashboard result={result} />
+          <CitizenJuryDashboard result={result} />
           <section className="portal-workflow">
             {intakePanel}
             {previewPanel}
@@ -1855,13 +1941,13 @@ function CsvWorkbench({ activeView, modelStatus }) {
       {activeView === "review" ? (
         <>
           <PortalViewHeading
-            description="Case-level safeguard cards for NGO assessment. Protected previews only; no automatic moderation decision."
-            icon={ShieldAlert}
-            title="Review Queue"
+            description="Case-level cards for citizen votes using search-proof restated evidence and verifier metadata."
+            icon={UsersRound}
+            title="Citizen Jury"
           />
           <section className="portal-focus-grid review-layout">
             <ReviewQueueDetailPanel
-              ngoReview={ngoReview}
+              citizenJury={citizenJury}
               onReviewCaseChange={updateReviewCase}
               reviewDecisions={reviewDecisions}
               reviewSaving={reviewSaving}
@@ -1968,7 +2054,7 @@ function App() {
           <ShieldCheck size={24} />
           <div>
             <strong>ContextSafe-HSD</strong>
-            <span>NGO Portal</span>
+            <span>Citizen Jury</span>
           </div>
         </div>
         <PortalNav activeView={activeView} className="sidebar-nav" onSelect={setActiveView} />

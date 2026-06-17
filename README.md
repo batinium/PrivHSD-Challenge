@@ -17,6 +17,7 @@ input CSV
   -> span fusion, residual cleanup, and candidate selection
   -> HSD cue safeguards
   -> local LLM sidecar review on cleaned text only
+  -> optional second-pass verifier on positive HSD labels
   -> exact-format output CSV with only the text column replaced
   -> manifest/audit sidecars
 ```
@@ -33,6 +34,7 @@ python -m contextsafe_hsd.cli protect \
   --llm-review local-llm \
   --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
   --local-llm-model openai/gpt-oss-20b \
+  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
@@ -41,8 +43,13 @@ The output CSV keeps the input row order, row count, and columns exactly. Only
 the selected text column is replaced. LLM labels, reason tags, diagnostics,
 suggestions, and warnings stay in JSON sidecars.
 
-For an offline run without the sidecar reviewer, pass `--llm-review off`. The
-manifest records the skipped review status and counts.
+For an offline run without local LLM sidecars, pass `--llm-review off` and
+`--llm-verifier off`. The manifest records skipped review status and counts.
+
+The AI-audits-AI safeguard is enabled by default with `--llm-verifier
+local-llm`. The verifier reviews only rows the main local LLM marked positive,
+uses cleaned text only, and records disagreement/uncertainty in the
+manifest/audit without changing the CSV.
 
 Validate the exact CSV shape:
 
@@ -65,7 +72,7 @@ Raw author/user IDs should not be treated as review case IDs.
 
 Research-only:
 
-- `mini-4b-verifier-ablation`: isolated local-model verifier experiment. It
+- `mini-verifier-eval`: isolated local-model verifier evaluation. It
   writes ignored artifacts under `data/outputs/` and does not alter the exact
   CSV runtime.
 
@@ -121,7 +128,7 @@ Start with `docs/reference/pipeline.md`,
 `docs/reference/data_contract.md`, and `docs/runbooks/quickstart.md`.
 
 The current small-model verifier handoff is
-`docs/planning/mini_4b_verifier_ablation/prompt.md`.
+`docs/planning/mini_verifier_eval/prompt.md`.
 
 ## Data Policy
 

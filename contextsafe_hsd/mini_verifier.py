@@ -1,4 +1,4 @@
-"""Mini local-model verifier ablation for HSD classification routing."""
+"""Mini local-model verifier evaluation for HSD classification routing."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ DEFAULT_ENDPOINT = "http://100.120.207.64:1234/v1/chat/completions"
 DEFAULT_MAIN_MODEL = "openai/gpt-oss-20b"
 DEFAULT_RUN_DIR = Path("data/outputs/train_split_full_pipeline_fixed_20260615_233312")
 DEFAULT_SOURCE_CSV = Path("data/train/train_split.csv")
-DEFAULT_OUTPUT_DIR = Path("data/outputs/mini_4b_verifier_ablation")
+DEFAULT_OUTPUT_DIR = Path("data/outputs/mini_verifier_eval")
 DEFAULT_SEED = 20260616
 RECOMMENDED_CANDIDATES = (
     "qwen/qwen3-4b-2507",
@@ -262,8 +262,8 @@ class TaskRun:
         }
 
 
-class MiniVerifierAblationError(ValueError):
-    """Raised when the verifier ablation cannot complete safely."""
+class MiniVerifierError(ValueError):
+    """Raised when the verifier evaluation cannot complete safely."""
 
 
 def read_csv_dicts(path: Path) -> list[dict[str, str]]:
@@ -320,7 +320,7 @@ def stratified_sample(rows: list[EvalRow], n: int, rng: random.Random) -> list[E
                 next_keys.append(key)
         keys = next_keys
     if len(selected) < n:
-        raise MiniVerifierAblationError(
+        raise MiniVerifierError(
             f"sample requested {n} rows but only found {len(selected)}"
         )
     return selected
@@ -336,11 +336,11 @@ def build_eval_set(
     protected_csv = run_dir / "train_split.protected.csv"
     result_json = run_dir / "protect_result.json"
     if not source_csv.exists():
-        raise MiniVerifierAblationError(f"missing source CSV: {source_csv}")
+        raise MiniVerifierError(f"missing source CSV: {source_csv}")
     if not protected_csv.exists():
-        raise MiniVerifierAblationError(f"missing protected CSV: {protected_csv}")
+        raise MiniVerifierError(f"missing protected CSV: {protected_csv}")
     if not result_json.exists():
-        raise MiniVerifierAblationError(f"missing protect result: {result_json}")
+        raise MiniVerifierError(f"missing protect result: {result_json}")
 
     result = json.loads(result_json.read_text(encoding="utf-8"))
     reviews = {
@@ -350,7 +350,7 @@ def build_eval_set(
     source_rows = {str(row["ID"]): row for row in read_csv_dicts(source_csv)}
     protected_rows = {str(row["ID"]): row for row in read_csv_dicts(protected_csv)}
     if not reviews:
-        raise MiniVerifierAblationError("protect result has no classification reviews")
+        raise MiniVerifierError("protect result has no classification reviews")
 
     cases: list[EvalRow] = []
     for row_id, source_row in source_rows.items():
@@ -418,11 +418,11 @@ def fetch_models(models_endpoint: str, *, timeout: float) -> dict[str, Any]:
             payload = json.loads(response.read().decode("utf-8"))
     except error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
-        raise MiniVerifierAblationError(
+        raise MiniVerifierError(
             f"model list request failed with HTTP {exc.code}: {detail or exc.reason}"
         ) from exc
     except (OSError, error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise MiniVerifierAblationError(f"model list request failed: {exc}") from exc
+        raise MiniVerifierError(f"model list request failed: {exc}") from exc
     model_ids = []
     for item in payload.get("data", []):
         if isinstance(item, Mapping) and item.get("id"):
@@ -446,7 +446,7 @@ def select_candidates(
         candidates = [model for model in explicit_candidates if model in available]
         missing = [model for model in explicit_candidates if model not in available]
         if missing:
-            raise MiniVerifierAblationError(
+            raise MiniVerifierError(
                 "requested candidate models are not available: " + ", ".join(missing)
             )
     else:
@@ -457,7 +457,7 @@ def select_candidates(
             ]
     probes = [UNCENSORED_PROBE] if include_uncensored_probe and UNCENSORED_PROBE in available else []
     if not candidates and not probes:
-        raise MiniVerifierAblationError(
+        raise MiniVerifierError(
             "none of the configured small verifier candidates are available"
         )
     return candidates, probes
@@ -1287,7 +1287,7 @@ def write_recommendation(
         )
         recommended_strategy = "combined_router"
     if best is None:
-        text = "# Mini 4B Verifier Ablation Recommendation\n\nNo candidate completed.\n"
+        text = "# Mini 4B Verifier Evaluation Recommendation\n\nNo candidate completed.\n"
         path.write_text(text, encoding="utf-8")
         return
     strategy_result = best["strategies"][recommended_strategy]
@@ -1307,14 +1307,14 @@ def write_recommendation(
         else "keep `openai/gpt-oss-20b` as the main classifier, route verifier `disagree` and `uncertain` rows to the 20B adjudication prompt, and do not let the small model directly override labels."
     )
     lines = [
-        "# Mini 4B Verifier Ablation Recommendation",
+        "# Mini 4B Verifier Evaluation Recommendation",
         "",
         "## Recommendation",
         "",
         f"- Selected small model: `{best['model_id']}`",
         f"- Recommended role: {role_sentence}",
         f"- Runtime design: {runtime_sentence}",
-        "- Prompt promotion: do not replace the main runtime prompt from this ablation alone.",
+        "- Prompt promotion: do not replace the main runtime prompt from this evaluation alone.",
         "",
         "## Eval-Set Metrics",
         "",
@@ -1370,7 +1370,7 @@ def write_recommendation(
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def run_ablation(
+def run_verifier_eval(
     *,
     source_csv: Path = DEFAULT_SOURCE_CSV,
     run_dir: Path = DEFAULT_RUN_DIR,
@@ -1584,8 +1584,8 @@ def run_ablation(
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="contextsafe-hsd mini-4b-verifier-ablation",
-        description="Run the mini 3B-4B verifier/router ablation against LM Studio.",
+        prog="contextsafe-hsd mini-verifier-eval",
+        description="Run the mini 3B-4B verifier/router evaluation against LM Studio.",
     )
     parser.add_argument("--source-csv", type=Path, default=DEFAULT_SOURCE_CSV)
     parser.add_argument("--run-dir", type=Path, default=DEFAULT_RUN_DIR)
@@ -1610,7 +1610,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
-    result = run_ablation(
+    result = run_verifier_eval(
         source_csv=args.source_csv,
         run_dir=args.run_dir,
         output_dir=args.output_dir,
@@ -1624,7 +1624,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         include_uncensored_probe=not args.skip_uncensored_probe,
         include_cost_floor=args.include_cost_floor,
         min_screen_parse_success=args.min_screen_parse_success,
-        progress_callback=lambda message: print(f"[ablation] {message}", flush=True),
+        progress_callback=lambda message: print(f"[evaluation] {message}", flush=True),
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
@@ -1636,7 +1636,7 @@ __all__ = [
     "DEFAULT_MAIN_MODEL",
     "DIRECT_CLASSIFIER_SYSTEM_PROMPT",
     "EvalRow",
-    "MiniVerifierAblationError",
+    "MiniVerifierError",
     "RECOMMENDED_CANDIDATES",
     "UNCENSORED_PROBE",
     "VERIFIER_SYSTEM_PROMPT",
@@ -1647,7 +1647,7 @@ __all__ = [
     "ensure_eval_set",
     "main",
     "parse_json_object",
-    "run_ablation",
+    "run_verifier_eval",
     "run_direct_classifier",
     "run_verifier",
     "screen_rows",

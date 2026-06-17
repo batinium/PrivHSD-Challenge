@@ -1,7 +1,7 @@
 # Pipeline Reference
 
 Status: active
-Last verified: 2026-06-16
+Last verified: 2026-06-17
 
 The final public story is one command and one backend path:
 
@@ -12,6 +12,7 @@ input CSV
   -> span fusion, residual cleanup, and candidate selection
   -> HSD target/action/negation/quote/counterspeech cue safeguards
   -> local LLM sidecar review on cleaned text only
+  -> optional second-pass verifier on positive HSD labels
   -> exact-format output CSV with only the text column replaced
   -> manifest/audit sidecars
 ```
@@ -27,6 +28,7 @@ Primary implementation:
 - `contextsafe_hsd/rationale_checks.py`
 - `contextsafe_hsd/span_providers/`
 - `contextsafe_hsd/models/local_llm_hsd_review_runtime.py`
+- `contextsafe_hsd/models/local_llm_hsd_verifier_runtime.py`
 
 ## Public Command
 
@@ -40,13 +42,19 @@ python -m contextsafe_hsd.cli protect \
   --llm-review local-llm \
   --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
   --local-llm-model openai/gpt-oss-20b \
+  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
 `--preset exact` is the hand-in path. `--preset audit` keeps the same CSV
-contract and requests deeper sidecars. `--llm-review off` skips the sidecar
-review and records that skipped status.
+contract and requests deeper sidecars. `--llm-review off --llm-verifier off`
+skips local LLM sidecars and records skipped status.
+
+`--llm-verifier local-llm` is the default second-pass verifier. It reviews only
+main local-LLM positive labels, uses cleaned text only, and writes
+disagreement/uncertainty as audit metadata. It does not override labels or modify
+the output CSV.
 
 ## Stage Contract
 
@@ -73,20 +81,20 @@ Verification:
 - Local LLM HSD review, when selected, receives cleaned text only.
 - LLM labels, reason tags, parse/fallback counts, and PII suggestions go to
   sidecars only.
+- Optional local LLM HSD verifier output is sidecar-only and scoped to positive
+  labels from the main reviewer.
 - Normal logs and reports do not print raw row text.
 
-Research-only verifier work:
+Verifier evaluation work:
 
-- `mini-4b-verifier-ablation` compares small local verifier models around the
+- `mini-verifier-eval` compares small local verifier models around the
   sidecar HSD reviewer.
-- It writes ignored artifacts under `data/outputs/mini_4b_verifier_ablation/`.
+- It writes ignored artifacts under `data/outputs/mini_verifier_eval/`.
 - Full-sample Qwen positive-verifier follow-ups were run as one-off research
   artifacts under ignored `data/outputs/` paths. The dedicated Qwen full
   comparison command is not retained in the public CLI.
-- These experiments do not change the exact CSV path, the production prompt, or
-  the manifest contract.
-- The current recommendation is to keep small-model verifier outputs as offline
-  audit evidence only, not as automatic label overrides.
+- These experiments support the optional verifier sidecar, but automatic label
+  overrides remain out of scope.
 
 ## Manifest Shape
 
@@ -115,6 +123,10 @@ The manifest leads with stage summaries plus provider/model diagnostics:
         "status": "ok",
         "parse_count": 3,
         "fallback_count": 0
+      },
+      "local_llm_hsd_verifier": {
+        "status": "skipped",
+        "label_override_applied": false
       }
     }
   }

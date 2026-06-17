@@ -8,6 +8,10 @@ from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
     LocalLlmReviewResult,
     LocalLlmRowReview,
 )
+from contextsafe_hsd.models.local_llm_hsd_verifier_runtime import (
+    LocalLlmVerifierResult,
+    LocalLlmVerifierRow,
+)
 from contextsafe_hsd.simple_pipeline import (
     SimplifiedPipelineError,
     run_final_csv_pipeline,
@@ -90,6 +94,33 @@ class FakeLocalLlmReview:
         )
 
 
+class FakeLocalLlmVerifier:
+    def __init__(self):
+        self.calls = []
+
+    def verify_texts(self, rows, *, batch_size, progress_callback=None):
+        self.calls.append({"rows": rows, "batch_size": batch_size})
+        return LocalLlmVerifierResult(
+            rows=tuple(
+                LocalLlmVerifierRow(
+                    row_id=row["id"],
+                    decision="disagree",
+                    suggested_label=False,
+                    reason="no_protected_target",
+                    parse_status="ok",
+                    action="human_review_candidate",
+                )
+                for row in rows
+            ),
+            model_id="fake-verifier",
+            endpoint="http://local.test/v1/chat/completions",
+            prompt_style="current",
+            elapsed_seconds=0.01,
+            request_count=1,
+            fallback_count=0,
+        )
+
+
 def test_protect_parser_is_small_and_defaults_to_local_llm_review():
     parser = build_parser()
 
@@ -97,7 +128,7 @@ def test_protect_parser_is_small_and_defaults_to_local_llm_review():
         "protect",
         "validate-submission",
         "profile-dataset",
-        "mini-4b-verifier-ablation",
+        "mini-verifier-eval",
     }
     args = parser.parse_args(
         [
@@ -114,6 +145,7 @@ def test_protect_parser_is_small_and_defaults_to_local_llm_review():
     assert args.command == "protect"
     assert args.text_col == "body"
     assert args.llm_review == "local-llm"
+    assert args.llm_verifier == "local-llm"
 
 
 def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
@@ -133,6 +165,7 @@ def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
         audit_path=audit_path,
         disabled_providers=["presidio", "scrubadub"],
         llm_review="local_llm",
+        llm_verifier="off",
         local_llm_batch_size=4,
         model_factories={"local_llm": lambda _context: fake_runtime},
     )
@@ -181,6 +214,51 @@ def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
     assert "mara@example.test" not in serialized
 
 
+def test_final_pipeline_can_run_optional_second_verifier(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    manifest_path = tmp_path / "manifest.json"
+    audit_path = tmp_path / "audit.json"
+    fake_review = FakeLocalLlmReview()
+    fake_verifier = FakeLocalLlmVerifier()
+    write_rows(source)
+
+    manifest = run_final_csv_pipeline(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        manifest_path=manifest_path,
+        audit_path=audit_path,
+        disabled_providers=["presidio", "scrubadub"],
+        llm_review="local_llm",
+        llm_verifier="local_llm",
+        local_llm_batch_size=4,
+        local_llm_verifier_batch_size=2,
+        model_factories={
+            "local_llm": lambda _context: fake_review,
+            "local_llm_verifier": lambda _context: fake_verifier,
+        },
+    )
+
+    rows = read_rows(output)
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert list(rows[0]) == ["id", "text", "is_hate_speech"]
+    assert manifest["llm_verifier"] == "local_llm"
+    verifier = manifest["classification_verifier"]
+    assert verifier["status"] == "ok"
+    assert verifier["row_count"] == 1
+    assert verifier["decision_counts"] == {"disagree": 1}
+    assert verifier["human_review_candidate_count"] == 1
+    assert verifier["label_override_applied"] is False
+    assert manifest["stages"]["verification"]["local_llm_hsd_verifier"][
+        "status"
+    ] == "ok"
+    assert fake_verifier.calls[0]["batch_size"] == 2
+    assert [row["id"] for row in fake_verifier.calls[0]["rows"]] == ["1"]
+    assert audit["verifier_reviews"][0]["action"] == "human_review_candidate"
+
+
 def test_final_pipeline_can_skip_local_llm_sidecar(tmp_path):
     source = tmp_path / "input.csv"
     output = tmp_path / "output.csv"
@@ -193,6 +271,7 @@ def test_final_pipeline_can_skip_local_llm_sidecar(tmp_path):
         id_col="id",
         disabled_providers=["presidio", "scrubadub"],
         llm_review="off",
+        llm_verifier="off",
     )
 
     assert manifest["llm_review"] == "off"
@@ -215,6 +294,7 @@ def test_final_pipeline_required_llm_fails_on_parse_skip(tmp_path):
             require_hate_classification=True,
             disabled_providers=["presidio", "scrubadub"],
             llm_review="local_llm",
+            llm_verifier="off",
             model_factories={
                 "local_llm": lambda _context: FakeLocalLlmReview(skip_all=True)
             },

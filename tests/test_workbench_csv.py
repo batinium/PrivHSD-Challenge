@@ -44,8 +44,8 @@ def test_platform_insight_without_label_columns_is_unclassified():
     assert report["classification"]["hatred_rows"] == 0
     assert report["classification"]["mean_hatred_score"] is None
     assert report["target_groups"]["categories"]["religion"]["hatred_rows"] == 0
-    assert report["ngo_review"]["routing_rule"] == "not_classified"
-    assert report["ngo_review"]["queue_rows"] == 0
+    assert report["citizen_jury"]["routing_rule"] == "not_classified"
+    assert report["citizen_jury"]["queue_rows"] == 0
 
 
 def test_platform_insight_does_not_classify_from_audit_candidate_scores():
@@ -122,7 +122,7 @@ def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
     assert report["classification"]["source"] == "csv_post_classification_columns"
     assert report["classification"]["label_column"] == "hsd_answer"
     assert report["classification"]["hatred_rows"] == 1
-    item = report["ngo_review"]["queue_preview"][0]
+    item = report["citizen_jury"]["queue_preview"][0]
     assert item["row_id"] == "case-1"
     assert item["citizen_restatement"] == (
         'A user wrote "Muslims should leave" and I reported it.'
@@ -133,7 +133,7 @@ def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
     assert item["safeguard"]["human_review"]["required"] is True
     assert item["safeguard"]["proportionate_response"]["auto_moderation"] is False
     assert report["safeguards"]["human_review_required_rows"] == 1
-    assert report["ngo_review"]["citizen_validation"]["enabled"] is True
+    assert report["citizen_jury"]["citizen_validation"]["enabled"] is True
 
 
 def test_platform_insight_keeps_full_review_queue_and_capped_preview():
@@ -155,10 +155,10 @@ def test_platform_insight_keeps_full_review_queue_and_capped_preview():
         id_col="id",
     )
 
-    assert report["ngo_review"]["queue_rows"] == workbench_app.MAX_PREVIEW_ROWS + 5
-    assert len(report["ngo_review"]["queue_items"]) == workbench_app.MAX_PREVIEW_ROWS + 5
-    assert len(report["ngo_review"]["queue_preview"]) == workbench_app.MAX_PREVIEW_ROWS
-    assert report["ngo_review"]["queue_items"][-1]["row_id"] == (
+    assert report["citizen_jury"]["queue_rows"] == workbench_app.MAX_PREVIEW_ROWS + 5
+    assert len(report["citizen_jury"]["queue_items"]) == workbench_app.MAX_PREVIEW_ROWS + 5
+    assert len(report["citizen_jury"]["queue_preview"]) == workbench_app.MAX_PREVIEW_ROWS
+    assert report["citizen_jury"]["queue_items"][-1]["row_id"] == (
         f"case-{workbench_app.MAX_PREVIEW_ROWS + 4}"
     )
 
@@ -194,7 +194,7 @@ def test_workbench_csv_endpoint_returns_masked_csv_without_helper_when_replacing
     assert insights["classification"]["hatred_rows"] == 1
     assert insights["classification"]["hatred_rate"] == 1.0
     assert insights["target_groups"]["categories"]["religion"]["hatred_rows"] == 1
-    assert insights["ngo_review"]["auto_moderation"] is False
+    assert insights["citizen_jury"]["auto_moderation"] is False
 
 
 def test_workbench_csv_endpoint_does_not_require_case_key(tmp_path, monkeypatch):
@@ -256,11 +256,12 @@ def test_workbench_csv_uses_safe_fingerprint_as_review_case_key(tmp_path, monkey
     )
     assert body["preview_rows"][0]["row_id"] == fingerprint
     assert body["audit"]["rows"][0]["row_id"] == fingerprint
-    review_item = body["platform_insights"]["ngo_review"]["queue_items"][0]
+    review_item = body["platform_insights"]["citizen_jury"]["queue_items"][0]
     assert review_item["row_id"] == fingerprint
     review_rows = list(csv.DictReader(io.StringIO(body["review_csv"])))
     assert review_rows[0]["case_id"] == fingerprint
-    assert "citizen_restatement" in review_rows[0]
+    assert "citizen_evidence" in review_rows[0]
+    assert "protected_text" not in review_rows[0]
 
 
 def test_workbench_rejects_duplicate_fingerprints_for_review_case_keys():
@@ -315,16 +316,19 @@ def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, mo
         == "hmac_sha256_row_text"
     )
     assert re.fullmatch(r"case-[0-9a-f]{24}", body["preview_rows"][0]["row_id"])
-    review_item = body["platform_insights"]["ngo_review"]["queue_items"][0]
+    review_item = body["platform_insights"]["citizen_jury"]["queue_items"][0]
     assert review_item["row_id"] == body["preview_rows"][0]["row_id"]
     review_rows = list(csv.DictReader(io.StringIO(body["review_csv"])))
     assert list(review_rows[0]) == [
         "case_id",
-        "citizen_restatement",
-        "protected_text",
+        "citizen_evidence",
+        "evidence_source",
+        "restatement_status",
+        "semantic_similarity_score",
+        "semantic_similarity_status",
     ]
     assert review_rows[0]["case_id"] == body["preview_rows"][0]["row_id"]
-    assert review_rows[0]["citizen_restatement"] == ""
+    assert review_rows[0]["citizen_evidence"] == ""
     assert "author-secret-1" not in json.dumps(body["platform_insights"])
     assert "author-secret-1" not in json.dumps(body["audit"])
     assert "author-secret-1" not in body["review_csv"]
@@ -445,7 +449,7 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
     assert processed.status_code == 200
     processed_body = processed.json()
     cache_key = processed_body["cache"]["key"]
-    review_row_id = processed_body["platform_insights"]["ngo_review"]["queue_items"][0][
+    review_row_id = processed_body["platform_insights"]["citizen_jury"]["queue_items"][0][
         "row_id"
     ]
     assert re.fullmatch(r"case-[0-9a-f]{24}", review_row_id)
@@ -454,7 +458,7 @@ def test_workbench_review_annotations_persist_structured_feedback(tmp_path, monk
         f"/api/reviews/{cache_key}/cases/{review_row_id}",
         json={
             "status": "escalated",
-            "reviewer_id": "ngo-demo",
+            "reviewer_id": "citizen-demo",
             "labels": {
                 "final_hsd_label": "confirmed_hatred",
                 "harm_risk": "high",
@@ -551,6 +555,7 @@ def test_workbench_csv_cache_key_includes_hsd_backend_options():
     assert base_key != local_key
     assert base_options["hsd_classification_backend"] == "none"
     assert local_options["hsd_classification_backend"] == "local_llm"
+    assert local_options["hsd_verifier_backend"] == "local_llm"
     assert "local_llm" not in local_options["disabled_models"]
 
 
@@ -599,6 +604,42 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
                     }
                 ]
             }
+        tool_name = (
+            payload.get("tools", [{}])[0]
+            .get("function", {})
+            .get("name")
+        )
+        if tool_name == "record_hsd_verifier":
+            content = payload["messages"][1]["content"]
+            assert "alex@example.test" not in content
+            rows = json.loads(content)["items"]
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "record_hsd_verifier",
+                                        "arguments": json.dumps(
+                                            {
+                                                "items": [
+                                                    {
+                                                        "id": rows[0]["id"],
+                                                        "decision": "agree",
+                                                        "suggested_label": True,
+                                                        "reason": "protected_identity_attack",
+                                                    }
+                                                ]
+                                            }
+                                        ),
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
         content = payload["messages"][1]["content"]
         assert "alex@example.test" not in content
         rows = json.loads(content)["items"]
@@ -639,6 +680,10 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
 
     monkeypatch.setattr(
         "contextsafe_hsd.models.local_llm_hsd_review_runtime.post_chat_completion",
+        fake_post_chat_completion,
+    )
+    monkeypatch.setattr(
+        "contextsafe_hsd.models.local_llm_hsd_verifier_runtime.post_chat_completion",
         fake_post_chat_completion,
     )
     monkeypatch.setattr(
@@ -688,16 +733,18 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
         "exclusion": 1,
         "protected_target": 1,
     }
-    queue_item = insights["ngo_review"]["queue_items"][0]
+    queue_item = insights["citizen_jury"]["queue_items"][0]
     assert queue_item["hsd_backend"] == "local_llm"
     assert queue_item["hsd_reasons"] == ["protected_target", "exclusion"]
+    assert queue_item["verifier_decision"] == "agree"
     assert queue_item["pii_suggestion_count"] == 2
-    assert "contact address" in queue_item["citizen_restatement"]
-    assert "alex@example.test" not in queue_item["citizen_restatement"]
+    assert "contact address" in queue_item["citizen_evidence"]
+    assert "alex@example.test" not in queue_item["citizen_evidence"]
     assert body["manifest"]["citizen_validation"]["enabled"] is True
     assert body["manifest"]["citizen_validation"]["restatement_model"] == "fake-restater"
+    assert body["manifest"]["classification_verifier"]["status"] == "ok"
     serialized_review = json.dumps(
-        body["platform_insights"]["ngo_review"]["queue_items"]
+        body["platform_insights"]["citizen_jury"]["queue_items"]
     )
     assert "alex@example.test" not in serialized_review
     serialized_classification = json.dumps(classification)

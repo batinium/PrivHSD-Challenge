@@ -62,6 +62,7 @@ def test_public_commands_are_registered():
 
     assert protect_args.command == "protect"
     assert protect_args.llm_review == "local-llm"
+    assert protect_args.llm_verifier == "local-llm"
     assert validate_args.command == "validate-submission"
 
 
@@ -75,6 +76,7 @@ def test_protect_help_is_short_public_surface():
 
     assert "--preset" in result.stdout
     assert "--llm-review" in result.stdout
+    assert "--llm-verifier" in result.stdout
     assert "exact" in result.stdout
     assert "Run the final exact CSV pipeline" in result.stdout
     assert "--disable-provider" not in result.stdout
@@ -107,6 +109,8 @@ def test_protect_exact_preserves_schema_and_manifest_stages(tmp_path, capsys):
             "exact",
             "--llm-review",
             "off",
+            "--llm-verifier",
+            "off",
         ]
     )
     captured = capsys.readouterr()
@@ -123,6 +127,7 @@ def test_protect_exact_preserves_schema_and_manifest_stages(tmp_path, capsys):
     assert manifest["pipeline"] == "final_exact"
     assert manifest["exact_format_submission"] is True
     assert manifest["llm_review"] == "off"
+    assert manifest["llm_verifier"] == "off"
     assert set(manifest["stages"]) == {
         "privacy_detection",
         "meaning_protection",
@@ -130,6 +135,9 @@ def test_protect_exact_preserves_schema_and_manifest_stages(tmp_path, capsys):
     }
     assert "hsd_advisory" not in manifest["stages"]["verification"]
     assert manifest["stages"]["verification"]["local_llm_hsd_review"][
+        "status"
+    ] == "skipped"
+    assert manifest["stages"]["verification"]["local_llm_hsd_verifier"][
         "status"
     ] == "skipped"
     assert manifest["validation"]["valid"] is True
@@ -200,6 +208,8 @@ def test_protect_exact_local_llm_review_stays_in_sidecar(monkeypatch, tmp_path):
             "exact",
             "--llm-review",
             "local-llm",
+            "--llm-verifier",
+            "off",
             "--local-llm-endpoint",
             "http://local.test/v1/chat/completions",
             "--local-llm-model",
