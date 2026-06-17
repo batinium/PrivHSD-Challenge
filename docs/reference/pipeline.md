@@ -80,10 +80,13 @@ Research-only verifier work:
 - `mini-4b-verifier-ablation` compares small local verifier models around the
   sidecar HSD reviewer.
 - It writes ignored artifacts under `data/outputs/mini_4b_verifier_ablation/`.
-- It does not change the exact CSV path, the production prompt, or the manifest
-  contract.
-- The current candidate for a larger sidecar-only comparison is
-  `qwen/qwen3-4b` as a positive verifier.
+- Full-sample Qwen positive-verifier follow-ups were run as one-off research
+  artifacts under ignored `data/outputs/` paths. The dedicated Qwen full
+  comparison command is not retained in the public CLI.
+- These experiments do not change the exact CSV path, the production prompt, or
+  the manifest contract.
+- The current recommendation is to keep small-model verifier outputs as offline
+  audit evidence only, not as automatic label overrides.
 
 ## Manifest Shape
 

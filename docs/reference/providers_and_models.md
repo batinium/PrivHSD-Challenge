@@ -44,10 +44,13 @@ local HSD verifier models against the current `openai/gpt-oss-20b` sidecar
 review. It is not part of the exact CSV runtime and does not modify protected
 text or append output columns.
 
-The 2026-06-16 mini run selected `qwen/qwen3-4b` as the next safer candidate to
-test on full samples. The intended role is sidecar-only positive verification
-of main-model predicted positives. Recall routing, combined routing, and the
-uncensored/aggressive probe are not ready for default use.
+The 2026-06-16 follow-up runs tested `qwen/qwen3-4b` and
+`qwen/qwen3.5-9b` as sidecar-only positive verifiers. Both remain research
+artifacts: neither model should be used as an automatic label-changing
+safeguard because the recall damage is too high relative to the precision gain.
+The one-off full-sample Qwen comparison command was removed from the public CLI;
+keep those results under ignored `data/outputs/` paths if they are needed for
+council review.
 
 Keep generated verifier artifacts under ignored `data/outputs/` paths.
 

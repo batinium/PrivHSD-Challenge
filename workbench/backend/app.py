@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+from collections.abc import Mapping, Sequence
 from collections import Counter
 import csv
 import importlib.util
@@ -25,6 +26,7 @@ from contextsafe_hsd.context import analyze_context
 from contextsafe_hsd.cue_checks import row_cue_report
 from contextsafe_hsd.detectors import Span, target_group_spans
 from contextsafe_hsd.metrics import row_metric
+from contextsafe_hsd.models.local_llm_hsd_review_runtime import post_chat_completion
 from contextsafe_hsd.pipeline import MODES, PrivatizerConfig, privatize_text
 from contextsafe_hsd.simple_pipeline import (
     append_hate_classification,
@@ -38,7 +40,7 @@ MAX_TEXT_LENGTH = 20_000
 MAX_CSV_LENGTH = 5_000_000
 MAX_PREVIEW_ROWS = 25
 ROOT = Path(__file__).resolve().parents[2]
-CSV_CACHE_VERSION = "workbench_csv_result_v7"
+CSV_CACHE_VERSION = "workbench_csv_result_v8"
 CSV_RESULT_CACHE_DIR = ROOT / "workbench" / ".cache" / "csv_results"
 REVIEW_CACHE_VERSION = "workbench_review_v1"
 REVIEW_CACHE_DIR = ROOT / "workbench" / ".cache" / "reviews"
@@ -78,6 +80,37 @@ PRIVACY_SAFE_REVIEW_ID_NAMES = frozenset(
 )
 REVIEW_ID_VALUE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{5,127}$")
 REVIEW_CASE_ID_COLUMN = "__contextsafe_review_case_id"
+PLACEHOLDER_RESTATEMENTS = {
+    "AGE": "an age",
+    "ALIAS": "an alias",
+    "DATE": "a date",
+    "EMAIL": "a contact address",
+    "ID": "an identifier",
+    "IP_ADDRESS": "a network address",
+    "LOCATION": "a location",
+    "NUMBER": "a number",
+    "ORG": "an organization",
+    "ORGANIZATION": "an organization",
+    "PERSON": "a person",
+    "PHONE": "a phone number",
+    "URL": "a web link",
+    "USER": "a user account",
+    "USERNAME": "a user account",
+}
+PLACEHOLDER_PATTERN = re.compile(r"\[([A-Z][A-Z0-9_ -]{1,40})\]")
+DIRECT_RESTATEMENT_PATTERNS = (
+    (
+        re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I),
+        "a contact address",
+    ),
+    (re.compile(r"https?://\S+|www\.\S+", re.I), "a web link"),
+    (re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,30}\b"), "a user account"),
+    (
+        re.compile(r"\b(?:\+?\d[\d(). -]{7,}\d)(?:\s*(?:x|ext\.?)\s*\d+)?\b", re.I),
+        "a phone number",
+    ),
+    (re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"), "a network address"),
+)
 
 
 class PrivatizeRequest(BaseModel):
@@ -127,6 +160,12 @@ class CsvPrivatizeRequest(BaseModel):
     local_llm_timeout_seconds: float = 120.0
     local_llm_batch_size: int = 10
     local_llm_enable_pii_suggestions: bool = True
+    citizen_restatement_backend: Literal["off", "local_llm"] = "off"
+    citizen_restatement_model: str = "openai/gpt-oss-20b"
+    citizen_restatement_batch_size: int = 10
+    citizen_restatement_timeout_seconds: float = 120.0
+    semantic_similarity_backend: Literal["off", "sentence_transformers"] = "off"
+    semantic_embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 class CsvPrivatizeResponse(BaseModel):
@@ -382,20 +421,313 @@ def strip_internal_workbench_columns(
     ]
 
 
+def sanitize_llm_restatement(restatement: str) -> str:
+    text = str(restatement or "")
+    for pattern, replacement in DIRECT_RESTATEMENT_PATTERNS:
+        text = pattern.sub(replacement, text)
+
+    def replace_placeholder(match: re.Match[str]) -> str:
+        entity = match.group(1).strip().replace(" ", "_").upper()
+        if entity in PLACEHOLDER_RESTATEMENTS:
+            return PLACEHOLDER_RESTATEMENTS[entity]
+        label = entity.lower().replace("_", " ")
+        article = "an" if label[:1] in {"a", "e", "i", "o", "u"} else "a"
+        return f"{article} masked {label}"
+
+    text = PLACEHOLDER_PATTERN.sub(replace_placeholder, text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"([(])\s+", r"\1", text)
+    text = re.sub(r"\s+([)])", r"\1", text)
+    return text
+
+
+def restatement_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "restatement": {"type": "string"},
+                        "safety_notes": {"type": "string"},
+                    },
+                    "required": ["id", "restatement", "safety_notes"],
+                    "additionalProperties": False,
+                },
+            }
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    }
+
+
+def restatement_payload(
+    *,
+    model_id: str,
+    rows: list[dict[str, str]],
+) -> dict[str, Any]:
+    return {
+        "model": model_id,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Restate protected, already-masked social media text for "
+                    "civilian hate-speech validation. Do not guess, recover, "
+                    "or invent masked identities. Preserve the target group, "
+                    "harm signal, quotation/reporting/counterspeech context, "
+                    "and negation when present. Use neutral wording. Output "
+                    "only JSON with an items array."
+                ),
+            },
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "items": [
+                            {
+                                "id": row["id"],
+                                "protected_text": row["protected_text"],
+                            }
+                            for row in rows
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        "temperature": 0,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "citizen_review_restatement",
+                "strict": True,
+                "schema": restatement_schema(),
+            },
+        },
+    }
+
+
+def parse_json_object(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        raise ValueError("response payload was not JSON text")
+    try:
+        parsed = json.loads(value.strip())
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(value):
+            if char != "{":
+                continue
+            try:
+                parsed, _offset = decoder.raw_decode(value[index:])
+                break
+            except json.JSONDecodeError:
+                continue
+        else:
+            raise ValueError("response content was not valid JSON")
+    if not isinstance(parsed, dict):
+        raise ValueError("response content was not a JSON object")
+    return parsed
+
+
+def extract_chat_json(response: Mapping[str, Any]) -> dict[str, Any]:
+    try:
+        message = response["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise ValueError("response did not contain a chat message") from exc
+    if not isinstance(message, Mapping):
+        raise ValueError("response message was not an object")
+    for tool_call in message.get("tool_calls") or []:
+        function = tool_call.get("function") if isinstance(tool_call, Mapping) else None
+        if isinstance(function, Mapping):
+            return parse_json_object(function.get("arguments"))
+    function_call = message.get("function_call")
+    if isinstance(function_call, Mapping):
+        return parse_json_object(function_call.get("arguments"))
+    return parse_json_object(message.get("content"))
+
+
+def normalize_restatement_items(
+    payload: Mapping[str, Any],
+    *,
+    input_rows: list[dict[str, str]],
+) -> dict[str, dict[str, Any]]:
+    raw_items = payload.get("items")
+    if not isinstance(raw_items, list):
+        raise ValueError("restatement payload missing items list")
+    input_by_id = {row["id"]: row for row in input_rows}
+    if len(raw_items) != len(input_by_id):
+        raise ValueError("restatement item count did not match input count")
+    seen: set[str] = set()
+    normalized: dict[str, dict[str, Any]] = {}
+    for item in raw_items:
+        if not isinstance(item, Mapping):
+            raise ValueError("restatement item was not an object")
+        row_id = str(item.get("id", "") or "")
+        if row_id not in input_by_id or row_id in seen:
+            raise ValueError("restatement item id did not match input rows")
+        seen.add(row_id)
+        restatement = sanitize_llm_restatement(str(item.get("restatement", "") or ""))
+        if not restatement:
+            raise ValueError("restatement was empty after safety scrub")
+        normalized[row_id] = {
+            "text": restatement,
+            "backend": "local_llm",
+            "parse_status": "ok",
+            "safety_notes": sanitize_llm_restatement(
+                str(item.get("safety_notes", "") or "")
+            ),
+        }
+    return normalized
+
+
+EMBEDDING_MODEL_CACHE: dict[str, Any] = {}
+
+
+def embedding_model(model_id: str) -> Any:
+    if model_id not in EMBEDDING_MODEL_CACHE:
+        from sentence_transformers import SentenceTransformer
+
+        EMBEDDING_MODEL_CACHE[model_id] = SentenceTransformer(model_id)
+    return EMBEDDING_MODEL_CACHE[model_id]
+
+
+def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+    dot = sum(float(a) * float(b) for a, b in zip(left, right, strict=True))
+    left_norm = sum(float(a) * float(a) for a in left) ** 0.5
+    right_norm = sum(float(b) * float(b) for b in right) ** 0.5
+    if not left_norm or not right_norm:
+        return 0.0
+    return round(dot / (left_norm * right_norm), 4)
+
+
+def semantic_similarity_score(
+    *,
+    original_text: str,
+    restatement: str,
+    backend: str,
+    model_id: str,
+) -> dict[str, Any]:
+    if backend == "off" or not restatement:
+        return {"backend": "off", "status": "skipped", "score": None}
+    try:
+        model = embedding_model(model_id)
+        vectors = model.encode(
+            [original_text, restatement],
+            convert_to_numpy=False,
+            normalize_embeddings=False,
+        )
+        return {
+            "backend": backend,
+            "model_id": model_id,
+            "status": "ok",
+            "score": cosine_similarity(list(vectors[0]), list(vectors[1])),
+        }
+    except Exception as exc:
+        return {
+            "backend": backend,
+            "model_id": model_id,
+            "status": "error",
+            "score": None,
+            "error_class": type(exc).__name__,
+            "error": str(exc),
+        }
+
+
+def build_citizen_restatements(
+    rows: list[dict[str, Any]],
+    *,
+    original_rows: list[dict[str, str]],
+    text_col: str,
+    output_col: str,
+    id_col: str | None,
+    backend: str,
+    endpoint: str,
+    model_id: str,
+    timeout: float,
+    batch_size: int,
+    semantic_backend: str,
+    semantic_model: str,
+) -> dict[str, dict[str, Any]]:
+    if backend == "off":
+        return {}
+    inputs = [
+        {
+            "id": review_row_id(row, row_index=index + 1, id_col=id_col),
+            "protected_text": str(row.get(output_col, "") or ""),
+            "original_text": str(original_rows[index].get(text_col, "") or "")
+            if index < len(original_rows)
+            else "",
+        }
+        for index, row in enumerate(rows)
+    ]
+    results: dict[str, dict[str, Any]] = {}
+    chunk_size = max(1, int(batch_size or 1))
+    for start in range(0, len(inputs), chunk_size):
+        batch = inputs[start : start + chunk_size]
+        try:
+            response = post_chat_completion(
+                endpoint=endpoint,
+                payload=restatement_payload(model_id=model_id, rows=batch),
+                timeout=timeout,
+            )
+            parsed = extract_chat_json(response)
+            results.update(normalize_restatement_items(parsed, input_rows=batch))
+        except Exception as exc:
+            for row in batch:
+                results[row["id"]] = {
+                    "text": "",
+                    "backend": backend,
+                    "parse_status": "skipped",
+                    "error_class": type(exc).__name__,
+                    "error": str(exc),
+                }
+    by_id = {row["id"]: row for row in inputs}
+    for row_id, item in results.items():
+        source = by_id.get(row_id, {})
+        item["semantic_similarity"] = semantic_similarity_score(
+            original_text=str(source.get("original_text", "") or ""),
+            restatement=str(item.get("text", "") or ""),
+            backend=semantic_backend,
+            model_id=semantic_model,
+        )
+    return results
+
+
 def build_review_csv(
     rows: list[dict[str, Any]],
     *,
     output_col: str,
     id_col: str | None,
+    citizen_restatements: dict[str, dict[str, Any]] | None = None,
 ) -> str:
+    restatements = citizen_restatements or {}
     review_rows = [
         {
             "case_id": review_row_id(row, row_index=index, id_col=id_col),
+            "citizen_restatement": str(
+                (
+                    restatements.get(
+                        review_row_id(row, row_index=index, id_col=id_col),
+                        {},
+                    )
+                    or {}
+                ).get("text", "")
+            ),
             "protected_text": str(row.get(output_col, "") or ""),
         }
         for index, row in enumerate(rows, start=1)
     ]
-    return write_csv_text(review_rows, ["case_id", "protected_text"])
+    return write_csv_text(
+        review_rows,
+        ["case_id", "citizen_restatement", "protected_text"],
+    )
 
 
 def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]:
@@ -426,6 +758,14 @@ def normalized_csv_cache_options(request: CsvPrivatizeRequest) -> dict[str, Any]
         "local_llm_enable_pii_suggestions": (
             request.local_llm_enable_pii_suggestions
         ),
+        "citizen_restatement_backend": request.citizen_restatement_backend,
+        "citizen_restatement_model": request.citizen_restatement_model,
+        "citizen_restatement_batch_size": request.citizen_restatement_batch_size,
+        "citizen_restatement_timeout_seconds": (
+            request.citizen_restatement_timeout_seconds
+        ),
+        "semantic_similarity_backend": request.semantic_similarity_backend,
+        "semantic_embedding_model": request.semantic_embedding_model,
     }
 
 
@@ -521,6 +861,54 @@ def cached_csv_response(
         created_at=record.get("created_at"),
     )
     return response
+
+
+def csv_cache_record_summary(record: dict[str, Any]) -> dict[str, Any] | None:
+    if record.get("version") != CSV_CACHE_VERSION:
+        return None
+    cache_key = str(record.get("cache_key") or "")
+    if not cache_key:
+        return None
+    result = record.get("result")
+    options = record.get("options") or {}
+    if not isinstance(result, dict) or not isinstance(options, dict):
+        return None
+    manifest = result.get("manifest") or {}
+    insights = result.get("platform_insights") or {}
+    review = insights.get("ngo_review") or {}
+    citizen = manifest.get("citizen_validation") or {}
+    return {
+        "cache_key": cache_key,
+        "created_at": record.get("created_at"),
+        "csv_sha256": options.get("csv_sha256"),
+        "row_count": manifest.get("row_count"),
+        "text_col": options.get("text_col"),
+        "id_col": options.get("id_col") or None,
+        "replace_text": options.get("replace_text"),
+        "hsd_classification_backend": options.get("hsd_classification_backend"),
+        "local_llm_model": options.get("local_llm_model"),
+        "citizen_restatement_backend": options.get("citizen_restatement_backend"),
+        "citizen_restatement_model": citizen.get("restatement_model"),
+        "semantic_similarity_backend": options.get("semantic_similarity_backend"),
+        "semantic_embedding_model": citizen.get("semantic_embedding_model"),
+        "review_queue_rows": review.get("queue_rows", 0),
+    }
+
+
+def recent_csv_result_caches(*, limit: int = 25) -> list[dict[str, Any]]:
+    if not CSV_RESULT_CACHE_DIR.exists():
+        return []
+    summaries: list[dict[str, Any]] = []
+    for path in CSV_RESULT_CACHE_DIR.glob("*.json"):
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        summary = csv_cache_record_summary(record)
+        if summary is not None:
+            summaries.append(summary)
+    summaries.sort(key=lambda item: float(item.get("created_at") or 0), reverse=True)
+    return summaries[: max(1, int(limit or 25))]
 
 
 PII_FEEDBACK_LABELS = frozenset(
@@ -698,6 +1086,8 @@ def review_response(cache_key: str) -> dict[str, Any]:
         "review_schema": {
             "statuses": ["open", "reviewing", "escalated", "cleared"],
             "final_hsd_labels": ["confirmed_hatred", "not_hatred", "uncertain"],
+            "citizen_vote_field": "final_hsd_label",
+            "citizen_vote_labels": ["confirmed_hatred", "not_hatred", "uncertain"],
             "harm_risk": ["high", "medium", "low"],
             "masking_quality": [
                 "acceptable",
@@ -805,11 +1195,16 @@ def csv_preview_row(
     row_id: Any,
     text_col: str,
     output_col: str,
+    citizen_restatements: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    protected_text = str(row.get(output_col, "") or "")
+    restatement = (citizen_restatements or {}).get(str(row_id), {})
     return {
         "row_id": row_id,
         "text_length": len(str(row.get(text_col, "") or "")),
-        "output": str(row.get(output_col, "") or ""),
+        "output": protected_text,
+        "citizen_restatement": str(restatement.get("text", "") or ""),
+        "semantic_similarity": restatement.get("semantic_similarity"),
     }
 
 
@@ -919,6 +1314,12 @@ def current_auto_pipeline_profile(
             "local_llm_review_default": "disabled_until_selected",
             "post_classification_hatred_columns": list(POST_CLASSIFICATION_LABEL_COLUMNS),
             "post_classification_score_columns": list(POST_CLASSIFICATION_SCORE_COLUMNS),
+        },
+        "citizen_validation": {
+            "evidence_source": "protected_text_restatement",
+            "raw_text_visible": False,
+            "vote_field": "final_hsd_label",
+            "allowed_votes": ["confirmed_hatred", "not_hatred", "uncertain"],
         },
     }
 
@@ -1295,6 +1696,7 @@ def platform_insight_report(
     id_col: str | None = None,
     classification_reviews: dict[str, dict[str, Any]] | None = None,
     classification_summary: dict[str, Any] | None = None,
+    citizen_restatements: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     label_col = first_present_column(output_rows, POST_CLASSIFICATION_LABEL_COLUMNS)
     score_col = first_present_column(output_rows, POST_CLASSIFICATION_SCORE_COLUMNS)
@@ -1321,6 +1723,7 @@ def platform_insight_report(
     }
     context_tag_counts: Counter[str] = Counter()
     audit_rows = audit_rows or []
+    restatements = citizen_restatements or {}
 
     for row_index, (original_row, output_row) in enumerate(zip(original_rows, output_rows)):
         original_text = str(original_row.get(text_col, "") or "")
@@ -1331,6 +1734,7 @@ def platform_insight_report(
             row_index=row_index + 1,
             id_col=id_col,
         )
+        citizen_restatement = restatements.get(str(row_id), {})
         metric = metric_for_insight_row(
             audit_row=audit_row,
             original_text=original_text,
@@ -1393,6 +1797,28 @@ def platform_insight_report(
                         "row_id": row_id,
                         "status": "needs_review",
                         "target_categories": categories,
+                        "citizen_restatement": str(
+                            citizen_restatement.get("text", "") or ""
+                        ),
+                        "citizen_validation": {
+                            "vote_field": "final_hsd_label",
+                            "allowed_votes": [
+                                "confirmed_hatred",
+                                "not_hatred",
+                                "uncertain",
+                            ],
+                            "source": "llm_protected_text_restatement"
+                            if citizen_restatement
+                            else "not_generated",
+                            "raw_text_retained": False,
+                            "restatement_status": citizen_restatement.get(
+                                "parse_status",
+                                "not_generated",
+                            ),
+                            "semantic_similarity": citizen_restatement.get(
+                                "semantic_similarity"
+                            ),
+                        },
                         "protected_preview": preview_text(protected_text),
                         "score": classification.get("score"),
                         "hsd_backend": classification.get("backend"),
@@ -1576,6 +2002,15 @@ def platform_insight_report(
             "queue_rate": round_rate(hatred_rows, len(original_rows)),
             "queue_items": queue_items,
             "queue_preview": queue_items[:MAX_PREVIEW_ROWS],
+            "citizen_validation": {
+                "enabled": bool(restatements),
+                "evidence_field": "citizen_restatement",
+                "vote_field": "final_hsd_label",
+                "raw_text_retained": False,
+                "source": "llm_protected_text_restatement"
+                if restatements
+                else "not_generated",
+            },
             "routing_rule": (
                 "local_llm_hsd_review_positive"
                 if uses_local_llm_reviews
@@ -1888,6 +2323,31 @@ def lookup_csv_cache(request: CsvPrivatizeRequest) -> dict[str, Any]:
     }
 
 
+@app.get("/api/csv/cache/recent")
+def list_recent_csv_caches(limit: int = 25) -> dict[str, Any]:
+    return {
+        "items": recent_csv_result_caches(limit=limit),
+        "cache_dir": str(CSV_RESULT_CACHE_DIR),
+        "version": CSV_CACHE_VERSION,
+    }
+
+
+@app.get("/api/csv/cache/{cache_key}")
+def get_cached_csv_result(cache_key: str) -> dict[str, Any]:
+    cache_key = validate_result_cache_key(cache_key)
+    record = read_csv_result_cache(cache_key)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Processed CSV result not found.")
+    response = cached_csv_response(
+        cache_key=cache_key,
+        options=record.get("options") or {},
+        record=record,
+    )
+    if response is None:
+        raise HTTPException(status_code=404, detail="Processed CSV result not found.")
+    return response
+
+
 @app.get("/api/reviews/{cache_key}")
 def get_review_annotations(cache_key: str) -> dict[str, Any]:
     return review_response(cache_key)
@@ -2144,10 +2604,64 @@ def build_csv_privatize_response(
             disabled_models=disabled_models
         ),
     }
+    if progress_callback is not None and request.citizen_restatement_backend != "off":
+        progress_callback(
+            {
+                "stage": "packaging",
+                "processed": 0,
+                "total": len(engine_rows),
+                "detail": "Generating citizen review restatements from protected text.",
+            }
+        )
+    citizen_restatements = build_citizen_restatements(
+        engine_rows,
+        original_rows=rows,
+        text_col=request.text_col,
+        output_col=insight_output_col,
+        id_col=processing_id_col,
+        backend=request.citizen_restatement_backend,
+        endpoint=request.local_llm_endpoint,
+        model_id=request.citizen_restatement_model,
+        timeout=request.citizen_restatement_timeout_seconds,
+        batch_size=request.citizen_restatement_batch_size,
+        semantic_backend=request.semantic_similarity_backend,
+        semantic_model=request.semantic_embedding_model,
+    )
+    restatement_status_counts = Counter(
+        str(item.get("parse_status", "unknown"))
+        for item in citizen_restatements.values()
+    )
+    manifest["citizen_validation"] = {
+        "enabled": request.citizen_restatement_backend != "off",
+        "review_csv_columns": [
+            "case_id",
+            "citizen_restatement",
+            "protected_text",
+        ],
+        "raw_text_visible": False,
+        "evidence_source": "llm_protected_text_restatement"
+        if request.citizen_restatement_backend != "off"
+        else "not_generated",
+        "restatement_backend": request.citizen_restatement_backend,
+        "restatement_model": (
+            request.citizen_restatement_model
+            if request.citizen_restatement_backend != "off"
+            else None
+        ),
+        "restatement_status_counts": dict(sorted(restatement_status_counts.items())),
+        "semantic_similarity_backend": request.semantic_similarity_backend,
+        "semantic_embedding_model": (
+            request.semantic_embedding_model
+            if request.semantic_similarity_backend != "off"
+            else None
+        ),
+        "vote_field": "final_hsd_label",
+    }
     review_csv = build_review_csv(
         engine_rows,
         output_col=insight_output_col,
         id_col=processing_id_col,
+        citizen_restatements=citizen_restatements,
     )
     platform_insights = platform_insight_report(
         original_rows=rows,
@@ -2159,6 +2673,7 @@ def build_csv_privatize_response(
         id_col=processing_id_col,
         classification_reviews=local_llm_reviews_by_id(classification),
         classification_summary=classification,
+        citizen_restatements=citizen_restatements,
     )
     preview_rows = [
         csv_preview_row(
@@ -2166,6 +2681,7 @@ def build_csv_privatize_response(
             row_id=review_row_id(row, row_index=index + 1, id_col=processing_id_col),
             text_col=request.text_col,
             output_col=insight_output_col,
+            citizen_restatements=citizen_restatements,
         )
         for index, row in enumerate(engine_rows[:MAX_PREVIEW_ROWS])
     ]

@@ -236,7 +236,13 @@ def ensure_backend_deps(python: list[str], *, install: bool) -> None:
         [
             *python,
             "-c",
-            "import fastapi, uvicorn",
+            (
+                "import importlib.util, sys; "
+                "missing = [name for name in "
+                "('fastapi', 'uvicorn', 'sentence_transformers') "
+                "if importlib.util.find_spec(name) is None]; "
+                "sys.exit(1 if missing else 0)"
+            ),
         ],
         cwd=ROOT,
         stdout=subprocess.DEVNULL,
@@ -249,7 +255,9 @@ def ensure_backend_deps(python: list[str], *, install: bool) -> None:
             "FastAPI backend dependencies are missing. Run:\n"
             "  micromamba env update -n contextsafe-hsd -f environment.yml\n"
             "or:\n"
-            "  micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --install"
+            "  micromamba run -n contextsafe-hsd -e PYTHONNOUSERSITE=1 python launch.py --install\n"
+            "or:\n"
+            "  python -m pip install -e '.[workbench]'"
         )
     run_checked(
         [*python, "-m", "pip", "install", "-r", str(BACKEND_REQUIREMENTS)],

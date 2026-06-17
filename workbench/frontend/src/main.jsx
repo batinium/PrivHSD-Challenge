@@ -68,6 +68,8 @@ const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub"];
 const AUTO_MODEL_ORDER = ["local_llm"];
 const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
 const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
+const DEFAULT_RESTATEMENT_MODEL = "openai/gpt-oss-20b";
+const DEFAULT_SEMANTIC_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2";
 const RISK_FILTERS = [
   { id: "all", label: "All" },
   { id: "high", label: "High" },
@@ -95,10 +97,10 @@ const EMPTY_REVIEW_LABELS = {
   target_categories: []
 };
 const FINAL_HSD_OPTIONS = [
-  ["", "No correction"],
-  ["confirmed_hatred", "Confirm hatred"],
-  ["not_hatred", "Not hatred"],
-  ["uncertain", "Uncertain"]
+  ["", "No vote"],
+  ["confirmed_hatred", "Hate speech"],
+  ["not_hatred", "Not hate speech"],
+  ["uncertain", "Unsure"]
 ];
 const HARM_RISK_OPTIONS = [
   ["", "No override"],
@@ -240,7 +242,7 @@ function ReviewQueuePanel({ ngoReview }) {
                 <strong>{item.row_id}</strong>
                 <span>{formatScoreValue(item.score)}</span>
               </div>
-              <p>{item.protected_preview}</p>
+              <p>{item.citizen_restatement || item.protected_preview}</p>
               <Tags values={[
                 ...(item.target_categories || []).map(categoryLabel),
                 ...(item.hsd_reasons || []).map(statusText),
@@ -502,7 +504,7 @@ function ReviewFeedbackPanel({ labels, onChange }) {
     <div className="review-feedback">
       <div className="review-feedback-grid">
         <label>
-          <span>HSD decision</span>
+          <span>Citizen vote</span>
           <select
             value={labels.final_hsd_label || ""}
             onChange={(event) => onChange({ final_hsd_label: event.target.value })}
@@ -632,7 +634,16 @@ function ReviewQueueDetailPanel({ ngoReview, onReviewCaseChange, reviewDecisions
                   </span>
                   <span>{item.safeguard?.harm_risk?.label || "Low harm signal"}</span>
                 </div>
-                <p>{item.protected_preview}</p>
+                <div className="citizen-evidence">
+                  <span>Citizen Restatement</span>
+                  <p>{item.citizen_restatement || item.protected_preview}</p>
+                </div>
+                {item.protected_preview && item.citizen_restatement ? (
+                  <details className="protected-evidence">
+                    <summary>Protected text</summary>
+                    <p>{item.protected_preview}</p>
+                  </details>
+                ) : null}
                 <Tags values={[
                   ...(item.target_categories || []).map(categoryLabel),
                   ...(item.context_tags || []).map(statusText),
@@ -916,19 +927,31 @@ function DataIntakePanel({
   headers,
   hsdBackend,
   idCol,
+  savedResults,
+  savedResultsBusy,
   localLlmBatchSize,
   localLlmEnablePiiSuggestions,
   localLlmEndpoint,
   localLlmModel,
   localLlmTimeout,
+  citizenRestatementEnabled,
+  citizenRestatementModel,
+  semanticSimilarityEnabled,
+  semanticEmbeddingModel,
   onHsdBackend,
+  onCitizenRestatementEnabled,
+  onCitizenRestatementModel,
   onFile,
   onIdCol,
+  onLoadSavedResult,
   onLocalLlmBatchSize,
   onLocalLlmEnablePiiSuggestions,
   onLocalLlmEndpoint,
   onLocalLlmModel,
   onLocalLlmTimeout,
+  onSemanticSimilarityEnabled,
+  onSemanticEmbeddingModel,
+  onSavedResults,
   onReplaceText,
   onRunCsv,
   onTextCol,
@@ -956,6 +979,28 @@ function DataIntakePanel({
           <span>{cacheBusy ? "Checking saved results" : cacheNotice}</span>
         </div>
       ) : null}
+      <div className="saved-results-control">
+        <button className="ghost" disabled={savedResultsBusy} onClick={onSavedResults} type="button">
+          <Archive size={17} />
+          {savedResultsBusy ? "Loading saved" : "Saved results"}
+        </button>
+        {savedResults?.length ? (
+          <div className="saved-results-list">
+            {savedResults.slice(0, 5).map((item) => (
+              <button
+                className="saved-result-item"
+                key={item.cache_key}
+                onClick={() => onLoadSavedResult(item.cache_key)}
+                type="button"
+              >
+                <span>{formatCount(item.row_count || 0)} rows</span>
+                <strong>{item.local_llm_model || statusText(item.hsd_classification_backend || "none")}</strong>
+                <small>{formatCount(item.review_queue_rows || 0)} review cases</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
       <div className="form-grid">
         <label>
           <span>Text Column</span>
@@ -1009,6 +1054,26 @@ function DataIntakePanel({
           <label className="check">
             <input checked={localLlmEnablePiiSuggestions} onChange={(event) => onLocalLlmEnablePiiSuggestions(event.target.checked)} type="checkbox" />
             <span>Capture residual PII suggestions for review metadata</span>
+          </label>
+          <label className="check">
+            <input checked={citizenRestatementEnabled} onChange={(event) => onCitizenRestatementEnabled(event.target.checked)} type="checkbox" />
+            <span>Generate LLM citizen restatements from protected text</span>
+          </label>
+          {citizenRestatementEnabled ? (
+            <div className="form-grid">
+              <label>
+                <span>Restatement Model</span>
+                <input value={citizenRestatementModel} onChange={(event) => onCitizenRestatementModel(event.target.value)} />
+              </label>
+              <label>
+                <span>Embedding Model</span>
+                <input value={semanticEmbeddingModel} onChange={(event) => onSemanticEmbeddingModel(event.target.value)} />
+              </label>
+            </div>
+          ) : null}
+          <label className="check">
+            <input checked={semanticSimilarityEnabled} disabled={!citizenRestatementEnabled} onChange={(event) => onSemanticSimilarityEnabled(event.target.checked)} type="checkbox" />
+            <span>Compare original and restatement with embeddings</span>
           </label>
         </div>
       ) : null}
@@ -1213,6 +1278,10 @@ function csvRequestPayload({
   localLlmEndpoint,
   localLlmModel,
   localLlmTimeout,
+  citizenRestatementEnabled,
+  citizenRestatementModel,
+  semanticSimilarityEnabled,
+  semanticEmbeddingModel,
   replaceText,
   textCol
 }) {
@@ -1232,7 +1301,13 @@ function csvRequestPayload({
     local_llm_model: localLlmModel,
     local_llm_timeout_seconds: Number(localLlmTimeout) || 120,
     local_llm_batch_size: Number(localLlmBatchSize) || 10,
-    local_llm_enable_pii_suggestions: Boolean(localLlmEnablePiiSuggestions)
+    local_llm_enable_pii_suggestions: Boolean(localLlmEnablePiiSuggestions),
+    citizen_restatement_backend: citizenRestatementEnabled ? "local_llm" : "off",
+    citizen_restatement_model: citizenRestatementModel || localLlmModel,
+    citizen_restatement_batch_size: Number(localLlmBatchSize) || 10,
+    citizen_restatement_timeout_seconds: Number(localLlmTimeout) || 120,
+    semantic_similarity_backend: semanticSimilarityEnabled ? "sentence_transformers" : "off",
+    semantic_embedding_model: semanticEmbeddingModel || DEFAULT_SEMANTIC_EMBEDDING_MODEL
   };
 }
 
@@ -1249,10 +1324,16 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [localLlmBatchSize, setLocalLlmBatchSize] = useState("10");
   const [localLlmTimeout, setLocalLlmTimeout] = useState("120");
   const [localLlmEnablePiiSuggestions, setLocalLlmEnablePiiSuggestions] = useState(true);
+  const [citizenRestatementEnabled, setCitizenRestatementEnabled] = useState(true);
+  const [citizenRestatementModel, setCitizenRestatementModel] = useState(DEFAULT_RESTATEMENT_MODEL);
+  const [semanticSimilarityEnabled, setSemanticSimilarityEnabled] = useState(true);
+  const [semanticEmbeddingModel, setSemanticEmbeddingModel] = useState(DEFAULT_SEMANTIC_EMBEDDING_MODEL);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [cacheBusy, setCacheBusy] = useState(false);
   const [cacheNotice, setCacheNotice] = useState("");
+  const [savedResults, setSavedResults] = useState([]);
+  const [savedResultsBusy, setSavedResultsBusy] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(null);
   const [error, setError] = useState("");
   const [reviewDecisions, setReviewDecisions] = useState({});
@@ -1309,19 +1390,31 @@ function CsvWorkbench({ activeView, modelStatus }) {
       headers={headers}
       hsdBackend={hsdBackend}
       idCol={idCol}
+      savedResults={savedResults}
+      savedResultsBusy={savedResultsBusy}
       localLlmBatchSize={localLlmBatchSize}
       localLlmEnablePiiSuggestions={localLlmEnablePiiSuggestions}
       localLlmEndpoint={localLlmEndpoint}
       localLlmModel={localLlmModel}
       localLlmTimeout={localLlmTimeout}
+      citizenRestatementEnabled={citizenRestatementEnabled}
+      citizenRestatementModel={citizenRestatementModel}
+      semanticSimilarityEnabled={semanticSimilarityEnabled}
+      semanticEmbeddingModel={semanticEmbeddingModel}
       onHsdBackend={handleHsdBackendChange}
+      onCitizenRestatementEnabled={handleCitizenRestatementEnabledChange}
+      onCitizenRestatementModel={handleCitizenRestatementModelChange}
       onFile={handleFile}
       onIdCol={handleIdColChange}
+      onLoadSavedResult={loadSavedResult}
       onLocalLlmBatchSize={handleLocalLlmBatchSizeChange}
       onLocalLlmEnablePiiSuggestions={handleLocalLlmPiiSuggestionChange}
       onLocalLlmEndpoint={handleLocalLlmEndpointChange}
       onLocalLlmModel={handleLocalLlmModelChange}
       onLocalLlmTimeout={handleLocalLlmTimeoutChange}
+      onSemanticSimilarityEnabled={handleSemanticSimilarityEnabledChange}
+      onSemanticEmbeddingModel={handleSemanticEmbeddingModelChange}
+      onSavedResults={loadSavedResults}
       onReplaceText={handleReplaceTextChange}
       onRunCsv={runCsv}
       onTextCol={handleTextColChange}
@@ -1464,6 +1557,26 @@ function CsvWorkbench({ activeView, modelStatus }) {
     refreshCachedCsv({ localLlmEnablePiiSuggestions: value });
   }
 
+  function handleCitizenRestatementEnabledChange(value) {
+    setCitizenRestatementEnabled(value);
+    refreshCachedCsv({ citizenRestatementEnabled: value });
+  }
+
+  function handleCitizenRestatementModelChange(value) {
+    setCitizenRestatementModel(value);
+    refreshCachedCsv({ citizenRestatementModel: value });
+  }
+
+  function handleSemanticSimilarityEnabledChange(value) {
+    setSemanticSimilarityEnabled(value);
+    refreshCachedCsv({ semanticSimilarityEnabled: value });
+  }
+
+  function handleSemanticEmbeddingModelChange(value) {
+    setSemanticEmbeddingModel(value);
+    refreshCachedCsv({ semanticEmbeddingModel: value });
+  }
+
   async function handleFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1556,6 +1669,10 @@ function CsvWorkbench({ activeView, modelStatus }) {
       localLlmEndpoint,
       localLlmModel,
       localLlmTimeout,
+      citizenRestatementEnabled,
+      citizenRestatementModel,
+      semanticSimilarityEnabled,
+      semanticEmbeddingModel,
       ...optionOverrides
     };
     try {
@@ -1571,6 +1688,10 @@ function CsvWorkbench({ activeView, modelStatus }) {
           localLlmEndpoint: options.localLlmEndpoint,
           localLlmModel: options.localLlmModel,
           localLlmTimeout: options.localLlmTimeout,
+          citizenRestatementEnabled: options.citizenRestatementEnabled,
+          citizenRestatementModel: options.citizenRestatementModel,
+          semanticSimilarityEnabled: options.semanticSimilarityEnabled,
+          semanticEmbeddingModel: options.semanticEmbeddingModel,
           replaceText: replaceTextValue,
           textCol: textColValue
         }))
@@ -1590,6 +1711,51 @@ function CsvWorkbench({ activeView, modelStatus }) {
       setCacheNotice(err.message || "Cache lookup unavailable. Run CSV to process.");
     } finally {
       setCacheBusy(false);
+    }
+  }
+
+  async function loadSavedResults() {
+    setSavedResultsBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/csv/cache/recent?limit=25");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Saved result lookup failed with ${response.status}`);
+      }
+      const body = await response.json();
+      setSavedResults(body.items || []);
+      setCacheNotice(
+        body.items?.length
+          ? "Saved results loaded from local demo cache."
+          : "No saved processed results found yet."
+      );
+    } catch (err) {
+      setSavedResults([]);
+      setError(err.message || "Saved result lookup failed");
+    } finally {
+      setSavedResultsBusy(false);
+    }
+  }
+
+  async function loadSavedResult(cacheKey) {
+    if (!cacheKey) return;
+    setSavedResultsBusy(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/csv/cache/${encodeURIComponent(cacheKey)}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `Saved result load failed with ${response.status}`);
+      }
+      const body = await response.json();
+      setResult(body);
+      setProcessingProgress(null);
+      setCacheNotice("Loaded processed result from local demo cache.");
+    } catch (err) {
+      setError(err.message || "Saved result load failed");
+    } finally {
+      setSavedResultsBusy(false);
     }
   }
 
@@ -1617,6 +1783,10 @@ function CsvWorkbench({ activeView, modelStatus }) {
           localLlmEndpoint,
           localLlmModel,
           localLlmTimeout,
+          citizenRestatementEnabled,
+          citizenRestatementModel,
+          semanticSimilarityEnabled,
+          semanticEmbeddingModel,
           replaceText,
           textCol
         }))

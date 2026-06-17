@@ -106,6 +106,17 @@ def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
         output_col="text",
         aggregate={"residual_identifier_count": 0},
         id_col="case_id",
+        citizen_restatements={
+            "case-1": {
+                "text": 'A user wrote "Muslims should leave" and I reported it.',
+                "parse_status": "ok",
+                "semantic_similarity": {
+                    "backend": "off",
+                    "status": "skipped",
+                    "score": None,
+                },
+            }
+        },
     )
 
     assert report["classification"]["source"] == "csv_post_classification_columns"
@@ -113,11 +124,16 @@ def test_platform_insight_builds_safeguard_cards_from_hsd_answer_labels():
     assert report["classification"]["hatred_rows"] == 1
     item = report["ngo_review"]["queue_preview"][0]
     assert item["row_id"] == "case-1"
+    assert item["citizen_restatement"] == (
+        'A user wrote "Muslims should leave" and I reported it.'
+    )
+    assert item["citizen_validation"]["raw_text_retained"] is False
     assert item["privacy_leakage"]["status"] == "clear"
     assert item["context_preservation"]["components"]["target_group_reference"] == "preserved"
     assert item["safeguard"]["human_review"]["required"] is True
     assert item["safeguard"]["proportionate_response"]["auto_moderation"] is False
     assert report["safeguards"]["human_review_required_rows"] == 1
+    assert report["ngo_review"]["citizen_validation"]["enabled"] is True
 
 
 def test_platform_insight_keeps_full_review_queue_and_capped_preview():
@@ -244,6 +260,7 @@ def test_workbench_csv_uses_safe_fingerprint_as_review_case_key(tmp_path, monkey
     assert review_item["row_id"] == fingerprint
     review_rows = list(csv.DictReader(io.StringIO(body["review_csv"])))
     assert review_rows[0]["case_id"] == fingerprint
+    assert "citizen_restatement" in review_rows[0]
 
 
 def test_workbench_rejects_duplicate_fingerprints_for_review_case_keys():
@@ -301,8 +318,13 @@ def test_workbench_csv_uses_synthetic_review_ids_for_author_columns(tmp_path, mo
     review_item = body["platform_insights"]["ngo_review"]["queue_items"][0]
     assert review_item["row_id"] == body["preview_rows"][0]["row_id"]
     review_rows = list(csv.DictReader(io.StringIO(body["review_csv"])))
-    assert list(review_rows[0]) == ["case_id", "protected_text"]
+    assert list(review_rows[0]) == [
+        "case_id",
+        "citizen_restatement",
+        "protected_text",
+    ]
     assert review_rows[0]["case_id"] == body["preview_rows"][0]["row_id"]
+    assert review_rows[0]["citizen_restatement"] == ""
     assert "author-secret-1" not in json.dumps(body["platform_insights"])
     assert "author-secret-1" not in json.dumps(body["audit"])
     assert "author-secret-1" not in body["review_csv"]
@@ -332,6 +354,26 @@ def test_workbench_csv_endpoint_persists_and_reuses_cached_result(tmp_path, monk
     assert lookup_body["cache_hit"] is True
     assert lookup_body["result"]["cache"]["hit"] is True
     assert lookup_body["result"]["output_csv"] == first_body["output_csv"]
+
+    recent = client.get("/api/csv/cache/recent")
+    assert recent.status_code == 200
+    recent_body = recent.json()
+    assert recent_body["version"] == workbench_app.CSV_CACHE_VERSION
+    assert recent_body["items"]
+    summary = recent_body["items"][0]
+    assert summary["cache_key"] == first_body["cache"]["key"]
+    assert summary["row_count"] == 1
+    assert summary["text_col"] == "text"
+    assert summary["id_col"] == "id"
+    assert summary["review_queue_rows"] == 0
+    assert "csv_text" not in json.dumps(summary)
+    assert "alex@example.test" not in json.dumps(summary)
+
+    loaded = client.get(f"/api/csv/cache/{first_body['cache']['key']}")
+    assert loaded.status_code == 200
+    loaded_body = loaded.json()
+    assert loaded_body["cache"]["hit"] is True
+    assert loaded_body["output_csv"] == first_body["output_csv"]
 
     second = client.post("/api/csv/privatize", json=payload)
     assert second.status_code == 200
@@ -528,6 +570,35 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
                 "timeout": timeout,
             }
         )
+        schema_name = payload.get("response_format", {}).get("json_schema", {}).get(
+            "name"
+        )
+        if schema_name == "citizen_review_restatement":
+            content = payload["messages"][1]["content"]
+            assert "alex@example.test" not in content
+            rows = json.loads(content)["items"]
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "items": [
+                                        {
+                                            "id": rows[0]["id"],
+                                            "restatement": (
+                                                "A person used a contact address while "
+                                                "saying Muslims should leave."
+                                            ),
+                                            "safety_notes": "No raw identifier included.",
+                                        }
+                                    ]
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
         content = payload["messages"][1]["content"]
         assert "alex@example.test" not in content
         rows = json.loads(content)["items"]
@@ -570,6 +641,10 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
         "contextsafe_hsd.models.local_llm_hsd_review_runtime.post_chat_completion",
         fake_post_chat_completion,
     )
+    monkeypatch.setattr(
+        "workbench.backend.app.post_chat_completion",
+        fake_post_chat_completion,
+    )
     client = TestClient(workbench_app.app)
     response = client.post(
         "/api/csv/privatize",
@@ -588,6 +663,8 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
             "local_llm_endpoint": "http://local.test/v1/chat/completions",
             "local_llm_model": "fake-local-llm",
             "local_llm_batch_size": 2,
+            "citizen_restatement_backend": "local_llm",
+            "citizen_restatement_model": "fake-restater",
         },
     )
 
@@ -615,6 +692,10 @@ def test_workbench_csv_endpoint_can_select_local_llm_review(
     assert queue_item["hsd_backend"] == "local_llm"
     assert queue_item["hsd_reasons"] == ["protected_target", "exclusion"]
     assert queue_item["pii_suggestion_count"] == 2
+    assert "contact address" in queue_item["citizen_restatement"]
+    assert "alex@example.test" not in queue_item["citizen_restatement"]
+    assert body["manifest"]["citizen_validation"]["enabled"] is True
+    assert body["manifest"]["citizen_validation"]["restatement_model"] == "fake-restater"
     serialized_review = json.dumps(
         body["platform_insights"]["ngo_review"]["queue_items"]
     )

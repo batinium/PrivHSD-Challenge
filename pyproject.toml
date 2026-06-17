@@ -21,7 +21,7 @@ classifiers = [
 [project.optional-dependencies]
 presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
 scrubadub = ["scrubadub"]
-workbench = ["fastapi>=0.111", "uvicorn[standard]>=0.30"]
+workbench = ["fastapi>=0.111", "uvicorn[standard]>=0.30", "sentence-transformers>=3.0"]
 dev = [
   "pytest>=9.0",
   "ruff>=0.15",

@@ -78,9 +78,9 @@ python -m contextsafe_hsd.cli mini-4b-verifier-ablation \
   --progress
 ```
 
-Current handoff: `qwen/qwen3-4b` is the small-model candidate to compare on full
-samples as a sidecar-only positive verifier. See
-`docs/planning/mini_4b_verifier_ablation/prompt.md`.
+Current handoff: small-model verifier runs are research-only offline audit
+evidence. Do not promote the Qwen verifier path to automatic label changes
+without a substantially better precision/recall and latency profile.
 
 ## Data Handling
 
