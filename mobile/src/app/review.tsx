@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppColors } from '@/constants/theme';
 import { ReviewDecision, ReviewItem, reviewSeedItems } from '@/data/review-data';
-import { guardRestatement, summarizeGuard } from '@/utils/privacy';
+import { guardRestatement } from '@/utils/privacy';
 
 const SWIPE_THRESHOLD = 110;
 
@@ -203,21 +203,6 @@ function ReviewCard({ item, cardWidth, stacked, animatedStyle }: ReviewCardProps
         <Text style={styles.cardLabel}>Restated for citizen review</Text>
         <Text style={styles.restatementText}>{guarded.text}</Text>
       </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.cardFooter}>
-        <View>
-          <Text style={styles.cardLabel}>Model signal</Text>
-          <Text style={styles.signalText}>
-            {item.classifierLabel} / {Math.round(item.classifierScore * 100)}%
-          </Text>
-        </View>
-        <View>
-          <Text style={styles.cardLabel}>Guard</Text>
-          <Text style={styles.guardText}>{summarizeGuard(guarded.findings)}</Text>
-        </View>
-      </View>
     </View>
   );
 }
@@ -390,29 +375,6 @@ const styles = StyleSheet.create({
     fontSize: 26,
     lineHeight: 34,
     fontWeight: '800',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: AppColors.line,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 16,
-  },
-  signalText: {
-    color: AppColors.ink,
-    fontSize: 15,
-    fontWeight: '900',
-    marginTop: 5,
-  },
-  guardText: {
-    color: AppColors.mint,
-    fontSize: 13,
-    fontWeight: '900',
-    marginTop: 5,
-    maxWidth: 150,
-    textAlign: 'right',
   },
   emptyCard: {
     minHeight: 380,
