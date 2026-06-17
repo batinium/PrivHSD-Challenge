@@ -212,6 +212,15 @@ class AuthorTfidfSignal:
 
 
 @dataclass(frozen=True)
+class SemanticClusterSignal:
+    cluster_id: int
+    cluster_rank: int
+    cluster_author_mass: float
+    cluster_author_concentration: float
+    cluster_terms: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class MaskDecision:
     token: str
     normalized: str
@@ -221,6 +230,11 @@ class MaskDecision:
     tfidf_score: float | None = None
     tfidf_rank: int | None = None
     author_count: int | None = None
+    semantic_cluster_id: int | None = None
+    semantic_cluster_rank: int | None = None
+    semantic_cluster_mass: float | None = None
+    semantic_cluster_concentration: float | None = None
+    semantic_cluster_terms: tuple[str, ...] | None = None
 
 
 def read_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
@@ -356,6 +370,104 @@ def build_author_tfidf_signals(
     return signals
 
 
+def build_semantic_cluster_signals(
+    author_tfidf_signals: dict[tuple[str, str], AuthorTfidfSignal],
+    *,
+    model_name: str,
+    device: str,
+    cluster_count: int,
+    terms_per_cluster: int,
+    source_min_tfidf_score: float,
+    source_max_tfidf_rank: int,
+    batch_size: int,
+    seed: int,
+) -> dict[tuple[str, str], SemanticClusterSignal]:
+    if not author_tfidf_signals:
+        return {}
+
+    candidate_tokens = sorted(
+        {
+            token
+            for (_author, token), signal in author_tfidf_signals.items()
+            if signal.tfidf_score >= source_min_tfidf_score
+            and signal.tfidf_rank <= source_max_tfidf_rank
+        }
+    )
+    if not candidate_tokens:
+        return {}
+
+    from sentence_transformers import SentenceTransformer
+    from sklearn.cluster import MiniBatchKMeans
+    import torch
+
+    selected_device = device
+    if selected_device == "auto":
+        selected_device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = SentenceTransformer(model_name, device=selected_device)
+    embeddings = model.encode(
+        candidate_tokens,
+        batch_size=batch_size,
+        convert_to_numpy=True,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+    if cluster_count <= 0:
+        cluster_count = max(2, len(candidate_tokens) // max(1, terms_per_cluster))
+    cluster_count = max(1, min(cluster_count, len(candidate_tokens)))
+    labels = MiniBatchKMeans(
+        n_clusters=cluster_count,
+        random_state=seed,
+        batch_size=max(256, batch_size * 4),
+        n_init="auto",
+    ).fit_predict(embeddings)
+
+    token_clusters = dict(zip(candidate_tokens, (int(label) for label in labels), strict=True))
+    author_cluster_mass: Counter[tuple[str, int]] = Counter()
+    cluster_total_mass: Counter[int] = Counter()
+    author_cluster_terms: dict[tuple[str, int], list[tuple[float, str]]] = defaultdict(list)
+    for (author, token), signal in author_tfidf_signals.items():
+        cluster_id = token_clusters.get(token)
+        if cluster_id is None:
+            continue
+        author_cluster_mass[(author, cluster_id)] += signal.tfidf_score
+        cluster_total_mass[cluster_id] += signal.tfidf_score
+        author_cluster_terms[(author, cluster_id)].append((signal.tfidf_score, token))
+
+    cluster_ranks: dict[tuple[str, int], int] = {}
+    author_masses: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for (author, cluster_id), mass in author_cluster_mass.items():
+        author_masses[author].append((cluster_id, mass))
+    for author, masses in author_masses.items():
+        for rank, (cluster_id, _mass) in enumerate(
+            sorted(masses, key=lambda item: (-item[1], item[0])),
+            start=1,
+        ):
+            cluster_ranks[(author, cluster_id)] = rank
+
+    signals: dict[tuple[str, str], SemanticClusterSignal] = {}
+    for (author, token), tfidf_signal in author_tfidf_signals.items():
+        cluster_id = token_clusters.get(token)
+        if cluster_id is None:
+            continue
+        mass = author_cluster_mass[(author, cluster_id)]
+        total_mass = cluster_total_mass[cluster_id]
+        top_terms = tuple(
+            term
+            for _score, term in sorted(
+                author_cluster_terms[(author, cluster_id)],
+                key=lambda item: (-item[0], item[1]),
+            )[:8]
+        )
+        signals[(author, token)] = SemanticClusterSignal(
+            cluster_id=cluster_id,
+            cluster_rank=cluster_ranks[(author, cluster_id)],
+            cluster_author_mass=float(mass),
+            cluster_author_concentration=float(mass / max(total_mass, 1e-12)),
+            cluster_terms=top_terms,
+        )
+    return signals
+
+
 def token_reason(
     *,
     original_token: str,
@@ -419,6 +531,45 @@ def tfidf_token_reason(
     return "author_tfidf"
 
 
+def semantic_cluster_token_reason(
+    *,
+    original_token: str,
+    normalized: str,
+    tfidf_signal: AuthorTfidfSignal | None,
+    cluster_signal: SemanticClusterSignal | None,
+    min_token_length: int,
+    min_author_count: int,
+    min_tfidf_score: float,
+    max_tfidf_rank: int,
+    min_cluster_mass: float,
+    min_cluster_concentration: float,
+    max_cluster_rank: int,
+) -> str | None:
+    if PLACEHOLDER_PATTERN.fullmatch(original_token):
+        return None
+    if STYLE_MARKER_PATTERN.fullmatch(original_token):
+        return "style_marker"
+    if REPEATED_LETTER_PATTERN.search(original_token):
+        return "repeated_letters"
+    if len(normalized) < min_token_length:
+        return None
+    if tfidf_signal is None or cluster_signal is None:
+        return None
+    if tfidf_signal.author_count < min_author_count:
+        return None
+    if tfidf_signal.tfidf_score < min_tfidf_score:
+        return None
+    if tfidf_signal.tfidf_rank > max_tfidf_rank:
+        return None
+    if cluster_signal.cluster_author_mass < min_cluster_mass:
+        return None
+    if cluster_signal.cluster_author_concentration < min_cluster_concentration:
+        return None
+    if cluster_signal.cluster_rank > max_cluster_rank:
+        return None
+    return "semantic_cluster"
+
+
 def is_never_mask_token(normalized: str) -> bool:
     return normalized in NEVER_MASK_TERMS or any(
         normalized.startswith(prefix) for prefix in NEVER_MASK_PREFIXES
@@ -442,6 +593,7 @@ def candidate_text_for_row(
     importance_rows: dict[str, list[ImportanceToken]],
     distributions: dict[tuple[str, str], TokenDistribution],
     author_tfidf_signals: dict[tuple[str, str], AuthorTfidfSignal],
+    semantic_cluster_signals: dict[tuple[str, str], SemanticClusterSignal],
     author_signal_mode: str,
     low_impact_threshold: float,
     protect_threshold: float,
@@ -452,11 +604,23 @@ def candidate_text_for_row(
     rare_document_frequency: int,
     min_tfidf_score: float,
     max_tfidf_rank: int,
+    min_cluster_mass: float,
+    min_cluster_concentration: float,
+    max_cluster_rank: int,
     replacement: str,
     protected: frozenset[str],
 ) -> tuple[str, list[MaskDecision]]:
     candidates: list[
-        tuple[int, float, float, int, ImportanceToken, str, AuthorTfidfSignal | None]
+        tuple[
+            int,
+            float,
+            float,
+            int,
+            ImportanceToken,
+            str,
+            AuthorTfidfSignal | None,
+            SemanticClusterSignal | None,
+        ]
     ] = []
     seen: set[str] = set()
     for item in importance_rows.get(row_id, []):
@@ -472,6 +636,7 @@ def candidate_text_for_row(
         if is_never_mask_token(item.normalized):
             continue
         signal = author_tfidf_signals.get((author, item.normalized))
+        cluster_signal = semantic_cluster_signals.get((author, item.normalized))
         if author_signal_mode == "tfidf":
             reason = tfidf_token_reason(
                 original_token=item.token,
@@ -481,6 +646,20 @@ def candidate_text_for_row(
                 min_author_count=min_author_count,
                 min_tfidf_score=min_tfidf_score,
                 max_tfidf_rank=max_tfidf_rank,
+            )
+        elif author_signal_mode == "semantic_cluster":
+            reason = semantic_cluster_token_reason(
+                original_token=item.token,
+                normalized=item.normalized,
+                tfidf_signal=signal,
+                cluster_signal=cluster_signal,
+                min_token_length=min_token_length,
+                min_author_count=min_author_count,
+                min_tfidf_score=min_tfidf_score,
+                max_tfidf_rank=max_tfidf_rank,
+                min_cluster_mass=min_cluster_mass,
+                min_cluster_concentration=min_cluster_concentration,
+                max_cluster_rank=max_cluster_rank,
             )
         else:
             distribution = distributions.get((author, item.normalized))
@@ -498,13 +677,28 @@ def candidate_text_for_row(
         risk_rank = {
             "repeated_letters": 4,
             "style_marker": 3,
+            "semantic_cluster": 2,
             "author_tfidf": 2,
             "author_concentrated": 2,
             "rare_long_token": 1,
         }[reason]
         tfidf_score = signal.tfidf_score if signal else 0.0
+        cluster_score = (
+            cluster_signal.cluster_author_mass * cluster_signal.cluster_author_concentration
+            if cluster_signal
+            else 0.0
+        )
         candidates.append(
-            (risk_rank, tfidf_score, item.abs_delta, len(item.normalized), item, reason, signal)
+            (
+                risk_rank,
+                max(tfidf_score, cluster_score),
+                item.abs_delta,
+                len(item.normalized),
+                item,
+                reason,
+                signal,
+                cluster_signal,
+            )
         )
 
     candidates.sort(
@@ -513,7 +707,16 @@ def candidate_text_for_row(
     masked_text = text
     decisions: list[MaskDecision] = []
     replacements = 0
-    for _risk_rank, _tfidf_score, _delta, _length, item, reason, signal in candidates:
+    for (
+        _risk_rank,
+        _signal_score,
+        _delta,
+        _length,
+        item,
+        reason,
+        signal,
+        cluster_signal,
+    ) in candidates:
         if replacements >= max_masks_per_row:
             break
         updated, changed = replace_token_once(masked_text, item.token, replacement)
@@ -533,6 +736,17 @@ def candidate_text_for_row(
                 tfidf_score=round(signal.tfidf_score, 6) if signal else None,
                 tfidf_rank=signal.tfidf_rank if signal else None,
                 author_count=signal.author_count if signal else None,
+                semantic_cluster_id=cluster_signal.cluster_id if cluster_signal else None,
+                semantic_cluster_rank=cluster_signal.cluster_rank if cluster_signal else None,
+                semantic_cluster_mass=(
+                    round(cluster_signal.cluster_author_mass, 6) if cluster_signal else None
+                ),
+                semantic_cluster_concentration=(
+                    round(cluster_signal.cluster_author_concentration, 6)
+                    if cluster_signal
+                    else None
+                ),
+                semantic_cluster_terms=cluster_signal.cluster_terms if cluster_signal else None,
             )
         )
     return masked_text, decisions
@@ -589,6 +803,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         protected=protected,
         min_token_length=args.min_token_length,
     )
+    semantic_cluster_signals = (
+        build_semantic_cluster_signals(
+            author_tfidf_signals,
+            model_name=args.semantic_cluster_model,
+            device=args.semantic_cluster_device,
+            cluster_count=args.semantic_cluster_count,
+            terms_per_cluster=args.semantic_terms_per_cluster,
+            source_min_tfidf_score=args.semantic_source_min_tfidf_score,
+            source_max_tfidf_rank=args.semantic_source_max_tfidf_rank,
+            batch_size=args.semantic_batch_size,
+            seed=args.semantic_cluster_seed,
+        )
+        if args.author_signal_mode == "semantic_cluster"
+        else {}
+    )
 
     candidate_rows = [dict(row) for row in cleaned_rows]
     row_decisions: list[dict[str, Any]] = []
@@ -604,6 +833,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             importance_rows=importance_rows,
             distributions=distributions,
             author_tfidf_signals=author_tfidf_signals,
+            semantic_cluster_signals=semantic_cluster_signals,
             author_signal_mode=args.author_signal_mode,
             low_impact_threshold=args.low_impact_threshold,
             protect_threshold=args.protect_threshold,
@@ -614,6 +844,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             rare_document_frequency=args.rare_document_frequency,
             min_tfidf_score=args.min_tfidf_score,
             max_tfidf_rank=args.max_tfidf_rank,
+            min_cluster_mass=args.min_semantic_cluster_mass,
+            min_cluster_concentration=args.min_semantic_cluster_concentration,
+            max_cluster_rank=args.max_semantic_cluster_rank,
             replacement=args.replacement,
             protected=protected,
         )
@@ -687,11 +920,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     baseline_labels = [row.label for row in baseline_result.rows]
     candidate_labels = [row.label for row in candidate_result.rows]
     summary = {
-        "artifact_type": (
-            "author_tfidf_token_mask"
-            if args.author_signal_mode == "tfidf"
-            else "low_impact_token_mask"
-        ),
+        "artifact_type": {
+            "count": "low_impact_token_mask",
+            "tfidf": "author_tfidf_token_mask",
+            "semantic_cluster": "author_semantic_cluster_token_mask",
+        }[args.author_signal_mode],
         "raw_input": str(args.raw_input),
         "cleaned_input": str(args.cleaned_input),
         "output": str(args.output),
@@ -717,6 +950,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "rare_document_frequency": args.rare_document_frequency,
             "min_tfidf_score": args.min_tfidf_score,
             "max_tfidf_rank": args.max_tfidf_rank,
+            "semantic_cluster_model": args.semantic_cluster_model,
+            "semantic_cluster_count": args.semantic_cluster_count,
+            "semantic_terms_per_cluster": args.semantic_terms_per_cluster,
+            "semantic_source_min_tfidf_score": args.semantic_source_min_tfidf_score,
+            "semantic_source_max_tfidf_rank": args.semantic_source_max_tfidf_rank,
+            "min_semantic_cluster_mass": args.min_semantic_cluster_mass,
+            "min_semantic_cluster_concentration": args.min_semantic_cluster_concentration,
+            "max_semantic_cluster_rank": args.max_semantic_cluster_rank,
             "classifier_model_path": args.model_path,
             "classifier_threshold": args.threshold,
         },
@@ -759,13 +1000,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-masks-per-row", type=int, default=2)
     parser.add_argument("--max-score-delta", type=float, default=0.1)
     parser.add_argument("--replacement", default="[STYLE]")
-    parser.add_argument("--author-signal-mode", choices=["count", "tfidf"], default="count")
+    parser.add_argument(
+        "--author-signal-mode",
+        choices=["count", "tfidf", "semantic_cluster"],
+        default="count",
+    )
     parser.add_argument("--min-token-length", type=int, default=7)
     parser.add_argument("--min-author-count", type=int, default=2)
     parser.add_argument("--min-author-concentration", type=float, default=0.75)
     parser.add_argument("--rare-document-frequency", type=int, default=1)
     parser.add_argument("--min-tfidf-score", type=float, default=0.06)
     parser.add_argument("--max-tfidf-rank", type=int, default=25)
+    parser.add_argument(
+        "--semantic-cluster-model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+    )
+    parser.add_argument("--semantic-cluster-device", choices=["auto", "cpu", "cuda"], default="auto")
+    parser.add_argument("--semantic-cluster-count", type=int, default=0)
+    parser.add_argument("--semantic-terms-per-cluster", type=int, default=24)
+    parser.add_argument("--semantic-source-min-tfidf-score", type=float, default=0.04)
+    parser.add_argument("--semantic-source-max-tfidf-rank", type=int, default=100)
+    parser.add_argument("--semantic-batch-size", type=int, default=128)
+    parser.add_argument("--semantic-cluster-seed", type=int, default=13)
+    parser.add_argument("--min-semantic-cluster-mass", type=float, default=0.16)
+    parser.add_argument("--min-semantic-cluster-concentration", type=float, default=0.8)
+    parser.add_argument("--max-semantic-cluster-rank", type=int, default=10)
     parser.add_argument("--model-path", default=DEFAULT_HF_HSD_MODEL_PATH)
     parser.add_argument("--threshold", type=float, default=DEFAULT_HF_HSD_THRESHOLD)
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
