@@ -6,31 +6,56 @@ Last verified: 2026-06-17
 This repo now has two runtime pieces:
 
 - `mobile/`: Expo Metro app for admin and citizen review.
-- `contextsafe_hsd`: Python backend pipeline for frozen baseline CSV generation.
+- `contextsafe_hsd.api_server`: lightweight local JSON backend API.
 
-The old FastAPI/Vite workbench backend was removed. A new API backend for CSV
-upload, restatement jobs, and review exports has not been added yet. Until that
-exists, run the Python pipeline as the backend batch step.
+The old FastAPI/Vite workbench backend was removed. The current backend is a
+small standard-library API with health, frozen-baseline summary, and review seed
+endpoints. The fuller CSV upload/restatement/export API is still the next build
+step.
 
-## 1. Start Expo Metro
+## 1. Launch Android Simulator From WSL
 
 From the repo root:
 
 ```bash
-cd mobile
-npm install
-npm start
+python launch.py --target android
 ```
 
-Metro will print QR/device options for Expo Go and development builds.
+This starts:
 
-## 2. Start Expo Web
+- Backend: `http://127.0.0.1:8765`
+- Android emulator API URL exposed to Expo:
+  `http://10.0.2.2:8765`
+- Expo Metro without requiring a Linux Android SDK
+
+Use this when Android Studio, the Android SDK, and the emulator are installed
+on the Windows side. Start the emulator from Windows, then open the app from
+Expo Go using the Metro URL/QR code.
+
+If the Windows emulator cannot reach Metro from WSL, retry with Expo tunnel
+mode:
+
+```bash
+python launch.py --target android --expo-host tunnel
+```
+
+## 2. Auto-Open Android From Linux SDK
+
+Only use this if Android SDK is installed inside Linux/WSL and `ANDROID_HOME`
+points to that Linux SDK:
+
+```bash
+python launch.py --target android-auto
+```
+
+This passes `--android` through to Expo.
+
+## 3. Start Expo Web
 
 From the repo root:
 
 ```bash
-cd mobile
-npm run web
+python launch.py --target web
 ```
 
 The current development URL is usually:
@@ -39,14 +64,27 @@ The current development URL is usually:
 http://localhost:8081
 ```
 
-If that port is busy, Expo will pick another port. In the current local session,
-the app is running at:
+If that port is busy, pass another Expo port:
 
-```text
-http://localhost:8082
+```bash
+python launch.py --target web --expo-port 8082
 ```
 
-## 3. Run The Frozen Baseline Backend Batch
+## 4. Start Metro Only
+
+```bash
+python launch.py --target metro
+```
+
+## 5. Backend API Endpoints
+
+```text
+GET http://127.0.0.1:8765/health
+GET http://127.0.0.1:8765/api/baseline
+GET http://127.0.0.1:8765/api/review-seed
+```
+
+## 6. Run The Frozen Baseline Backend Batch
 
 Use this when you need to generate a protected CSV before importing it into the
 app flow:
@@ -85,7 +123,7 @@ python -m contextsafe_hsd.cli protect \
   --audit OUTPUT.audit.json
 ```
 
-## 4. Verify Before Demo
+## 7. Verify Before Demo
 
 ```bash
 python -m ruff check contextsafe_hsd tests
@@ -98,7 +136,7 @@ npx expo export --platform web
 
 ## Backend API Slot
 
-The next backend service should expose:
+The next backend expansion should expose:
 
 - CSV upload and frozen baseline job launch.
 - Protected CSV, manifest, and audit retrieval.
