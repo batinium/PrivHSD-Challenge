@@ -17,10 +17,10 @@ input CSV
   -> cue-safe author style scrub and repeated author-group residual masking
   -> span fusion, residual cleanup, and candidate selection
   -> HSD cue safeguards
-  -> default HF sidecar classification on cleaned text only
-  -> optional second-pass verifier on positive HSD labels
+  -> optional HF sidecar classification on cleaned text only
   -> exact-format output CSV with only the text column replaced
   -> manifest/audit sidecars
+  -> Expo mobile/web admin and citizen review app
 ```
 
 Run the final path:
@@ -48,8 +48,9 @@ Scalable HSD labels default to the fine-tuned local HF classifier sidecar:
 --hf-hsd-threshold 0.850469
 ```
 
-Use `--hsd-classifier off` only for deterministic privacy-only runs without
-sidecar labels.
+Use `--hsd-classifier off` for the fastest frozen upload CSV when sidecar labels
+are not needed. Use `--hsd-classifier hf` for app batches that need queue
+labels and audit summaries. The sidecar classifier does not alter the CSV text.
 
 The selected checkpoint is `Hate-speech-CNERG/dehatebert-mono-english`
 fine-tuned with 5-fold official-train validation. Out-of-fold best F1 was
@@ -66,7 +67,7 @@ audit path. To run the older local LLM sidecar extension, pass:
 
 The optional verifier reviews only rows the main sidecar classifier marked
 positive, uses cleaned text only, and records disagreement/uncertainty in the
-manifest/audit without changing the CSV.
+manifest/audit without changing the CSV. It is not part of the MVP mobile path.
 
 Author-risk reduction is also on by default. The pipeline normalizes
 author-identifying style markers with cue safeguards and masks detector-backed
@@ -134,14 +135,15 @@ validate_submission(
 
 ```bash
 python -m pip install -e '.[dev]'
-python -m ruff check contextsafe_hsd tests workbench/backend
+python -m ruff check contextsafe_hsd tests
 python -m pytest -q
+cd mobile && npm run lint && npx tsc --noEmit
 ```
 
 Optional local helpers:
 
 ```bash
-python -m pip install -e '.[presidio,scrubadub,hf,workbench]'
+python -m pip install -e '.[presidio,scrubadub,hf]'
 ```
 
 ## Repository Map
@@ -152,12 +154,13 @@ tests/               Regression tests for exact output, cue preservation, LLM si
 docs/reference/      Stable contracts
 docs/runbooks/       Operating commands
 docs/planning/       Current status and active research handoffs
-workbench/           Optional local FastAPI + React demo
+mobile/              Expo mobile/web admin and citizen review app
 data/                Ignored local data, models, outputs, and run notes
 ```
 
 Start with `docs/reference/pipeline.md`,
-`docs/reference/data_contract.md`, and `docs/runbooks/quickstart.md`.
+`docs/reference/data_contract.md`, `docs/reference/system_diagram.md`, and
+`docs/runbooks/quickstart.md`.
 
 The current small-model verifier handoff is
 `docs/planning/mini_verifier_eval/prompt.md`.

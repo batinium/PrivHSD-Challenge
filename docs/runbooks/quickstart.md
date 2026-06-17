@@ -18,10 +18,11 @@ python -m pip install -e '.[presidio,scrubadub,hf]'
 ## Verify
 
 ```bash
-python -m ruff check contextsafe_hsd tests workbench/backend
+python -m ruff check contextsafe_hsd tests
 python -m pytest -q
 python -m contextsafe_hsd.cli --help
 python -m contextsafe_hsd.cli protect --help
+cd mobile && npm run lint && npx tsc --noEmit
 ```
 
 ## Protect A CSV
@@ -57,6 +58,20 @@ Use the fine-tuned HF sidecar classifier only when you want local audit evidence
 GPT/local LLM sidecars are optional backup/audit extensions; enable them
 explicitly only when you want second-pass evidence, not for the default
 submission path.
+
+## Run The Expo App
+
+```bash
+cd mobile
+npm install
+npm run web
+```
+
+The current Expo app contains:
+
+- Admin dashboard for the frozen baseline batch and restatement model choice.
+- Citizen review deck with swipe decisions over guarded restated evidence.
+- Direct-identifier guard for restatements before they enter the review deck.
 
 ## Validate
 

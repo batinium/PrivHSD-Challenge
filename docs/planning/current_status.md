@@ -3,8 +3,8 @@
 Status: frozen MVP baseline selected
 Last verified: 2026-06-17
 
-ContextSafe-HSD is now reduced to the final exact CSV pipeline plus a compact
-optional workbench demo. The current competition direction is deterministic
+ContextSafe-HSD is now reduced to the final exact CSV pipeline plus an Expo
+mobile/web review app. The current competition direction is deterministic
 privacy protection plus classifier-friendly utility preservation, with a
 fine-tuned local HF classifier as the scalable HSD sidecar and GPT/local LLM
 kept as backup/audit tooling.
@@ -202,27 +202,21 @@ Retained:
 - isolated mini verifier evaluation CLI for model comparison
 - exact CSV validation
 - cue-safe style scrubbing and conservative author-group masking on by default
-- optional workbench demo
+- Expo mobile/web review app
 
-## Citizen Validation Dashboard
+## Expo Mobile/Web Review App
 
-The workbench review queue now supports a citizen-validation conversion layer:
+The legacy FastAPI/Vite workbench has been removed. The new product surface is
+`mobile/`, an Expo app with two MVP screens:
 
-- LLM restatements are generated from protected text only. The frontend enables
-  the citizen restatement path by default for local LLM CSV processing; the API
-  still supports disabling it for offline/exact runs.
-- The restatement is the primary civilian-facing evidence for the hate-speech
-  vote; masked protected text is not shown in the citizen jury view, and raw
-  text is not retained in review annotations.
-- Optional semantic similarity uses a local sentence-transformers embedding
-  model to compare original text with the LLM restatement and stores only the
-  score/status.
-- Citizen votes are stored as structured `final_hsd_label` review labels:
-  `confirmed_hatred`, `not_hatred`, or `uncertain`.
-- Processed dashboard results are cached by CSV hash plus all relevant runtime
-  options, including local LLM review, restatement, and embedding models. The
-  portal can list and reload recent processed results without rerunning these
-  stages.
+- Admin dashboard for the frozen baseline batch, output CSV path, restatement
+  model selection, and restatement leakage guard state.
+- Citizen swipe review deck that shows guarded restatements only and records
+  `confirmed_hatred`, `not_hatred`, or `uncertain` decisions.
+
+The current Expo app uses seeded data from the frozen baseline while the backend
+contract is built. Reviewer-facing surfaces must not expose raw source text.
+Restatements must pass a direct-identifier guard before entering the deck.
 
 ## Handoff 2026-06-17
 
@@ -246,14 +240,9 @@ Completed:
 - Verifier result on that run: 463 reviewed positives, 429 agree,
   21 disagree, 13 uncertain, 34 human-review candidates, and label overrides
   disabled.
-- Updated the workbench into a Zero-Trust Citizen Jury flow: civilian-facing
-  queue uses `citizen_evidence` from LLM restatement, removes legacy reviewer wording,
-  hides masked/raw text from the review UI, records structured citizen votes,
-  includes verifier metadata, and uses European Council-style blue/gold colors.
-- Updated the workbench CSV cache key/version so processed results include
-  verifier, restatement, and semantic-model options.
-- Confirmed `launch.py` starts both backend and frontend on alternate ports and
-  shuts down cleanly.
+- Removed the legacy workbench app, workbench launcher, and workbench tests.
+- Added the Expo `mobile/` app with admin and citizen swipe review screens.
+- Added an in-app restatement leakage guard for direct identifiers.
 - Cleaned temporary files: Python bytecode, `.pytest_cache`, `.ruff_cache`,
   frontend `dist/`, and the duplicate run `cli_stdout.json`.
 
@@ -261,29 +250,24 @@ Checks passed:
 
 ```bash
 python -m pytest -q
-python -m ruff check contextsafe_hsd tests workbench/backend
-npm --prefix workbench/frontend run build
-python launch.py --help
-python launch.py --backend-port 8011 --frontend-port 5181
+python -m ruff check contextsafe_hsd tests
+cd mobile && npm run lint && npx tsc --noEmit
 ```
 
 Left for next session:
 
-- The portal revision is implemented and tested, but the live
-  `sentence-transformers/all-MiniLM-L6-v2` semantic embedding download/check was
-  interrupted before completion. The code path is wired; run it once in a
-  network-ready environment to warm the model cache and confirm live scoring.
-- Review the uncommitted diff and decide whether to commit all verifier,
-  workbench, docs, and test changes together or split into separate commits.
+- Replace the seeded mobile data with a real protected CSV + audit import API.
+- Wire admin-selected restatement model calls behind a backend that never sends
+  raw source text to citizen screens.
 - If more model work is desired, keep it under ignored `data/outputs/` and do
   not change the sidecar-only verifier contract without a new full metric run.
 
 ## Verification To Keep Current
 
 ```bash
-python -m ruff check contextsafe_hsd tests workbench/backend
+python -m ruff check contextsafe_hsd tests
 python -m pytest -q
-npm --prefix workbench/frontend run build
+cd mobile && npm run lint && npx tsc --noEmit
 ```
 
 Run a small smoke before hand-in:

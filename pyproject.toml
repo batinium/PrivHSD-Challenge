@@ -29,7 +29,6 @@ hf = [
   "torch>=2.2",
   "transformers>=4.43",
 ]
-workbench = ["fastapi>=0.111", "uvicorn[standard]>=0.30", "sentence-transformers>=3.0"]
 dev = [
   "pytest>=9.0",
   "ruff>=0.15",

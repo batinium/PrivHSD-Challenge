@@ -1,4 +1,4 @@
-"""Provider loading by CLI/workbench name."""
+"""Provider loading by CLI/app name."""
 
 from __future__ import annotations
 
