@@ -66,6 +66,8 @@ NEVER_MASK_TERMS = frozenset(
         "conservatives",
         "cuck",
         "cucks",
+        "dumbass",
+        "dumbasses",
         "dead",
         "death",
         "democrat",
@@ -90,6 +92,8 @@ NEVER_MASK_TERMS = frozenset(
         "hateful",
         "hating",
         "homophobic",
+        "incel",
+        "incels",
         "immigrant",
         "immigrants",
         "islam",
@@ -121,6 +125,8 @@ NEVER_MASK_TERMS = frozenset(
         "murder",
         "murdered",
         "murdering",
+        "moron",
+        "morons",
         "muslim",
         "muslims",
         "nazi",
@@ -135,12 +141,14 @@ NEVER_MASK_TERMS = frozenset(
         "raped",
         "raping",
         "rapist",
+        "rapists",
         "refugee",
         "refugees",
         "republican",
         "republicans",
         "sexism",
         "sexist",
+        "sexual",
         "shoot",
         "shooting",
         "sjw",
@@ -167,11 +175,13 @@ NEVER_MASK_TERMS = frozenset(
 )
 NEVER_MASK_PREFIXES = (
     "bitch",
+    "asshole",
     "cunt",
     "fag",
     "fuck",
     "motherfuck",
     "nigg",
+    "puss",
     "retard",
     "shit",
     "slut",
@@ -195,12 +205,22 @@ class TokenDistribution:
 
 
 @dataclass(frozen=True)
+class AuthorTfidfSignal:
+    tfidf_score: float
+    tfidf_rank: int
+    author_count: int
+
+
+@dataclass(frozen=True)
 class MaskDecision:
     token: str
     normalized: str
     abs_delta: float
     reason: str
     replacements: int
+    tfidf_score: float | None = None
+    tfidf_rank: int | None = None
+    author_count: int | None = None
 
 
 def read_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
@@ -274,6 +294,68 @@ def build_distribution(
     return distributions
 
 
+def build_author_tfidf_signals(
+    rows: list[dict[str, str]],
+    *,
+    text_col: str,
+    author_col: str | None,
+    protected: frozenset[str],
+    min_token_length: int,
+) -> dict[tuple[str, str], AuthorTfidfSignal]:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    author_docs: dict[str, list[str]] = defaultdict(list)
+    author_counts: Counter[tuple[str, str]] = Counter()
+    for row in rows:
+        author = str(row.get(author_col or "", "") or "").strip()
+        if not author:
+            continue
+        text = str(row.get(text_col, "") or "")
+        author_docs[author].append(text)
+        author_counts.update((author, token) for token in iter_normalized_tokens(text))
+    if not author_docs:
+        return {}
+
+    def analyzer(text: str) -> list[str]:
+        tokens: list[str] = []
+        for match in TOKEN_PATTERN.finditer(text):
+            original = match.group(0)
+            normalized = normalize_token(original)
+            if len(normalized) < min_token_length:
+                continue
+            if PLACEHOLDER_PATTERN.fullmatch(original):
+                continue
+            if normalized in protected or is_never_mask_token(normalized):
+                continue
+            tokens.append(normalized)
+        return tokens
+
+    authors = sorted(author_docs)
+    documents = ["\n".join(author_docs[author]) for author in authors]
+    vectorizer = TfidfVectorizer(
+        analyzer=analyzer,
+        lowercase=False,
+        norm="l2",
+        smooth_idf=True,
+        sublinear_tf=True,
+    )
+    matrix = vectorizer.fit_transform(documents)
+    terms = vectorizer.get_feature_names_out()
+
+    signals: dict[tuple[str, str], AuthorTfidfSignal] = {}
+    for author_index, author in enumerate(authors):
+        row = matrix.getrow(author_index)
+        ranked = sorted(zip(row.indices, row.data), key=lambda item: -float(item[1]))
+        for rank, (term_index, score) in enumerate(ranked, start=1):
+            token = str(terms[term_index])
+            signals[(author, token)] = AuthorTfidfSignal(
+                tfidf_score=float(score),
+                tfidf_rank=rank,
+                author_count=author_counts[(author, token)],
+            )
+    return signals
+
+
 def token_reason(
     *,
     original_token: str,
@@ -308,6 +390,35 @@ def token_reason(
     return None
 
 
+def tfidf_token_reason(
+    *,
+    original_token: str,
+    normalized: str,
+    signal: AuthorTfidfSignal | None,
+    min_token_length: int,
+    min_author_count: int,
+    min_tfidf_score: float,
+    max_tfidf_rank: int,
+) -> str | None:
+    if PLACEHOLDER_PATTERN.fullmatch(original_token):
+        return None
+    if STYLE_MARKER_PATTERN.fullmatch(original_token):
+        return "style_marker"
+    if REPEATED_LETTER_PATTERN.search(original_token):
+        return "repeated_letters"
+    if len(normalized) < min_token_length:
+        return None
+    if signal is None:
+        return None
+    if signal.author_count < min_author_count:
+        return None
+    if signal.tfidf_score < min_tfidf_score:
+        return None
+    if signal.tfidf_rank > max_tfidf_rank:
+        return None
+    return "author_tfidf"
+
+
 def is_never_mask_token(normalized: str) -> bool:
     return normalized in NEVER_MASK_TERMS or any(
         normalized.startswith(prefix) for prefix in NEVER_MASK_PREFIXES
@@ -330,6 +441,8 @@ def candidate_text_for_row(
     text: str,
     importance_rows: dict[str, list[ImportanceToken]],
     distributions: dict[tuple[str, str], TokenDistribution],
+    author_tfidf_signals: dict[tuple[str, str], AuthorTfidfSignal],
+    author_signal_mode: str,
     low_impact_threshold: float,
     protect_threshold: float,
     max_masks_per_row: int,
@@ -337,10 +450,14 @@ def candidate_text_for_row(
     min_author_count: int,
     min_author_concentration: float,
     rare_document_frequency: int,
+    min_tfidf_score: float,
+    max_tfidf_rank: int,
     replacement: str,
     protected: frozenset[str],
 ) -> tuple[str, list[MaskDecision]]:
-    candidates: list[tuple[int, float, int, ImportanceToken, str]] = []
+    candidates: list[
+        tuple[int, float, float, int, ImportanceToken, str, AuthorTfidfSignal | None]
+    ] = []
     seen: set[str] = set()
     for item in importance_rows.get(row_id, []):
         if item.normalized in seen:
@@ -354,31 +471,49 @@ def candidate_text_for_row(
             continue
         if is_never_mask_token(item.normalized):
             continue
-        distribution = distributions.get((author, item.normalized))
-        reason = token_reason(
-            original_token=item.token,
-            normalized=item.normalized,
-            distribution=distribution,
-            min_token_length=min_token_length,
-            min_author_count=min_author_count,
-            min_author_concentration=min_author_concentration,
-            rare_document_frequency=rare_document_frequency,
-        )
+        signal = author_tfidf_signals.get((author, item.normalized))
+        if author_signal_mode == "tfidf":
+            reason = tfidf_token_reason(
+                original_token=item.token,
+                normalized=item.normalized,
+                signal=signal,
+                min_token_length=min_token_length,
+                min_author_count=min_author_count,
+                min_tfidf_score=min_tfidf_score,
+                max_tfidf_rank=max_tfidf_rank,
+            )
+        else:
+            distribution = distributions.get((author, item.normalized))
+            reason = token_reason(
+                original_token=item.token,
+                normalized=item.normalized,
+                distribution=distribution,
+                min_token_length=min_token_length,
+                min_author_count=min_author_count,
+                min_author_concentration=min_author_concentration,
+                rare_document_frequency=rare_document_frequency,
+            )
         if reason is None:
             continue
         risk_rank = {
             "repeated_letters": 4,
             "style_marker": 3,
+            "author_tfidf": 2,
             "author_concentrated": 2,
             "rare_long_token": 1,
         }[reason]
-        candidates.append((risk_rank, item.abs_delta, len(item.normalized), item, reason))
+        tfidf_score = signal.tfidf_score if signal else 0.0
+        candidates.append(
+            (risk_rank, tfidf_score, item.abs_delta, len(item.normalized), item, reason, signal)
+        )
 
-    candidates.sort(key=lambda value: (-value[0], value[1], -value[2], value[3].normalized))
+    candidates.sort(
+        key=lambda value: (-value[0], -value[1], value[2], -value[3], value[4].normalized)
+    )
     masked_text = text
     decisions: list[MaskDecision] = []
     replacements = 0
-    for _risk_rank, _delta, _length, item, reason in candidates:
+    for _risk_rank, _tfidf_score, _delta, _length, item, reason, signal in candidates:
         if replacements >= max_masks_per_row:
             break
         updated, changed = replace_token_once(masked_text, item.token, replacement)
@@ -395,6 +530,9 @@ def candidate_text_for_row(
                 abs_delta=item.abs_delta,
                 reason=reason,
                 replacements=1,
+                tfidf_score=round(signal.tfidf_score, 6) if signal else None,
+                tfidf_rank=signal.tfidf_rank if signal else None,
+                author_count=signal.author_count if signal else None,
             )
         )
     return masked_text, decisions
@@ -437,13 +575,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if [row[args.id_col] for row in raw_rows] != [row[args.id_col] for row in cleaned_rows]:
         raise ValueError("raw and cleaned CSV row IDs do not match")
     importance_rows = load_importance(args.importance_csv)
+    protected = protected_tokens()
     distributions = build_distribution(
         raw_rows,
         text_col=args.text_col,
         id_col=args.id_col,
         author_col=args.author_col,
     )
-    protected = protected_tokens()
+    author_tfidf_signals = build_author_tfidf_signals(
+        raw_rows,
+        text_col=args.text_col,
+        author_col=args.author_col,
+        protected=protected,
+        min_token_length=args.min_token_length,
+    )
 
     candidate_rows = [dict(row) for row in cleaned_rows]
     row_decisions: list[dict[str, Any]] = []
@@ -458,6 +603,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             text=current_text,
             importance_rows=importance_rows,
             distributions=distributions,
+            author_tfidf_signals=author_tfidf_signals,
+            author_signal_mode=args.author_signal_mode,
             low_impact_threshold=args.low_impact_threshold,
             protect_threshold=args.protect_threshold,
             max_masks_per_row=args.max_masks_per_row,
@@ -465,6 +612,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             min_author_count=args.min_author_count,
             min_author_concentration=args.min_author_concentration,
             rare_document_frequency=args.rare_document_frequency,
+            min_tfidf_score=args.min_tfidf_score,
+            max_tfidf_rank=args.max_tfidf_rank,
             replacement=args.replacement,
             protected=protected,
         )
@@ -538,7 +687,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     baseline_labels = [row.label for row in baseline_result.rows]
     candidate_labels = [row.label for row in candidate_result.rows]
     summary = {
-        "artifact_type": "low_impact_token_mask",
+        "artifact_type": (
+            "author_tfidf_token_mask"
+            if args.author_signal_mode == "tfidf"
+            else "low_impact_token_mask"
+        ),
         "raw_input": str(args.raw_input),
         "cleaned_input": str(args.cleaned_input),
         "output": str(args.output),
@@ -557,10 +710,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "max_masks_per_row": args.max_masks_per_row,
             "max_score_delta": args.max_score_delta,
             "replacement": args.replacement,
+            "author_signal_mode": args.author_signal_mode,
             "min_token_length": args.min_token_length,
             "min_author_count": args.min_author_count,
             "min_author_concentration": args.min_author_concentration,
             "rare_document_frequency": args.rare_document_frequency,
+            "min_tfidf_score": args.min_tfidf_score,
+            "max_tfidf_rank": args.max_tfidf_rank,
             "classifier_model_path": args.model_path,
             "classifier_threshold": args.threshold,
         },
@@ -603,10 +759,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-masks-per-row", type=int, default=2)
     parser.add_argument("--max-score-delta", type=float, default=0.1)
     parser.add_argument("--replacement", default="[STYLE]")
+    parser.add_argument("--author-signal-mode", choices=["count", "tfidf"], default="count")
     parser.add_argument("--min-token-length", type=int, default=7)
     parser.add_argument("--min-author-count", type=int, default=2)
     parser.add_argument("--min-author-concentration", type=float, default=0.75)
     parser.add_argument("--rare-document-frequency", type=int, default=1)
+    parser.add_argument("--min-tfidf-score", type=float, default=0.06)
+    parser.add_argument("--max-tfidf-rank", type=int, default=25)
     parser.add_argument("--model-path", default=DEFAULT_HF_HSD_MODEL_PATH)
     parser.add_argument("--threshold", type=float, default=DEFAULT_HF_HSD_THRESHOLD)
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
