@@ -37,7 +37,7 @@ MIN_NORMALIZED_LENGTH = 3
 
 @dataclass(frozen=True)
 class AuthorGroupMaskingConfig:
-    enabled: bool = False
+    enabled: bool = True
     author_col: str | None = None
     min_repetitions: int = 2
     min_author_rows: int = 2

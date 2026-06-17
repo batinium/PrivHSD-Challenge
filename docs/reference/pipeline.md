@@ -9,9 +9,10 @@ The final public story is one command and one backend path:
 input CSV
   -> deterministic PII sanitization
   -> Presidio/scrubadub PII Assist
+  -> cue-safe author style scrub and repeated author-group residual masking
   -> span fusion, residual cleanup, and candidate selection
   -> HSD target/action/negation/quote/counterspeech cue safeguards
-  -> local LLM sidecar review on cleaned text only
+  -> optional sidecar classification/review on cleaned text only
   -> optional second-pass verifier on positive HSD labels
   -> exact-format output CSV with only the text column replaced
   -> manifest/audit sidecars
@@ -27,6 +28,7 @@ Primary implementation:
 - `contextsafe_hsd/cue_checks.py`
 - `contextsafe_hsd/rationale_checks.py`
 - `contextsafe_hsd/span_providers/`
+- `contextsafe_hsd/models/hf_hsd_classifier_runtime.py`
 - `contextsafe_hsd/models/local_llm_hsd_review_runtime.py`
 - `contextsafe_hsd/models/local_llm_hsd_verifier_runtime.py`
 
@@ -39,22 +41,31 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --llm-review local-llm \
-  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
-  --local-llm-model openai/gpt-oss-20b \
-  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
 `--preset exact` is the hand-in path. `--preset audit` keeps the same CSV
-contract and requests deeper sidecars. `--llm-review off --llm-verifier off`
-skips local LLM sidecars and records skipped status.
+contract and requests deeper sidecars. The command defaults to the scalable
+fine-tuned local classifier sidecar:
 
-`--llm-verifier local-llm` is the default second-pass verifier. It reviews only
-main local-LLM positive labels, uses cleaned text only, and writes
-disagreement/uncertainty as audit metadata. It does not override labels or modify
-the output CSV.
+```bash
+--hsd-classifier hf \
+--hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+--hf-hsd-threshold 0.850469
+```
+
+The current selected model is the official-train fine-tuned
+`Hate-speech-CNERG/dehatebert-mono-english` checkpoint. Its 5-fold out-of-fold
+best F1 is `0.8289` at threshold `0.850469`. Use `--hsd-classifier off` only
+for deterministic privacy-only runs without sidecar labels.
+
+GPT/local LLM review and verifier runs are optional backup/audit extensions. To
+enable the older local LLM sidecar path, pass `--llm-review local-llm`,
+`--local-llm-endpoint`, `--local-llm-model`, and optionally
+`--llm-verifier local-llm`. The verifier reviews only main sidecar positive
+labels, uses cleaned text only, and writes disagreement/uncertainty as audit
+metadata. It does not override labels or modify the output CSV.
 
 ## Stage Contract
 
@@ -72,18 +83,32 @@ Meaning protection:
   quote, counterspeech, reporting, or rationale cue loss.
 - High-confidence direct identifiers are still removed even when sidecar review
   later flags classification uncertainty.
-- Author-group masking remains off by default.
+- Cue-safe style scrubbing and conservative author-group masking are on by
+  default. Style scrubbing normalizes idiolect markers, casing, repeated
+  punctuation/letters, hashtags, emoji, and signatures while preserving HSD cue
+  terms and placeholders. Author-group masking only masks detector-backed
+  direct/quasi identifier spans that repeat within the same author/user group.
 
 Verification:
 
 - Exact CSV shape is validated.
 - Residual identifiers and privacy warnings are summarized.
+- HF HSD classifier, when selected, receives cleaned text only and writes
+  binary label, softmax score, threshold, and model metadata to sidecars only.
 - Local LLM HSD review, when selected, receives cleaned text only.
 - LLM labels, reason tags, parse/fallback counts, and PII suggestions go to
   sidecars only.
 - Optional local LLM HSD verifier output is sidecar-only and scoped to positive
-  labels from the main reviewer.
+  labels from the main sidecar classifier.
 - Normal logs and reports do not print raw row text.
+
+Metric target:
+
+- PrivHSD optimizes
+  `TO = Utility_protected / Utility_original - Privacy_protected / Privacy_original`.
+- Higher is better. The default path favors high-confidence direct and
+  technical identifier masking, cue-safe style normalization, and minimal
+  semantic rewriting so anonymization improves without collapsing HSD utility.
 
 Verifier evaluation work:
 
@@ -120,9 +145,12 @@ The manifest leads with stage summaries plus provider/model diagnostics:
     },
     "verification": {
       "local_llm_hsd_review": {
+        "status": "skipped"
+      },
+      "hsd_classification": {
+        "backend": "hf_classifier",
         "status": "ok",
-        "parse_count": 3,
-        "fallback_count": 0
+        "parse_count": 3
       },
       "local_llm_hsd_verifier": {
         "status": "skipped",

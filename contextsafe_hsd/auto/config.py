@@ -5,13 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from contextsafe_hsd.metrics import METRIC_DEPTHS
+from contextsafe_hsd.models.hf_hsd_classifier_runtime import (
+    DEFAULT_HF_HSD_BATCH_SIZE,
+    DEFAULT_HF_HSD_MAX_LENGTH,
+    DEFAULT_HF_HSD_MODEL_PATH,
+    DEFAULT_HF_HSD_THRESHOLD,
+)
 
 
 AUTO_MODES = frozenset({"auto"})
 AUTO_CAPABLE_MODES = frozenset({"auto", "utility", "balanced", "privacy"})
 DEVICE_POLICIES = frozenset({"auto", "cpu", "cuda"})
 AUDIT_LEVELS = frozenset({"summary", "row", "debug"})
-HSD_CLASSIFICATION_BACKENDS = frozenset({"none", "local_llm"})
+HSD_CLASSIFICATION_BACKENDS = frozenset({"none", "local_llm", "hf_classifier"})
 
 
 @dataclass(frozen=True)
@@ -33,8 +39,13 @@ class AutoPipelineConfig:
     audit_level: str = "summary"
     provider_language: str = "en"
     hsd_classification_backend: str = "none"
+    hf_hsd_model_path: str = DEFAULT_HF_HSD_MODEL_PATH
+    hf_hsd_threshold: float = DEFAULT_HF_HSD_THRESHOLD
+    hf_hsd_device: str = "auto"
+    hf_hsd_batch_size: int = DEFAULT_HF_HSD_BATCH_SIZE
+    hf_hsd_max_length: int = DEFAULT_HF_HSD_MAX_LENGTH
     generalize_targets: bool | None = False
-    style_scrub: bool = False
+    style_scrub: bool = True
     official_mode: bool = True
     local_llm_enabled: bool = False
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions"
@@ -43,7 +54,7 @@ class AutoPipelineConfig:
     local_llm_batch_size: int = 10
     local_llm_enable_pii_suggestions: bool = True
     local_llm_require_structured_output: bool = True
-    author_group_masking: bool = False
+    author_group_masking: bool = True
     author_group_col: str | None = None
     author_group_min_repetitions: int = 2
     author_group_min_author_rows: int = 2
@@ -73,6 +84,16 @@ class AutoPipelineConfig:
             "local_llm_enabled",
             bool(self.local_llm_enabled or backend == "local_llm"),
         )
+        object.__setattr__(
+            self,
+            "hf_hsd_model_path",
+            self.hf_hsd_model_path.strip() or DEFAULT_HF_HSD_MODEL_PATH,
+        )
+        object.__setattr__(
+            self,
+            "hf_hsd_device",
+            self.hf_hsd_device.strip().lower() or "auto",
+        )
         if self.author_group_col is not None:
             object.__setattr__(
                 self,
@@ -92,6 +113,14 @@ class AutoPipelineConfig:
                 "hsd_classification_backend must be one of "
                 f"{sorted(HSD_CLASSIFICATION_BACKENDS)}"
             )
+        if self.hf_hsd_device not in DEVICE_POLICIES:
+            raise ValueError(f"hf_hsd_device must be one of {sorted(DEVICE_POLICIES)}")
+        if not 0.0 <= self.hf_hsd_threshold <= 1.0:
+            raise ValueError("hf_hsd_threshold must be between 0 and 1")
+        if self.hf_hsd_batch_size < 1:
+            raise ValueError("hf_hsd_batch_size must be positive")
+        if self.hf_hsd_max_length < 1:
+            raise ValueError("hf_hsd_max_length must be positive")
         if self.max_model_batch_size < 1:
             raise ValueError("max_model_batch_size must be positive")
         if self.max_provider_rows is not None and self.max_provider_rows < 0:

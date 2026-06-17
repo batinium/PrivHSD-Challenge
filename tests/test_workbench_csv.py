@@ -527,7 +527,7 @@ def test_workbench_text_endpoint_uses_selected_span_provider(monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["privatized_text"] == "[PERSON] said Muslims should leave."
+    assert body["privatized_text"] == "[PERSON] said muslims should leave."
     assert body["span_providers"]["presidio"]["status"] == "ready"
     assert body["span_providers"]["presidio"]["accepted_span_count"] == 1
     assert body["hsd_classifier"]["status"] == "removed"

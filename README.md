@@ -14,9 +14,10 @@ moderation system, or a guarantee that every identifier has been removed.
 input CSV
   -> deterministic PII sanitization
   -> Presidio/scrubadub PII Assist
+  -> cue-safe author style scrub and repeated author-group residual masking
   -> span fusion, residual cleanup, and candidate selection
   -> HSD cue safeguards
-  -> local LLM sidecar review on cleaned text only
+  -> default HF sidecar classification on cleaned text only
   -> optional second-pass verifier on positive HSD labels
   -> exact-format output CSV with only the text column replaced
   -> manifest/audit sidecars
@@ -31,25 +32,56 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --llm-review local-llm \
-  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
-  --local-llm-model openai/gpt-oss-20b \
-  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
 The output CSV keeps the input row order, row count, and columns exactly. Only
-the selected text column is replaced. LLM labels, reason tags, diagnostics,
-suggestions, and warnings stay in JSON sidecars.
+the selected text column is replaced. Labels, diagnostics, suggestions, and
+warnings from sidecars stay in JSON sidecars.
 
-For an offline run without local LLM sidecars, pass `--llm-review off` and
-`--llm-verifier off`. The manifest records skipped review status and counts.
+Scalable HSD labels default to the fine-tuned local HF classifier sidecar:
 
-The AI-audits-AI safeguard is enabled by default with `--llm-verifier
-local-llm`. The verifier reviews only rows the main local LLM marked positive,
-uses cleaned text only, and records disagreement/uncertainty in the
+```bash
+--hsd-classifier hf \
+--hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+--hf-hsd-threshold 0.850469
+```
+
+Use `--hsd-classifier off` only for deterministic privacy-only runs without
+sidecar labels.
+
+The selected checkpoint is `Hate-speech-CNERG/dehatebert-mono-english`
+fine-tuned with 5-fold official-train validation. Out-of-fold best F1 was
+`0.8289` at threshold `0.850469`; every OOF row was predicted by a model that
+did not train on that row. GPT/local LLM classification remains a backup or
+audit path. To run the older local LLM sidecar extension, pass:
+
+```bash
+--llm-review local-llm \
+--local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
+--local-llm-model openai/gpt-oss-20b \
+--llm-verifier local-llm
+```
+
+The optional verifier reviews only rows the main sidecar classifier marked
+positive, uses cleaned text only, and records disagreement/uncertainty in the
 manifest/audit without changing the CSV.
+
+Author-risk reduction is also on by default. The pipeline normalizes
+author-identifying style markers with cue safeguards and masks detector-backed
+factual spans that repeat across rows from the same author/user column. Use
+`--no-style-scrub` or `--no-author-group-masking` only for ablations.
+
+The PrivHSD trade-off score is optimized as:
+
+```text
+TO = Utility_protected / Utility_original - Privacy_protected / Privacy_original
+```
+
+Higher is better. The default strategy therefore removes deterministic direct
+and technical identifiers aggressively while preserving hate-speech semantics
+and avoiding broad text rewrites that damage HSD utility.
 
 Validate the exact CSV shape:
 
@@ -109,7 +141,7 @@ python -m pytest -q
 Optional local helpers:
 
 ```bash
-python -m pip install -e '.[presidio,scrubadub,workbench]'
+python -m pip install -e '.[presidio,scrubadub,hf,workbench]'
 ```
 
 ## Repository Map

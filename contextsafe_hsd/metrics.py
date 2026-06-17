@@ -33,12 +33,17 @@ UTILITY_CUES = load_utility_cue_terms("utility_cues")
 DIRECT_IDENTIFIER_TYPES = frozenset(
     {
         "ALIAS",
+        "CREDIT_CARD",
+        "CRYPTO_WALLET",
+        "DISCORD_USER",
         "PERSON",
         "USER",
         "EMAIL",
+        "IBAN",
         "PHONE",
         "URL",
         "IP_ADDRESS",
+        "SOCIAL_LINK",
         "IDENTIFIER",
     }
 )
@@ -111,7 +116,17 @@ def residual_high_confidence_direct_spans(spans: Iterable[Span]) -> list[Span]:
         span
         for span in spans
         if span.entity_type in HIGH_CONFIDENCE_DIRECT_TYPES
-        and span.source in {"regex", "regex_obfuscated_email"}
+        and span.source
+        in {
+            "regex",
+            "regex_crypto_wallet",
+            "regex_deobfuscated_email",
+            "regex_discord_handle",
+            "regex_iban_mod97",
+            "regex_luhn_credit_card",
+            "regex_obfuscated_email",
+            "regex_social_link",
+        }
     ]
 
 

@@ -28,16 +28,16 @@ npm --prefix workbench/frontend run dev
 - CSV upload defaults to replacing the selected text column in place.
 - Downloaded exact CSV preserves the original schema.
 - Helper-column output is local audit only.
-- Local LLM HSD review is sidecar-only, with the second verifier enabled by
-  default as audit metadata for positive labels.
-- Platform insight uses explicit CSV labels or local LLM sidecar labels only.
+- HF HSD classification is sidecar-only by default; local LLM review and the
+  second verifier are optional audit extensions for positive labels.
+- Platform insight uses explicit CSV labels or selected sidecar labels only.
 - The workbench does not fabricate classifier votes.
 - Review cache files contain case IDs and structured labels, not raw CSV text.
 - Processed CSV results are cached under `workbench/.cache/csv_results/`.
-  The cache key includes the CSV hash, masking options, local LLM review
+  The cache key includes the CSV hash, masking options, sidecar classifier
   settings, citizen restatement model, and semantic embedding model.
 - The portal can list recent processed results and load one directly without
-  re-uploading the CSV or rerunning local LLM / embedding stages.
+  re-uploading the CSV or rerunning classifier / embedding stages.
 - Raw author/user IDs are not used as review case IDs.
 - Citizen validation generates search-proof LLM restatements from protected text
   only. Civilians see the restated evidence, not raw text or masked protected

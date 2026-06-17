@@ -4,6 +4,10 @@ import json
 import pytest
 
 from contextsafe_hsd.cli import build_parser
+from contextsafe_hsd.models.hf_hsd_classifier_runtime import (
+    HfHsdClassifierResult,
+    HfHsdClassifierRow,
+)
 from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
     LocalLlmReviewResult,
     LocalLlmRowReview,
@@ -121,7 +125,47 @@ class FakeLocalLlmVerifier:
         )
 
 
-def test_protect_parser_is_small_and_defaults_to_local_llm_review():
+class FakeHfClassifier:
+    def __init__(self):
+        self.calls = []
+        self.model_id = "fake-hf-hsd"
+
+    def status_metadata(self):
+        return {
+            "model_id": self.model_id,
+            "model_path": "fake/model",
+            "threshold": 0.7,
+            "max_length": 512,
+            "device": "cpu",
+        }
+
+    def classify_texts(self, rows, *, batch_size, progress_callback=None):
+        self.calls.append({"rows": rows, "batch_size": batch_size})
+        reviews = []
+        for row in rows:
+            score = 0.91 if "leave" in row["text"] else 0.08
+            hate = score >= 0.7
+            reviews.append(
+                HfHsdClassifierRow(
+                    row_id=row["id"],
+                    label="1" if hate else "0",
+                    hate=hate,
+                    score=score,
+                    threshold=0.7,
+                )
+            )
+        return HfHsdClassifierResult(
+            rows=tuple(reviews),
+            model_id=self.model_id,
+            model_path="fake/model",
+            threshold=0.7,
+            max_length=512,
+            device="cpu",
+            elapsed_seconds=0.01,
+        )
+
+
+def test_protect_parser_is_small_and_defaults_to_deterministic_review():
     parser = build_parser()
 
     assert set(parser._subparsers._actions[1].choices) == {
@@ -144,8 +188,9 @@ def test_protect_parser_is_small_and_defaults_to_local_llm_review():
 
     assert args.command == "protect"
     assert args.text_col == "body"
-    assert args.llm_review == "local-llm"
-    assert args.llm_verifier == "local-llm"
+    assert args.llm_review == "off"
+    assert args.llm_verifier == "off"
+    assert args.hsd_classifier is None
 
 
 def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
@@ -257,6 +302,49 @@ def test_final_pipeline_can_run_optional_second_verifier(tmp_path):
     assert fake_verifier.calls[0]["batch_size"] == 2
     assert [row["id"] for row in fake_verifier.calls[0]["rows"]] == ["1"]
     assert audit["verifier_reviews"][0]["action"] == "human_review_candidate"
+
+
+def test_final_pipeline_can_use_hf_classifier_sidecar(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    manifest_path = tmp_path / "manifest.json"
+    audit_path = tmp_path / "audit.json"
+    fake_classifier = FakeHfClassifier()
+    write_rows(source)
+
+    manifest = run_final_csv_pipeline(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        manifest_path=manifest_path,
+        audit_path=audit_path,
+        disabled_providers=["presidio", "scrubadub"],
+        hsd_classification_backend="hf_classifier",
+        hf_hsd_batch_size=8,
+        hf_hsd_threshold=0.7,
+        llm_review="off",
+        llm_verifier="off",
+        model_factories={"hf_classifier": lambda _context: fake_classifier},
+    )
+
+    rows = read_rows(output)
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    classification = manifest["classification"]
+    assert list(rows[0]) == ["id", "text", "is_hate_speech"]
+    assert classification["backend"] == "hf_classifier"
+    assert classification["status"] == "ok"
+    assert classification["parse_count"] == 2
+    assert classification["prediction_counts"] == {"0": 1, "1": 1}
+    assert classification["threshold"] == 0.7
+    assert classification["row_reviews"][0]["score"] == 0.91
+    assert manifest["hsd_classification_backend"] == "hf_classifier"
+    assert manifest["llm_review"] == "off"
+    assert manifest["stages"]["verification"]["hsd_classification"][
+        "backend"
+    ] == "hf_classifier"
+    assert fake_classifier.calls[0]["batch_size"] == 8
+    assert "mara@example.test" not in json.dumps(audit)
 
 
 def test_final_pipeline_can_skip_local_llm_sidecar(tmp_path):

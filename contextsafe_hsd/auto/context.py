@@ -15,7 +15,7 @@ from contextsafe_hsd.span_providers.scrubadub_provider import (
 )
 
 from .config import AutoPipelineConfig
-from .model_registry import discover_local_llm
+from .model_registry import discover_hf_classifier, discover_local_llm
 
 
 ProviderFactory = Callable[["AutoPipelineContext"], SpanProvider]
@@ -72,6 +72,7 @@ class AutoPipelineContext:
         self._discover_provider("presidio", "presidio_analyzer")
         self._discover_provider("scrubadub", "scrubadub")
         self.model_status["local_llm"] = discover_local_llm(self.config)
+        self.model_status["hf_classifier"] = discover_hf_classifier(self.config)
         for name in self.provider_factories:
             self.provider_status[name] = {
                 "status": "available",
@@ -182,10 +183,24 @@ class AutoPipelineContext:
                 enable_pii_suggestions=self.config.local_llm_enable_pii_suggestions,
                 require_structured_output=self.config.local_llm_require_structured_output,
             )
+        if name == "hf_classifier":
+            from contextsafe_hsd.models.hf_hsd_classifier_runtime import (
+                HfHsdClassifierRuntime,
+            )
+
+            return HfHsdClassifierRuntime(
+                model_path=self.config.hf_hsd_model_path,
+                threshold=self.config.hf_hsd_threshold,
+                device=self.config.hf_hsd_device,
+                max_length=self.config.hf_hsd_max_length,
+            )
         raise ValueError(f"unknown auto model {name!r}")
 
     def ensure_local_llm_review(self) -> Any | None:
         return self.ensure_model("local_llm")
+
+    def ensure_hf_classifier(self) -> Any | None:
+        return self.ensure_model("hf_classifier")
 
     def audit_status(self) -> dict[str, Any]:
         return {

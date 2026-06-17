@@ -4,7 +4,10 @@ Status: active
 Last verified: 2026-06-17
 
 ContextSafe-HSD is now reduced to the final exact CSV pipeline plus a compact
-optional workbench demo.
+optional workbench demo. The current competition direction is deterministic
+privacy protection plus classifier-friendly utility preservation, with a
+fine-tuned local HF classifier as the scalable HSD sidecar and GPT/local LLM
+kept as backup/audit tooling.
 
 ## Public Runtime
 
@@ -21,22 +24,54 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --llm-review local-llm \
-  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
-  --local-llm-model openai/gpt-oss-20b \
-  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
-`--llm-review off --llm-verifier off` is supported for offline exact runs. The
-AI-audits-AI sidecar verifier is default-on for local LLM runs and reviews main
-positive labels. It records disagreement and uncertainty in the sidecars only;
-it does not change labels or CSV text.
+This defaults to the fine-tuned HF sidecar classifier with `--llm-review off`
+and `--llm-verifier off`. The sidecar verifier is available for positive labels
+from a selected sidecar classifier; it records disagreement and uncertainty in
+the sidecars only and does not change labels or CSV text.
+
+Recommended scalable classifier path:
+
+```bash
+python -m contextsafe_hsd.cli protect \
+  --input INPUT.csv \
+  --output OUTPUT.csv \
+  --text-col text \
+  --id-col ID \
+  --preset exact \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json
+```
+
+Current score context:
+
+- Recent checked run reported PrivHSD trade-off `0.3835`.
+- Best current supervised classifier: `Hate-speech-CNERG/dehatebert-mono-english`
+  fine-tuned on the official train split with 5-fold OOF validation.
+  OOF best F1 is `0.8289` at threshold `0.850469`; the final checkpoint is
+  `data/outputs/dehatebert_official_kfold_20260617/final_model`.
+- Other checked supervised runs did not beat that single model:
+  HateXplain BERT OOF best F1 `0.8200`, RoBERTa-large `0.8228`,
+  DeHateBERT with 6% warmup `0.8279`, and a DeHateBERT/HateXplain OOF
+  ensemble only reached `0.8295`.
+- Public merged data alone and a 5k public-data augmentation screen hurt
+  official-fold validation, so external data should be teacher-filtered or
+  curriculum-trained before using it in the primary model.
+- The challenge objective is
+  `TO = Utility_protected / Utility_original - Privacy_protected / Privacy_original`.
+- Higher is better, so the next default direction is to remove direct and
+  stylistic re-identification cues while preserving HSD semantics rather than
+  rewriting comments broadly.
 
 ## Optional Verifier And Evaluation
 
-The second verifier is retained as a default-on `protect` sidecar safeguard. The
+The second verifier is retained as an opt-in `protect` sidecar safeguard. The
 model-comparison workflow remains isolated as an evaluation command:
 
 ```bash
@@ -79,8 +114,8 @@ Full-sample follow-up on 2026-06-16:
   tool-call verifier tests still damaged too many true positives:
   `current_tool` rescued 14 FP and damaged 19 TP, while
   `human_review_router_tool` rescued 72 FP and damaged 73 TP.
-- Current recommendation: keep the verifier in the default runtime only as a
-  sidecar audit safeguard. Do not promote a small-model override or routine
+- Current recommendation: keep the verifier only as an optional sidecar audit
+  safeguard. Do not promote a small-model override or routine
   routed adjudication path without a much better precision/recall and latency
   profile.
 
@@ -102,11 +137,11 @@ Retained:
 - Presidio/scrubadub PII Assist
 - span fusion and residual cleanup
 - cue safeguards
-- local LLM sidecar review
+- optional local LLM sidecar review
 - optional local LLM second verifier for sidecar-only audit evidence
 - isolated mini verifier evaluation CLI for model comparison
 - exact CSV validation
-- author-group masking off by default
+- cue-safe style scrubbing and conservative author-group masking on by default
 - optional workbench demo
 
 ## Citizen Validation Dashboard
@@ -137,10 +172,9 @@ Completed:
   experimental naming: `contextsafe_hsd/mini_verifier.py`,
   `tests/test_mini_verifier.py`, and `docs/planning/mini_verifier_eval/`.
 - Removed the one-off Qwen comparison script.
-- Added `contextsafe_hsd/models/local_llm_hsd_verifier_runtime.py` and wired
-  `protect` so `--llm-verifier local-llm` is the default sidecar verifier for
-  local LLM review runs. It reviews only main-model positive rows and never
-  changes CSV text or labels.
+- Added `contextsafe_hsd/models/local_llm_hsd_verifier_runtime.py`; it is now
+  opt-in with `--llm-verifier local-llm` for selected sidecar classifier runs.
+  It reviews only main-model positive rows and never changes CSV text or labels.
 - Ran the verifier-enabled pipeline on `data/train/train_split.csv`.
   Artifacts are under
   `data/outputs/train_split_verifier_enabled_20260617_050133/`:

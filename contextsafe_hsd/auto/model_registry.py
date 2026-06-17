@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from pathlib import Path
 from typing import Any
 
 from .config import AutoPipelineConfig
@@ -57,4 +58,37 @@ def discover_local_llm(config: AutoPipelineConfig) -> dict[str, Any]:
         "pii_suggestions_enabled": config.local_llm_enable_pii_suggestions,
         "require_structured_output": config.local_llm_require_structured_output,
         "detail": "Local OpenAI-compatible structured review; no live call made during discovery.",
+    }
+
+
+def discover_hf_classifier(config: AutoPipelineConfig) -> dict[str, Any]:
+    if "hf_classifier" in config.disabled_models or "hf-classifier" in config.disabled_models:
+        return disabled_status("model")
+    if config.hsd_classification_backend != "hf_classifier":
+        return {
+            "status": "disabled",
+            "kind": "model",
+            "detail": "HF HSD classifier is disabled unless selected.",
+        }
+    missing = dependency_status(("torch", "transformers"), kind="model")
+    if missing is not None:
+        return missing
+    model_path = Path(config.hf_hsd_model_path)
+    if not model_path.exists() and not config.allow_model_download:
+        return {
+            "status": "missing_model",
+            "kind": "model",
+            "model_path": config.hf_hsd_model_path,
+            "detail": "Local HF classifier path is missing and downloads are disabled.",
+        }
+    return {
+        "status": "available",
+        "kind": "model",
+        "load": "lazy",
+        "model_path": config.hf_hsd_model_path,
+        "threshold": round(config.hf_hsd_threshold, 6),
+        "device": config.hf_hsd_device,
+        "batch_size": config.hf_hsd_batch_size,
+        "max_length": config.hf_hsd_max_length,
+        "detail": "Local Transformers binary HSD classifier; no inference during discovery.",
     }

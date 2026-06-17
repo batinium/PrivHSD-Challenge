@@ -8,8 +8,11 @@ The final runtime has a small provider/model story.
 ## Always-On Code
 
 - Deterministic PII detectors and masking rules.
+- Technical PII checks for de-obfuscated emails, IPs, crypto wallets, Discord
+  handles, social links, Luhn-valid credit cards, and Mod-97-valid IBANs.
 - Span fusion and overlap filtering.
 - Residual direct-identifier cleanup.
+- Cue-safe style scrubbing and repeated author-group residual masking.
 - HSD cue safeguards.
 
 ## Optional PII Assist
@@ -21,9 +24,25 @@ cue checks, and candidate selection.
 Missing dependencies or initialization errors are reported in the manifest and
 fall back to deterministic output.
 
-## Local LLM Sidecar Review
+## Default HF HSD Classifier
 
-The main retained classifier runtime is
+The default sidecar classifier is
+`contextsafe_hsd.models.hf_hsd_classifier_runtime`.
+
+It runs after sanitization, receives cleaned text only, and writes sidecar
+metadata without changing the exact CSV. The selected checkpoint is
+`Hate-speech-CNERG/dehatebert-mono-english` fine-tuned on the official train
+split with 5-fold out-of-fold validation:
+
+- model path: `data/outputs/dehatebert_official_kfold_20260617/final_model`
+- threshold: `0.850469`
+- OOF best F1: `0.8289`
+
+Use `--hsd-classifier off` for privacy-only runs without sidecar labels.
+
+## Optional Local LLM Sidecar Review
+
+The retained GPT/local LLM backup runtime is
 `contextsafe_hsd.models.local_llm_hsd_review_runtime`.
 
 It runs after sanitization, receives cleaned text only, and returns structured
@@ -36,12 +55,14 @@ sidecar metadata:
 - validated residual PII suggestions
 
 It must not rewrite whole comments and must not append columns to exact output.
+It is disabled by default; pass `--llm-review local-llm` only for optional
+sidecar experiments.
 
-## Default Local LLM Verifier
+## Optional Local LLM Verifier
 
-`contextsafe_hsd.models.local_llm_hsd_verifier_runtime` is the default
-second-pass verifier for local LLM runs. It runs only after the main local LLM
-reviewer and only on rows the main reviewer marked positive.
+`contextsafe_hsd.models.local_llm_hsd_verifier_runtime` is an opt-in
+second-pass verifier for selected sidecar classifier runs. It reviews only rows
+marked positive by the main sidecar classifier.
 
 It returns:
 
@@ -52,8 +73,8 @@ It returns:
 - parse/fallback counts
 
 Verifier output is sidecar-only. It must not rewrite text, append CSV columns,
-or override the main sidecar label automatically. Use `--llm-verifier off` to
-disable it for offline or classifier-only runs.
+or override the main sidecar label automatically. Use `--llm-verifier local-llm`
+only for optional verifier experiments.
 
 ## Verifier Evaluation Command
 
@@ -77,9 +98,7 @@ The final package does not include:
 
 - GLiNER provider code
 - HSD advisory model ensembles
-- ML classifier training/evaluation/prediction commands
 - semantic triage/report commands
 - token-policy, DPMLM, or local LLM rewrite candidates
-- dataset preparation scripts
 
 Historical experiments can be rebuilt outside the public package if needed.

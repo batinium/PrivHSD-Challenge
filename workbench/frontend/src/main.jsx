@@ -66,7 +66,7 @@ const CATEGORY_LABELS = {
   sexual_orientation: "Sexual orientation"
 };
 const AUTO_PROVIDER_ORDER = ["deterministic", "presidio", "scrubadub"];
-const AUTO_MODEL_ORDER = ["local_llm", "local_llm_verifier"];
+const AUTO_MODEL_ORDER = ["hf_classifier", "local_llm", "local_llm_verifier"];
 const DEFAULT_LOCAL_LLM_ENDPOINT = "http://localhost:1234/v1/chat/completions";
 const DEFAULT_LOCAL_LLM_MODEL = "openai/gpt-oss-20b";
 const DEFAULT_RESTATEMENT_MODEL = "openai/gpt-oss-20b";
@@ -1053,6 +1053,9 @@ function DataIntakePanel({
       <div className="backend-control">
         <span>HSD Review Backend</span>
         <div className="segmented-control backend-selector">
+          <button className={hsdBackend === "hf_classifier" ? "active" : ""} onClick={() => onHsdBackend("hf_classifier")} type="button">
+            HF Classifier
+          </button>
           <button className={hsdBackend === "local_llm" ? "active" : ""} onClick={() => onHsdBackend("local_llm")} type="button">
             Local LLM
           </button>
@@ -1350,7 +1353,7 @@ function csvRequestPayload({
     output_col: "privatized_text",
     replace_text: replaceText,
     mode: "auto",
-    style_scrub: false,
+    style_scrub: true,
     disabled_providers: [],
     disabled_models: ["local_llm"],
     metric_depth: "fast",
@@ -1382,7 +1385,7 @@ function CsvWorkbench({ activeView, modelStatus }) {
   const [textCol, setTextCol] = useState("");
   const [idCol, setIdCol] = useState("");
   const [replaceText, setReplaceText] = useState(true);
-  const [hsdBackend, setHsdBackend] = useState("local_llm");
+  const [hsdBackend, setHsdBackend] = useState("hf_classifier");
   const [localLlmEndpoint, setLocalLlmEndpoint] = useState(DEFAULT_LOCAL_LLM_ENDPOINT);
   const [localLlmModel, setLocalLlmModel] = useState(DEFAULT_LOCAL_LLM_MODEL);
   const [localLlmBatchSize, setLocalLlmBatchSize] = useState("10");

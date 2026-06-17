@@ -9,6 +9,12 @@ from typing import Any, Callable, Mapping
 
 from .auto import AutoPipelineConfig, AutoPipelineContext, AutoPipelineEngine
 from .csv_pipeline import read_csv, write_csv, write_json
+from .models.hf_hsd_classifier_runtime import (
+    DEFAULT_HF_HSD_BATCH_SIZE,
+    DEFAULT_HF_HSD_MAX_LENGTH,
+    DEFAULT_HF_HSD_MODEL_PATH,
+    DEFAULT_HF_HSD_THRESHOLD,
+)
 from .row_ids import report_row_id
 from .submission import git_commit, sha256_file, validation_report
 
@@ -62,7 +68,7 @@ def skipped_verifier_result(
         "backend": backend,
         "skip_reason": reason,
         "row_count": row_count,
-        "reviewed_scope": "main_local_llm_positive_rows_only",
+        "reviewed_scope": "main_classifier_positive_rows_only",
         "parse_count": 0,
         "fallback_count": 0,
         "skipped_count": row_count,
@@ -139,6 +145,70 @@ def local_llm_hsd_review(
     }
 
 
+def hf_hsd_classification(
+    *,
+    context: AutoPipelineContext,
+    output_rows: list[dict[str, Any]],
+    text_col: str,
+    id_col: str | None,
+    require_hate_classification: bool,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    if not output_rows:
+        return skipped_review_result(
+            reason="empty_input",
+            row_count=0,
+            backend="hf_classifier",
+        )
+    runtime = context.ensure_hf_classifier()
+    if runtime is None:
+        if require_hate_classification:
+            raise SimplifiedPipelineError(
+                "HF HSD classification was required but unavailable"
+            )
+        return skipped_review_result(
+            reason="hf_classifier_unavailable",
+            row_count=len(output_rows),
+            backend="hf_classifier",
+        )
+
+    classifier_rows = [
+        {
+            "id": report_row_id(row, row_index=index, id_col=id_col),
+            "text": str(row.get(text_col, "") or ""),
+        }
+        for index, row in enumerate(output_rows, start=1)
+    ]
+    try:
+        result = runtime.classify_texts(
+            classifier_rows,
+            batch_size=context.config.hf_hsd_batch_size,
+            progress_callback=progress_callback,
+        )
+    except Exception as exc:
+        if require_hate_classification:
+            raise
+        return skipped_review_result(
+            reason="model_inference_failed",
+            row_count=len(output_rows),
+            backend="hf_classifier",
+            error_class=type(exc).__name__,
+        )
+
+    if require_hate_classification and result.skipped_count:
+        raise SimplifiedPipelineError(
+            "HF HSD classification was required but one or more rows "
+            "could not be parsed"
+        )
+
+    return {
+        **result.summary(),
+        "model_ids": [result.model_id],
+        "model_count": 1 if result.parsed_count else 0,
+        "pii_suggestions_applied": False,
+    }
+
+
 def append_local_llm_hate_classification(
     *,
     context: AutoPipelineContext,
@@ -194,9 +264,9 @@ def local_llm_hsd_verifier(
     model_factories: Mapping[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    if classification.get("backend") != "local_llm":
+    if classification.get("backend") not in {"local_llm", "hf_classifier"}:
         return skipped_verifier_result(
-            reason="classification_backend_not_local_llm",
+            reason="classification_backend_not_supported",
             row_count=0,
         )
     review_by_id = {
@@ -280,9 +350,37 @@ def append_hate_classification(
             columns=columns,
             require_hate_classification=require_hate_classification,
         )
+    if backend == "hf_classifier":
+        classification = hf_hsd_classification(
+            context=context,
+            output_rows=output_rows,
+            text_col=text_col,
+            id_col=id_col,
+            require_hate_classification=require_hate_classification,
+        )
+        review_by_id = {
+            str(review.get("id")): review
+            for review in classification.get("row_reviews", [])
+            if isinstance(review, dict) and review.get("id") is not None
+        }
+        for index, row in enumerate(output_rows, start=1):
+            row_id = report_row_id(row, row_index=index, id_col=id_col)
+            review = review_by_id.get(row_id)
+            if review is None or review.get("parse_status") != "ok":
+                row[columns["label"]] = ""
+                row[columns["score"]] = ""
+                row[columns["model_count"]] = "0"
+                continue
+            row[columns["label"]] = str(review.get("label", "") or "")
+            row[columns["score"]] = str(review.get("score", "") or "")
+            row[columns["model_count"]] = "1"
+        return {
+            **classification,
+            "columns": columns,
+        }
     if require_hate_classification:
         raise SimplifiedPipelineError(
-            "HSD classification is disabled; use local_llm review."
+            "HSD classification is disabled; use local_llm or hf_classifier."
         )
     for row in output_rows:
         row[columns["label"]] = ""
@@ -343,7 +441,7 @@ def final_stage_summary(
             "prompt_style": verifier.get("prompt_style"),
             "reviewed_scope": verifier.get(
                 "reviewed_scope",
-                "main_local_llm_positive_rows_only",
+                "main_classifier_positive_rows_only",
             ),
             "parse_count": verifier.get("parse_count"),
             "fallback_count": verifier.get("fallback_count"),
@@ -375,25 +473,31 @@ def build_final_pipeline_rows(
     disabled_providers: list[str] | None = None,
     disabled_models: list[str] | None = None,
     audit_level: str = "summary",
-    llm_review: str = "local_llm",
+    llm_review: str = "off",
+    hsd_classification_backend: str | None = None,
+    hf_hsd_model_path: str = DEFAULT_HF_HSD_MODEL_PATH,
+    hf_hsd_threshold: float = DEFAULT_HF_HSD_THRESHOLD,
+    hf_hsd_device: str = "auto",
+    hf_hsd_batch_size: int = DEFAULT_HF_HSD_BATCH_SIZE,
+    hf_hsd_max_length: int = DEFAULT_HF_HSD_MAX_LENGTH,
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions",
     local_llm_model: str = "openai/gpt-oss-20b",
     local_llm_timeout_seconds: float = 120.0,
     local_llm_batch_size: int = 10,
     local_llm_enable_pii_suggestions: bool = True,
-    llm_verifier: str = "local_llm",
+    llm_verifier: str = "off",
     local_llm_verifier_model: str | None = None,
     local_llm_verifier_timeout_seconds: float | None = None,
     local_llm_verifier_batch_size: int | None = None,
     local_llm_verifier_prompt_style: str = "current",
     local_llm_verifier_reasoning_effort: str | None = None,
     require_hate_classification: bool = False,
-    author_group_masking: bool = False,
+    author_group_masking: bool = True,
     author_group_col: str | None = None,
     author_group_min_repetitions: int = 2,
     author_group_min_author_rows: int = 2,
     generalize_targets: bool | None = False,
-    style_scrub: bool = False,
+    style_scrub: bool = True,
     provider_factories: Mapping[str, Any] | None = None,
     model_factories: Mapping[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
@@ -405,13 +509,28 @@ def build_final_pipeline_rows(
     normalized_llm_review = llm_review.strip().lower().replace("-", "_")
     if normalized_llm_review not in {"local_llm", "off"}:
         raise SimplifiedPipelineError("llm_review must be local_llm or off")
+    normalized_hsd_backend = (
+        hsd_classification_backend.strip().lower().replace("-", "_")
+        if hsd_classification_backend is not None
+        else ("local_llm" if normalized_llm_review == "local_llm" else "none")
+    )
+    if normalized_hsd_backend == "off":
+        normalized_hsd_backend = "none"
+    if normalized_hsd_backend not in {"none", "local_llm", "hf_classifier"}:
+        raise SimplifiedPipelineError(
+            "hsd_classification_backend must be none, local_llm, or hf_classifier"
+        )
+    if normalized_hsd_backend == "local_llm":
+        normalized_llm_review = "local_llm"
     normalized_llm_verifier = llm_verifier.strip().lower().replace("-", "_")
     if normalized_llm_verifier not in {"local_llm", "off"}:
         raise SimplifiedPipelineError("llm_verifier must be local_llm or off")
 
     disabled_model_set = set(disabled_models or [])
-    if normalized_llm_review == "off":
+    if normalized_llm_review == "off" and normalized_hsd_backend != "local_llm":
         disabled_model_set.add("local_llm")
+    if normalized_hsd_backend != "hf_classifier":
+        disabled_model_set.add("hf_classifier")
     config = AutoPipelineConfig(
         metric_depth=metric_depth,
         allow_model_download=allow_model_download,
@@ -421,9 +540,12 @@ def build_final_pipeline_rows(
         disabled_providers=frozenset(disabled_providers or []),
         disabled_models=frozenset(disabled_model_set),
         audit_level=audit_level,
-        hsd_classification_backend=(
-            "local_llm" if normalized_llm_review == "local_llm" else "none"
-        ),
+        hsd_classification_backend=normalized_hsd_backend,
+        hf_hsd_model_path=hf_hsd_model_path,
+        hf_hsd_threshold=hf_hsd_threshold,
+        hf_hsd_device=hf_hsd_device,
+        hf_hsd_batch_size=hf_hsd_batch_size,
+        hf_hsd_max_length=hf_hsd_max_length,
         local_llm_endpoint=local_llm_endpoint,
         local_llm_model=local_llm_model,
         local_llm_timeout_seconds=local_llm_timeout_seconds,
@@ -452,8 +574,17 @@ def build_final_pipeline_rows(
         progress_callback=progress_callback,
     )
     output_rows = [dict(row) for row in engine_result.rows]
-    if normalized_llm_review == "local_llm":
+    if normalized_hsd_backend == "local_llm":
         classification = local_llm_hsd_review(
+            context=context,
+            output_rows=output_rows,
+            text_col=text_col,
+            id_col=id_col,
+            require_hate_classification=require_hate_classification,
+            progress_callback=progress_callback,
+        )
+    elif normalized_hsd_backend == "hf_classifier":
+        classification = hf_hsd_classification(
             context=context,
             output_rows=output_rows,
             text_col=text_col,
@@ -465,8 +596,12 @@ def build_final_pipeline_rows(
         classification = skipped_review_result(
             reason="disabled",
             row_count=len(output_rows),
+            backend=normalized_hsd_backend,
         )
-    if normalized_llm_verifier == "local_llm":
+    if normalized_llm_verifier == "local_llm" and normalized_hsd_backend in {
+        "local_llm",
+        "hf_classifier",
+    }:
         verifier = local_llm_hsd_verifier(
             context=context,
             output_rows=output_rows,
@@ -537,9 +672,16 @@ def build_final_pipeline_rows(
             "baseline_mode": config.baseline_mode,
             "metric_depth": config.metric_depth,
             "llm_review": normalized_llm_review,
+            "hsd_classification_backend": normalized_hsd_backend,
             "llm_verifier": normalized_llm_verifier,
             "device": config.device,
+            "hf_hsd_model_path": config.hf_hsd_model_path,
+            "hf_hsd_threshold": config.hf_hsd_threshold,
+            "hf_hsd_device": config.hf_hsd_device,
+            "hf_hsd_batch_size": config.hf_hsd_batch_size,
+            "hf_hsd_max_length": config.hf_hsd_max_length,
             "author_group_masking": config.author_group_masking,
+            "style_scrub": config.style_scrub,
         },
     }
 
@@ -562,25 +704,31 @@ def run_final_csv_pipeline(
     disabled_providers: list[str] | None = None,
     disabled_models: list[str] | None = None,
     audit_level: str = "summary",
-    llm_review: str = "local_llm",
+    llm_review: str = "off",
+    hsd_classification_backend: str | None = None,
+    hf_hsd_model_path: str = DEFAULT_HF_HSD_MODEL_PATH,
+    hf_hsd_threshold: float = DEFAULT_HF_HSD_THRESHOLD,
+    hf_hsd_device: str = "auto",
+    hf_hsd_batch_size: int = DEFAULT_HF_HSD_BATCH_SIZE,
+    hf_hsd_max_length: int = DEFAULT_HF_HSD_MAX_LENGTH,
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions",
     local_llm_model: str = "openai/gpt-oss-20b",
     local_llm_timeout_seconds: float = 120.0,
     local_llm_batch_size: int = 10,
     local_llm_enable_pii_suggestions: bool = True,
-    llm_verifier: str = "local_llm",
+    llm_verifier: str = "off",
     local_llm_verifier_model: str | None = None,
     local_llm_verifier_timeout_seconds: float | None = None,
     local_llm_verifier_batch_size: int | None = None,
     local_llm_verifier_prompt_style: str = "current",
     local_llm_verifier_reasoning_effort: str | None = None,
     require_hate_classification: bool = False,
-    author_group_masking: bool = False,
+    author_group_masking: bool = True,
     author_group_col: str | None = None,
     author_group_min_repetitions: int = 2,
     author_group_min_author_rows: int = 2,
     generalize_targets: bool | None = False,
-    style_scrub: bool = False,
+    style_scrub: bool = True,
     provider_factories: Mapping[str, Any] | None = None,
     model_factories: Mapping[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
@@ -600,6 +748,12 @@ def run_final_csv_pipeline(
         disabled_models=disabled_models,
         audit_level=audit_level,
         llm_review=llm_review,
+        hsd_classification_backend=hsd_classification_backend,
+        hf_hsd_model_path=hf_hsd_model_path,
+        hf_hsd_threshold=hf_hsd_threshold,
+        hf_hsd_device=hf_hsd_device,
+        hf_hsd_batch_size=hf_hsd_batch_size,
+        hf_hsd_max_length=hf_hsd_max_length,
         local_llm_endpoint=local_llm_endpoint,
         local_llm_model=local_llm_model,
         local_llm_timeout_seconds=local_llm_timeout_seconds,
@@ -664,8 +818,14 @@ def run_final_csv_pipeline(
         "baseline_mode": result["config"]["baseline_mode"],
         "metric_depth": metric_depth,
         "replace_text": True,
+        "style_scrub": result["config"]["style_scrub"],
+        "author_group_masking": result["config"]["author_group_masking"],
         "exact_format_submission": True,
         "llm_review": result["config"]["llm_review"],
+        "hsd_classification_backend": result["config"]["hsd_classification_backend"],
+        "hf_hsd_model_path": result["config"]["hf_hsd_model_path"],
+        "hf_hsd_threshold": result["config"]["hf_hsd_threshold"],
+        "hf_hsd_max_length": result["config"]["hf_hsd_max_length"],
         "llm_verifier": result["config"]["llm_verifier"],
         "stages": result["stages"],
         "sanitization": result["sanitization"],

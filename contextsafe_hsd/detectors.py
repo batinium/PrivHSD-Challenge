@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+import ipaddress
 import re
 from typing import Iterable, Sequence
 
@@ -48,6 +49,11 @@ TAGS = {
     "PHONE": "[PHONE]",
     "URL": "[URL]",
     "IP_ADDRESS": "[ID]",
+    "CRYPTO_WALLET": "[CRYPTO_WALLET]",
+    "DISCORD_USER": "[DISCORD_USER]",
+    "SOCIAL_LINK": "[SOCIAL_LINK]",
+    "CREDIT_CARD": "[CREDIT_CARD]",
+    "IBAN": "[IBAN]",
     "DATE": "[DATE]",
     "LOCATION": "[LOCATION]",
     "ORGANIZATION": "[ORG]",
@@ -82,12 +88,51 @@ TARGET_ORG_PATTERN = re.compile(
     re.I,
 )
 
+EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
+IPV4_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+IPV6_CANDIDATE_PATTERN = re.compile(
+    r"(?<![A-Fa-f0-9:])(?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9]{0,4}"
+    r"(?![A-Fa-f0-9:])"
+)
+CRYPTO_WALLET_PATTERNS: Sequence[re.Pattern[str]] = (
+    re.compile(r"(?<![A-Za-z0-9])(?:bc1[ac-hj-np-z02-9]{25,90})(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![A-Za-z0-9])(?:[13][a-km-zA-HJ-NP-Z1-9]{25,34})(?![A-Za-z0-9])"),
+    re.compile(r"(?<![A-Za-z0-9])0x[a-fA-F0-9]{40}(?![A-Za-z0-9])"),
+)
+DISCORD_HANDLE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.])(?:[A-Za-z0-9_][A-Za-z0-9_.]{1,31})#[0-9]{4}"
+    r"(?![A-Za-z0-9_])"
+)
+SOCIAL_LINK_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])"
+    r"(?:(?:https?|hxxps?)://|www\.)?"
+    r"(?:linkedin\.com/in|facebook\.com|twitter\.com|x\.com|instagram\.com|"
+    r"tiktok\.com|reddit\.com/user)/[A-Za-z0-9._~%+\-/?=&]+",
+    re.I,
+)
+CREDIT_CARD_CANDIDATE_PATTERN = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
+IBAN_CANDIDATE_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9])(?:[A-Z]{2}\d{2})(?:[ -]?[A-Z0-9]){11,30}"
+    r"(?![A-Za-z0-9])",
+    re.I,
+)
+IBAN_TOKEN_PATTERN = re.compile(r"(?<![A-Za-z0-9])[A-Z0-9]{2,8}(?![A-Za-z0-9])", re.I)
+DEOBFUSCATION_TOKEN_PATTERN = re.compile(
+    r"(?P<at>\s+at\s+|\s*\[\s*at\s*\]\s*|\s*\(\s*at\s*\)\s*|\s*@\s*)"
+    r"|(?P<dot>\s+dot\s+|\s*\[\s*dot\s*\]\s*|\s*\(\s*dot\s*\)\s*)",
+    re.I,
+)
+EXPLICIT_DEOBFUSCATED_EMAIL_MARKER_PATTERN = re.compile(
+    r"@|\[\s*(?:at|dot)\s*\]|\(\s*(?:at|dot)\s*\)|_(?:at|dot)_",
+    re.I,
+)
+
 
 REGEX_PATTERNS: Sequence[tuple[str, re.Pattern[str]]] = (
-    ("EMAIL", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)),
+    ("EMAIL", EMAIL_PATTERN),
     ("URL", re.compile(r"\b(?:https?://|hxxps?://|www\.)[^\s<>()]+", re.I)),
     ("USER", re.compile(r"(?<!\w)@[A-Za-z0-9._-]{1,64}\b")),
-    ("IP_ADDRESS", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
+    ("IP_ADDRESS", IPV4_PATTERN),
     (
         "PHONE",
         re.compile(
@@ -355,11 +400,16 @@ GENERIC_LOCATION_NOUNS = {
 
 HIGH_CONFIDENCE_DIRECT_TYPES = frozenset(
     {
+        "CREDIT_CARD",
+        "CRYPTO_WALLET",
+        "DISCORD_USER",
         "EMAIL",
+        "IBAN",
         "PHONE",
         "URL",
         "USER",
         "IP_ADDRESS",
+        "SOCIAL_LINK",
         "IDENTIFIER",
     }
 )
@@ -878,6 +928,59 @@ def has_obfuscated_email_context(text: str, start: int, end: int) -> bool:
     return bool(OBFUSCATED_EMAIL_CONTEXT_PATTERN.search(window))
 
 
+def deobfuscate_email_text(text: str) -> tuple[str, list[tuple[int, int]]]:
+    normalized: list[str] = []
+    source_ranges: list[tuple[int, int]] = []
+    cursor = 0
+    for match in DEOBFUSCATION_TOKEN_PATTERN.finditer(text):
+        for index in range(cursor, match.start()):
+            normalized.append(text[index])
+            source_ranges.append((index, index + 1))
+        replacement = "@" if match.group("at") is not None else "."
+        normalized.append(replacement)
+        source_ranges.append((match.start(), match.end()))
+        cursor = match.end()
+    for index in range(cursor, len(text)):
+        normalized.append(text[index])
+        source_ranges.append((index, index + 1))
+    return "".join(normalized), source_ranges
+
+
+def deobfuscated_email_spans(text: str) -> list[Span]:
+    normalized, source_ranges = deobfuscate_email_text(text)
+    if normalized == text:
+        return []
+    spans: list[Span] = []
+    for match in EMAIL_PATTERN.finditer(normalized):
+        if match.start() >= len(source_ranges) or match.end() < 1:
+            continue
+        start = source_ranges[match.start()][0]
+        end = source_ranges[match.end() - 1][1]
+        value = text[start:end]
+        if value == match.group(0):
+            continue
+        if len(value) > 140:
+            continue
+        local = match.group(0).split("@", 1)[0]
+        if contains_target_group_term(local) or local.lower() in action_context_terms():
+            continue
+        if not EXPLICIT_DEOBFUSCATED_EMAIL_MARKER_PATTERN.search(
+            value
+        ) and not has_obfuscated_email_context(text, start, end):
+            continue
+        spans.append(
+            Span(
+                start=start,
+                end=end,
+                entity_type="EMAIL",
+                text=value,
+                score=0.88,
+                source="regex_deobfuscated_email",
+            )
+        )
+    return spans
+
+
 def obfuscated_email_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for match in OBFUSCATED_EMAIL_PATTERN.finditer(text):
@@ -907,11 +1010,176 @@ def obfuscated_email_spans(text: str) -> list[Span]:
     return spans
 
 
+def valid_ipv4(value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return address.version == 4
+
+
+def valid_ipv6(value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return address.version == 6
+
+
+def luhn_valid(value: str) -> bool:
+    digits = [int(character) for character in re.sub(r"\D", "", value)]
+    if not 13 <= len(digits) <= 19:
+        return False
+    if len(set(digits)) == 1:
+        return False
+    checksum = 0
+    parity = len(digits) % 2
+    for index, digit in enumerate(digits):
+        if index % 2 == parity:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        checksum += digit
+    return checksum % 10 == 0
+
+
+def likely_card_number_candidate(value: str) -> bool:
+    stripped = value.strip()
+    digits = re.sub(r"\D", "", stripped)
+    if not 13 <= len(digits) <= 19:
+        return False
+    if stripped.startswith("+") or re.search(r"[()]", stripped):
+        return False
+    if not re.fullmatch(r"[0-9][0-9 .-]+[0-9]", stripped):
+        return False
+    groups = re.findall(r"\d+", stripped)
+    return len(groups) >= 3 or bool(re.fullmatch(r"\d{13,19}", stripped))
+
+
+def iban_valid(value: str) -> bool:
+    normalized = re.sub(r"[\s-]", "", value).upper()
+    if not 15 <= len(normalized) <= 34:
+        return False
+    if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]+", normalized):
+        return False
+    rearranged = normalized[4:] + normalized[:4]
+    expanded_parts: list[str] = []
+    for character in rearranged:
+        if character.isdigit():
+            expanded_parts.append(character)
+        elif "A" <= character <= "Z":
+            expanded_parts.append(str(ord(character) - 55))
+        else:
+            return False
+    remainder = 0
+    for character in "".join(expanded_parts):
+        remainder = (remainder * 10 + int(character)) % 97
+    return remainder == 1
+
+
+def iban_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    tokens = list(IBAN_TOKEN_PATTERN.finditer(text))
+    for index, token in enumerate(tokens):
+        if not re.fullmatch(r"[A-Za-z]{2}\d{2}", token.group(0)):
+            continue
+        last_valid_end: int | None = None
+        previous_end = token.end()
+        for candidate_token in tokens[index:]:
+            if candidate_token.start() != token.start():
+                separator = text[previous_end : candidate_token.start()]
+                if not re.fullmatch(r"[ -]+", separator):
+                    break
+            candidate = text[token.start() : candidate_token.end()]
+            normalized = re.sub(r"[\s-]", "", candidate).upper()
+            if len(normalized) > 34:
+                break
+            if iban_valid(candidate):
+                last_valid_end = candidate_token.end()
+            previous_end = candidate_token.end()
+        if last_valid_end is not None:
+            value = text[token.start() : last_valid_end]
+            spans.append(
+                Span(
+                    token.start(),
+                    last_valid_end,
+                    "IBAN",
+                    value,
+                    0.95,
+                    "regex_iban_mod97",
+                )
+            )
+    return spans
+
+
+def technical_identifier_spans(text: str) -> list[Span]:
+    spans: list[Span] = []
+    for match in IPV6_CANDIDATE_PATTERN.finditer(text):
+        value = match.group(0)
+        if valid_ipv6(value):
+            spans.append(
+                Span(match.start(), match.end(), "IP_ADDRESS", value, 0.93, "regex_ipv6")
+            )
+    for pattern in CRYPTO_WALLET_PATTERNS:
+        for match in pattern.finditer(text):
+            spans.append(
+                Span(
+                    match.start(),
+                    match.end(),
+                    "CRYPTO_WALLET",
+                    match.group(0),
+                    0.92,
+                    "regex_crypto_wallet",
+                )
+            )
+    for match in DISCORD_HANDLE_PATTERN.finditer(text):
+        spans.append(
+            Span(
+                match.start(),
+                match.end(),
+                "DISCORD_USER",
+                match.group(0),
+                0.92,
+                "regex_discord_handle",
+            )
+        )
+    for match in SOCIAL_LINK_PATTERN.finditer(text):
+        spans.append(
+            Span(
+                match.start(),
+                match.end(),
+                "SOCIAL_LINK",
+                match.group(0),
+                0.92,
+                "regex_social_link",
+            )
+        )
+    for match in CREDIT_CARD_CANDIDATE_PATTERN.finditer(text):
+        value = match.group(0)
+        if luhn_valid(value):
+            spans.append(
+                Span(
+                    match.start(),
+                    match.end(),
+                    "CREDIT_CARD",
+                    value,
+                    0.95,
+                    "regex_luhn_credit_card",
+                )
+            )
+    spans.extend(iban_spans(text))
+    return spans
+
+
 def regex_spans(text: str) -> list[Span]:
     spans: list[Span] = []
     for entity_type, pattern in REGEX_PATTERNS:
         for match in pattern.finditer(text):
             value = match.group(0)
+            if entity_type == "IP_ADDRESS" and not valid_ipv4(value):
+                continue
+            if entity_type == "PHONE" and likely_card_number_candidate(value):
+                continue
             if entity_type == "LOCATION":
                 if rejected_location_candidate(
                     value,
@@ -940,7 +1208,9 @@ def regex_spans(text: str) -> list[Span]:
                 )
             )
     spans.extend(obfuscated_email_spans(text))
+    spans.extend(deobfuscated_email_spans(text))
     spans.extend(adjacent_user_spans(text))
+    spans.extend(technical_identifier_spans(text))
     spans.extend(target_org_case_insensitive_spans(text))
     return spans
 

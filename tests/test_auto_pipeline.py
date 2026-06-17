@@ -31,7 +31,8 @@ def test_default_auto_config_uses_cpu_and_no_sidecar_model():
     assert config.local_llm_enabled is False
     assert config.device == "cpu"
     assert set(context.provider_status) == {"deterministic", "presidio", "scrubadub"}
-    assert set(context.model_status) == {"local_llm"}
+    assert set(context.model_status) == {"hf_classifier", "local_llm"}
+    assert context.model_status["hf_classifier"]["status"] == "disabled"
     assert context.model_status["local_llm"]["status"] == "disabled"
 
 
@@ -46,6 +47,20 @@ def test_local_llm_backend_enables_lazy_local_model_status():
     assert context.config.hsd_classification_backend == "local_llm"
     assert context.model_status["local_llm"]["status"] == "available"
     assert context.model_load_counts["local_llm"] == 0
+
+
+def test_hf_classifier_backend_enables_lazy_model_status():
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            hsd_classification_backend="hf-classifier",
+            official_mode=False,
+        ),
+        model_factories={"hf_classifier": lambda _context: object()},
+    )
+
+    assert context.config.hsd_classification_backend == "hf_classifier"
+    assert context.model_status["hf_classifier"]["status"] == "available"
+    assert context.model_load_counts["hf_classifier"] == 0
 
 
 def test_build_final_pipeline_rows_preserves_schema_and_stage_names():

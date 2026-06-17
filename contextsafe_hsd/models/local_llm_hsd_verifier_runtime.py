@@ -120,7 +120,7 @@ class LocalLlmVerifierResult:
             "backend": "local_llm_verifier",
             "status": self.status,
             "row_count": self.row_count,
-            "reviewed_scope": "main_local_llm_positive_rows_only",
+            "reviewed_scope": "main_classifier_positive_rows_only",
             "model_id": self.model_id,
             "endpoint": self.endpoint,
             "prompt_style": self.prompt_style,

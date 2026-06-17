@@ -259,6 +259,45 @@ def test_one_character_handle_and_obfuscated_url_are_masked():
     assert "Muslims should leave" in result.text
 
 
+def test_deobfuscated_spaced_email_maps_back_to_original_span():
+    text = "Email alex @ example dot test because Muslims should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "alex @ example dot test" not in result.text
+    assert "[EMAIL]" in result.text
+    assert "Muslims should leave" in result.text
+
+
+def test_technical_identifiers_are_masked_without_losing_hsd_statement():
+    text = (
+        "Drop 2001:db8::8a2e:370:7334, bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080, "
+        "user#1234, linkedin.com/in/alex-v, 4111 1111 1111 1111, "
+        "GB82 WEST 1234 5698 7654 32 because immigrants should leave."
+    )
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "2001:db8::8a2e:370:7334" not in result.text
+    assert "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080" not in result.text
+    assert "user#1234" not in result.text
+    assert "linkedin.com/in/alex-v" not in result.text
+    assert "4111 1111 1111 1111" not in result.text
+    assert "GB82 WEST 1234 5698 7654 32" not in result.text
+    assert "[CRYPTO_WALLET]" in result.text
+    assert "[DISCORD_USER]" in result.text
+    assert "[SOCIAL_LINK]" in result.text
+    assert "[CREDIT_CARD]" in result.text
+    assert "[IBAN]" in result.text
+    assert "immigrants should leave" in result.text
+
+
+def test_invalid_card_like_number_is_not_masked_by_luhn_detector():
+    text = "Thread 4111 1111 1111 1112 says Muslims should leave."
+    result = privatize_text(text, PrivatizerConfig(mode="balanced"))
+
+    assert "4111 1111 1111 1112" in result.text
+    assert "Muslims should leave" in result.text
+
+
 def test_context_person_masks_unicode_and_lowercase_self_identification():
     text = "My name is ayşe and Muslims should leave Lagos."
     result = privatize_text(text, PrivatizerConfig(mode="balanced"))

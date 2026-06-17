@@ -12,7 +12,7 @@ python -m pip install -e '.[dev]'
 Optional local helpers:
 
 ```bash
-python -m pip install -e '.[presidio,scrubadub]'
+python -m pip install -e '.[presidio,scrubadub,hf]'
 ```
 
 ## Verify
@@ -33,17 +33,15 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --llm-review local-llm \
-  --local-llm-endpoint http://100.120.207.64:1234/v1/chat/completions \
-  --local-llm-model openai/gpt-oss-20b \
-  --llm-verifier local-llm \
   --manifest OUTPUT.manifest.json \
   --audit OUTPUT.audit.json
 ```
 
-Use `--llm-review off --llm-verifier off` when no local OpenAI-compatible server
-is available. The AI-audits-AI verifier is default-on for local LLM runs and
-reviews main positive HSD labels without changing the CSV.
+This defaults to the fine-tuned HF sidecar classifier with `--llm-review off`
+and `--llm-verifier off`. GPT/local LLM sidecars are optional backup/audit
+extensions; enable them explicitly only when you want second-pass evidence, not
+for the default submission path. Use `--hsd-classifier off` for a privacy-only
+run without sidecar labels.
 
 ## Validate
 
@@ -81,9 +79,10 @@ python -m contextsafe_hsd.cli mini-verifier-eval \
   --progress
 ```
 
-Current handoff: the runtime verifier is default-on as sidecar audit evidence
-for local LLM review runs. Do not promote any verifier path to automatic label
-changes without a substantially better precision/recall and latency profile.
+Current handoff: the runtime verifier is opt-in sidecar audit evidence for
+selected sidecar classifier runs. Do not promote any verifier path to automatic
+label changes without a substantially better precision/recall and latency
+profile.
 
 ## Data Handling
 

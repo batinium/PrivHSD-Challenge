@@ -1,12 +1,12 @@
 # Mini Verifier Evaluation Results And Runtime Decision
 
-Status: completed mini evaluation; runtime verifier is now default-on sidecar
+Status: completed mini evaluation; runtime verifier is opt-in sidecar
 Last verified: 2026-06-17
 
 This note supersedes the original run prompt. The mini evaluation was implemented
 as a research-only CLI path and run against LM Studio. The output is promising
-enough to show as a council-facing improvement direction. The production
-decision is to keep the verifier as a default-on audit safeguard only: it writes
+enough to show as a council-facing improvement direction. The current runtime
+decision is to keep the verifier as an opt-in audit safeguard only: it writes
 sidecar metadata and human-review routing signals, but it does not rewrite text
 or override CSV labels.
 
@@ -23,10 +23,11 @@ Current implementation state:
 - The one-off Qwen comparison script has been removed.
 - The runtime verifier is implemented in
   `contextsafe_hsd/models/local_llm_hsd_verifier_runtime.py`.
-- `protect` defaults to `--llm-verifier local-llm` for local LLM review runs.
-  It reviews only main local-LLM positive rows and writes sidecar metadata. It
-  does not override labels, does not rewrite text, and does not add helper
-  columns to the exact CSV output.
+- `protect` defaults to the HF classifier sidecar with `--llm-review off` and
+  `--llm-verifier off`. When explicitly enabled, the verifier reviews positive
+  rows from the selected sidecar classifier and writes sidecar metadata. It does
+  not override labels, does not rewrite text, and does not add helper columns to
+  the exact CSV output.
 - `launch.py` has been smoke-tested: it starts the FastAPI backend and React
   frontend and shuts both down cleanly.
 - Temporary generated files were cleaned after verification: Python bytecode,
@@ -252,7 +253,7 @@ Production-like recommendation if the larger comparison holds:
 Yes. There are two supported paths:
 
 - Research reproduction: `python -m contextsafe_hsd.cli mini-verifier-eval ...`
-- Runtime use: `python -m contextsafe_hsd.cli protect ... --llm-verifier local-llm`
+- Runtime use: `python -m contextsafe_hsd.cli protect ... --llm-review local-llm --llm-verifier local-llm`
 
 The old one-off full-comparison script and its Qwen-specific output path have
 been retired. New comparisons should use a clearly named output directory under
@@ -266,9 +267,8 @@ Safe summary:
 ```text
 We added a local LLM verifier around the main local LLM reviewer. It reviews
 only rows the main model marked positive and records whether the second model
-agrees, disagrees, or is uncertain. The verifier is now enabled by default as an
-AI-audits-AI safeguard, but it is sidecar-only: it does not change official CSV
-labels or text.
+agrees, disagrees, or is uncertain. The verifier is now opt-in sidecar evidence:
+it does not change official CSV labels or text.
 ```
 
 What is promising:

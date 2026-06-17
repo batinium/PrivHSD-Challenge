@@ -22,17 +22,35 @@ UTILITY_CLASS_NONE = "none"
 DIRECT_IDENTIFIER_TYPES = frozenset(
     {
         "ALIAS",
+        "CREDIT_CARD",
+        "CRYPTO_WALLET",
+        "DISCORD_USER",
         "PERSON",
         "USER",
         "EMAIL",
+        "IBAN",
         "PHONE",
         "URL",
         "IP_ADDRESS",
+        "SOCIAL_LINK",
         "IDENTIFIER",
     }
 )
 HIGH_PRECISION_DIRECT_TYPES = frozenset(
-    {"ALIAS", "USER", "EMAIL", "PHONE", "URL", "IP_ADDRESS", "IDENTIFIER"}
+    {
+        "ALIAS",
+        "CREDIT_CARD",
+        "CRYPTO_WALLET",
+        "DISCORD_USER",
+        "EMAIL",
+        "IBAN",
+        "IP_ADDRESS",
+        "IDENTIFIER",
+        "PHONE",
+        "SOCIAL_LINK",
+        "URL",
+        "USER",
+    }
 )
 QUASI_IDENTIFIER_TYPES = frozenset({"AGE", "DATE", "LOCATION", "ORGANIZATION"})
 
@@ -153,6 +171,13 @@ def provider_from_source(source: str) -> str:
         return "presidio"
     if source in {
         "regex",
+        "regex_crypto_wallet",
+        "regex_deobfuscated_email",
+        "regex_discord_handle",
+        "regex_iban_mod97",
+        "regex_ipv6",
+        "regex_luhn_credit_card",
+        "regex_social_link",
         "context_person",
         "context_alias",
         "context_location",

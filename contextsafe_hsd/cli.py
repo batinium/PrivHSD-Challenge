@@ -18,6 +18,12 @@ from .mini_verifier import (
     MiniVerifierError,
     run_verifier_eval,
 )
+from .models.hf_hsd_classifier_runtime import (
+    DEFAULT_HF_HSD_BATCH_SIZE,
+    DEFAULT_HF_HSD_MAX_LENGTH,
+    DEFAULT_HF_HSD_MODEL_PATH,
+    DEFAULT_HF_HSD_THRESHOLD,
+)
 from .simple_pipeline import SimplifiedPipelineError, run_final_csv_pipeline
 from .submission import SubmissionError, validate_submission
 
@@ -52,12 +58,19 @@ def make_progress_printer():
 
 def add_author_group_masking_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
-        "--enable-author-group-masking",
-        action="store_true",
+        "--author-group-masking",
+        action=argparse.BooleanOptionalAction,
+        default=True,
         help=(
             "Mask detector-backed factual spans repeated across rows from the "
-            "same author/user group after row-level sanitization. Off by default."
+            "same author/user group after row-level sanitization. On by default."
         ),
+    )
+    parser.add_argument(
+        "--enable-author-group-masking",
+        dest="author_group_masking",
+        action="store_true",
+        help="Deprecated alias; author-group masking is on by default.",
     )
     parser.add_argument(
         "--author-group-col",
@@ -86,8 +99,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Protect a CSV while preserving row order, row count, and columns.",
         description=(
             "Run the final exact CSV pipeline: deterministic sanitization, "
-            "Presidio/scrubadub PII Assist, cue-safe candidate selection, and "
-            "optional local LLM sidecar review on cleaned text only."
+            "Presidio/scrubadub PII Assist, cue-safe candidate selection, "
+            "default HF sidecar classification, and optional local LLM audit "
+            "extensions on cleaned text only."
         ),
     )
     protect.add_argument("--input", type=Path, required=True)
@@ -105,8 +119,49 @@ def build_parser() -> argparse.ArgumentParser:
     protect.add_argument(
         "--llm-review",
         choices=["off", "local-llm"],
-        default="local-llm",
-        help="Run sidecar-only local LLM HSD review after sanitization.",
+        default="off",
+        help=(
+            "Deprecated alias for --hsd-classifier local-llm when "
+            "--hsd-classifier is omitted."
+        ),
+    )
+    protect.add_argument(
+        "--hsd-classifier",
+        choices=["off", "hf", "hf-classifier", "local-llm"],
+        help=(
+            "Sidecar-only HSD classifier after sanitization. Defaults to hf "
+            "for the fine-tuned local Transformers classifier; local-llm "
+            "keeps GPT as the main classifier; off disables classification."
+        ),
+    )
+    protect.add_argument(
+        "--hf-hsd-model-path",
+        default=DEFAULT_HF_HSD_MODEL_PATH,
+        help="Local path or model id for --hsd-classifier hf.",
+    )
+    protect.add_argument(
+        "--hf-hsd-threshold",
+        type=float,
+        default=DEFAULT_HF_HSD_THRESHOLD,
+        help="Decision threshold for --hsd-classifier hf.",
+    )
+    protect.add_argument(
+        "--hf-hsd-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device for --hsd-classifier hf.",
+    )
+    protect.add_argument(
+        "--hf-hsd-batch-size",
+        type=int,
+        default=DEFAULT_HF_HSD_BATCH_SIZE,
+        help="Batch size for --hsd-classifier hf.",
+    )
+    protect.add_argument(
+        "--hf-hsd-max-length",
+        type=int,
+        default=DEFAULT_HF_HSD_MAX_LENGTH,
+        help="Tokenizer max length for --hsd-classifier hf.",
     )
     protect.add_argument(
         "--local-llm-endpoint",
@@ -123,8 +178,8 @@ def build_parser() -> argparse.ArgumentParser:
     protect.add_argument(
         "--llm-verifier",
         choices=["off", "local-llm"],
-        default="local-llm",
-        help="Run optional second-pass local LLM verifier on main positive labels.",
+        default="off",
+        help="Optional second-pass local LLM verifier on main positive labels.",
     )
     protect.add_argument(
         "--local-llm-verifier-model",
@@ -159,6 +214,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--progress",
         action="store_true",
         help="Print coarse raw-text-free pipeline progress to stderr.",
+    )
+    protect.add_argument(
+        "--style-scrub",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Normalize author-identifying style markers while preserving HSD "
+            "target/action/negation cues. On by default."
+        ),
     )
     add_author_group_masking_arguments(protect)
 
@@ -236,6 +300,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(raw_argv)
     try:
         if args.command == "protect":
+            hsd_classifier = (
+                args.hsd_classifier.replace("-", "_")
+                if args.hsd_classifier
+                else (
+                    "local_llm"
+                    if args.llm_review.replace("-", "_") == "local_llm"
+                    else "hf_classifier"
+                )
+            )
+            if hsd_classifier == "hf":
+                hsd_classifier = "hf_classifier"
             result = run_final_csv_pipeline(
                 args.input,
                 args.output,
@@ -249,6 +324,12 @@ def main(argv: list[str] | None = None) -> int:
                 allow_model_download=False,
                 audit_level="row" if args.preset == "audit" else "summary",
                 llm_review=args.llm_review.replace("-", "_"),
+                hsd_classification_backend=hsd_classifier,
+                hf_hsd_model_path=args.hf_hsd_model_path,
+                hf_hsd_threshold=args.hf_hsd_threshold,
+                hf_hsd_device=args.hf_hsd_device,
+                hf_hsd_batch_size=args.hf_hsd_batch_size,
+                hf_hsd_max_length=args.hf_hsd_max_length,
                 local_llm_endpoint=args.local_llm_endpoint,
                 local_llm_model=args.local_llm_model,
                 local_llm_timeout_seconds=args.local_llm_timeout_seconds,
@@ -269,12 +350,12 @@ def main(argv: list[str] | None = None) -> int:
                     args.local_llm_verifier_reasoning_effort
                 ),
                 require_hate_classification=args.require_llm_review,
-                author_group_masking=args.enable_author_group_masking,
+                author_group_masking=args.author_group_masking,
                 author_group_col=args.author_group_col,
                 author_group_min_repetitions=args.author_group_min_repetitions,
                 author_group_min_author_rows=args.author_group_min_author_rows,
                 generalize_targets=False,
-                style_scrub=False,
+                style_scrub=args.style_scrub,
                 progress_callback=make_progress_printer()
                 if args.progress
                 else None,

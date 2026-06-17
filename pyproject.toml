@@ -21,6 +21,14 @@ classifiers = [
 [project.optional-dependencies]
 presidio = ["presidio-analyzer>=2.2", "spacy>=3.7"]
 scrubadub = ["scrubadub"]
+hf = [
+  "huggingface-hub>=0.24",
+  "numpy>=1.26",
+  "pandas>=2.0",
+  "scikit-learn>=1.4",
+  "torch>=2.2",
+  "transformers>=4.43",
+]
 workbench = ["fastapi>=0.111", "uvicorn[standard]>=0.30", "sentence-transformers>=3.0"]
 dev = [
   "pytest>=9.0",

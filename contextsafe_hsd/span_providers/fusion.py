@@ -20,11 +20,16 @@ from .base import (
 
 DEFAULT_THRESHOLDS = {
     "ALIAS": 0.0,
+    "CREDIT_CARD": 0.0,
+    "CRYPTO_WALLET": 0.0,
+    "DISCORD_USER": 0.0,
     "USER": 0.0,
     "EMAIL": 0.0,
+    "IBAN": 0.0,
     "PHONE": 0.0,
     "URL": 0.0,
     "IP_ADDRESS": 0.0,
+    "SOCIAL_LINK": 0.0,
     "IDENTIFIER": 0.0,
     "PERSON": 0.5,
     "LOCATION": 0.6,
