@@ -18,6 +18,9 @@ input CSV
   -> manifest/audit sidecars
 ```
 
+For a simplified data-in to data-out architecture view, see
+`docs/reference/system_diagram.md`.
+
 Primary implementation:
 
 - `contextsafe_hsd/cli.py`

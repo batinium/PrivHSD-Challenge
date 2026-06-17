@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections import Counter
+import csv
 from dataclasses import dataclass, field
 import importlib.util
+from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from contextsafe_hsd.models.dpmlm_rewrite_runtime import normalize_token
 from contextsafe_hsd.span_providers.base import SpanProvider
 from contextsafe_hsd.span_providers.presidio import PresidioAugmentError, PresidioSpanProvider, load_presidio_analyzer
 from contextsafe_hsd.span_providers.scrubadub_provider import (
@@ -15,7 +18,11 @@ from contextsafe_hsd.span_providers.scrubadub_provider import (
 )
 
 from .config import AutoPipelineConfig
-from .model_registry import discover_hf_classifier, discover_local_llm
+from .model_registry import (
+    discover_dpmlm_rewriter,
+    discover_hf_classifier,
+    discover_local_llm,
+)
 
 
 ProviderFactory = Callable[["AutoPipelineContext"], SpanProvider]
@@ -49,6 +56,16 @@ class AutoPipelineContext:
     provider_load_counts: Counter[str] = field(default_factory=Counter)
     model_load_counts: Counter[str] = field(default_factory=Counter)
     audit_counters: Counter[str] = field(default_factory=Counter)
+    _hsd_protected_tokens_by_row: dict[str, frozenset[str]] | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _hsd_token_guard_status: dict[str, Any] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
 
     @classmethod
     def create(
@@ -73,6 +90,7 @@ class AutoPipelineContext:
         self._discover_provider("scrubadub", "scrubadub")
         self.model_status["local_llm"] = discover_local_llm(self.config)
         self.model_status["hf_classifier"] = discover_hf_classifier(self.config)
+        self.model_status["dpmlm_rewriter"] = discover_dpmlm_rewriter(self.config)
         for name in self.provider_factories:
             self.provider_status[name] = {
                 "status": "available",
@@ -194,6 +212,18 @@ class AutoPipelineContext:
                 device=self.config.hf_hsd_device,
                 max_length=self.config.hf_hsd_max_length,
             )
+        if name == "dpmlm_rewriter":
+            from contextsafe_hsd.models.dpmlm_rewrite_runtime import (
+                DpmlmRewriteRuntime,
+            )
+
+            return DpmlmRewriteRuntime(
+                model_path=self.config.dpmlm_model_path,
+                device=self.config.dpmlm_device,
+                epsilon=self.config.dpmlm_epsilon,
+                top_k=self.config.dpmlm_top_k,
+                max_length=self.config.dpmlm_max_length,
+            )
         raise ValueError(f"unknown auto model {name!r}")
 
     def ensure_local_llm_review(self) -> Any | None:
@@ -202,10 +232,81 @@ class AutoPipelineContext:
     def ensure_hf_classifier(self) -> Any | None:
         return self.ensure_model("hf_classifier")
 
+    def ensure_dpmlm_rewriter(self) -> Any | None:
+        return self.ensure_model("dpmlm_rewriter")
+
+    def hsd_protected_tokens_for(
+        self,
+        *,
+        row_id: str,
+        row_index: int,
+    ) -> frozenset[str]:
+        if not self.config.hsd_token_importance_path:
+            return frozenset()
+        mapping = self._load_hsd_protected_tokens()
+        keys = (str(row_id), f"index:{row_index}")
+        protected: set[str] = set()
+        for key in keys:
+            protected.update(mapping.get(key, frozenset()))
+        return frozenset(protected)
+
+    def _load_hsd_protected_tokens(self) -> dict[str, frozenset[str]]:
+        if self._hsd_protected_tokens_by_row is not None:
+            return self._hsd_protected_tokens_by_row
+        path = Path(str(self.config.hsd_token_importance_path))
+        row_tokens: dict[str, set[str]] = {}
+        token_count = 0
+        try:
+            with path.open("r", encoding="utf-8", newline="") as handle:
+                for row in csv.DictReader(handle):
+                    try:
+                        importance = float(row.get("abs_delta_hate_score") or 0.0)
+                    except ValueError:
+                        importance = 0.0
+                    if importance < self.config.hsd_token_protect_threshold:
+                        continue
+                    token = normalize_token(str(row.get("token") or ""))
+                    if not token:
+                        continue
+                    row_id = str(row.get("row_id") or "").strip()
+                    row_index = str(row.get("row_index") or "").strip()
+                    if row_id:
+                        row_tokens.setdefault(row_id, set()).add(token)
+                    if row_index:
+                        row_tokens.setdefault(f"index:{row_index}", set()).add(token)
+                    token_count += 1
+        except OSError as exc:
+            self._hsd_token_guard_status = error_status(exc, kind="hsd_token_guard")
+            self.audit_counters[
+                f"hsd_token_guard_error:{type(exc).__name__}"
+            ] += 1
+            self._hsd_protected_tokens_by_row = {}
+            return self._hsd_protected_tokens_by_row
+
+        self._hsd_protected_tokens_by_row = {
+            key: frozenset(tokens) for key, tokens in row_tokens.items()
+        }
+        self._hsd_token_guard_status = {
+            "status": "ready",
+            "kind": "hsd_token_guard",
+            "path": str(path),
+            "threshold": self.config.hsd_token_protect_threshold,
+            "row_key_count": len(self._hsd_protected_tokens_by_row),
+            "token_count": token_count,
+        }
+        return self._hsd_protected_tokens_by_row
+
     def audit_status(self) -> dict[str, Any]:
+        if self.config.hsd_token_importance_path and not self._hsd_token_guard_status:
+            self._load_hsd_protected_tokens()
         return {
             "providers": self.provider_status,
             "models": self.model_status,
+            "hsd_token_guard": self._hsd_token_guard_status
+            or {
+                "status": "disabled",
+                "kind": "hsd_token_guard",
+            },
             "provider_load_counts": dict(sorted(self.provider_load_counts.items())),
             "model_load_counts": dict(sorted(self.model_load_counts.items())),
             "audit_counters": dict(sorted(self.audit_counters.items())),

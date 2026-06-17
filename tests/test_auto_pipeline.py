@@ -9,6 +9,10 @@ from contextsafe_hsd.auto.engine import (
     cleanup_strict_residuals,
 )
 from contextsafe_hsd.detectors import Span
+from contextsafe_hsd.models.dpmlm_rewrite_runtime import (
+    DpmlmRewriteResult,
+    replacement_similarity,
+)
 from contextsafe_hsd.simple_pipeline import build_final_pipeline_rows
 from contextsafe_hsd.span_providers.base import (
     PRIVACY_CLASS_DIRECT,
@@ -31,7 +35,12 @@ def test_default_auto_config_uses_cpu_and_no_sidecar_model():
     assert config.local_llm_enabled is False
     assert config.device == "cpu"
     assert set(context.provider_status) == {"deterministic", "presidio", "scrubadub"}
-    assert set(context.model_status) == {"hf_classifier", "local_llm"}
+    assert set(context.model_status) == {
+        "dpmlm_rewriter",
+        "hf_classifier",
+        "local_llm",
+    }
+    assert context.model_status["dpmlm_rewriter"]["status"] == "disabled"
     assert context.model_status["hf_classifier"]["status"] == "disabled"
     assert context.model_status["local_llm"]["status"] == "disabled"
 
@@ -61,6 +70,128 @@ def test_hf_classifier_backend_enables_lazy_model_status():
     assert context.config.hsd_classification_backend == "hf_classifier"
     assert context.model_status["hf_classifier"]["status"] == "available"
     assert context.model_load_counts["hf_classifier"] == 0
+
+
+class FakeDpmlmRuntime:
+    model_id = "fake-dpmlm"
+    model_path = "fake-dpmlm"
+    epsilon = 100.0
+
+    def __init__(self) -> None:
+        self.calls = []
+
+    def status_metadata(self):
+        return {"model_id": self.model_id, "model_path": self.model_path}
+
+    def rewrite(
+        self,
+        text,
+        *,
+        seed,
+        max_rewrite_tokens,
+        min_eligible_score,
+        extra_protected_tokens=None,
+    ):
+        self.calls.append(
+            {
+                "text": text,
+                "seed": seed,
+                "max_rewrite_tokens": max_rewrite_tokens,
+                "min_eligible_score": min_eligible_score,
+                "extra_protected_tokens": tuple(extra_protected_tokens or ()),
+            }
+        )
+        rewritten = text.replace("coooool", "cool")
+        return DpmlmRewriteResult(
+            text=rewritten,
+            token_count=len(text.split()),
+            eligible_count=1,
+            protected_token_count=0,
+            extra_protected_token_count=len(tuple(extra_protected_tokens or ())),
+            requested_rewrite_count=1,
+            changed_token_count=1 if rewritten != text else 0,
+            skipped_prediction_count=0,
+            elapsed_seconds=0.01,
+            rewritten_tokens=(
+                {
+                    "token_index": 1,
+                    "original_token_length": len("coooool"),
+                    "replacement_token_length": len("cool"),
+                    "eligible_score": 9,
+                },
+            ),
+        )
+
+
+def test_dpmlm_rewrite_candidate_is_lazy_and_scored():
+    runtime = FakeDpmlmRuntime()
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            disabled_providers=frozenset({"presidio", "scrubadub"}),
+            dpmlm_rewrite=True,
+            dpmlm_max_rewrite_tokens=1,
+            dpmlm_min_eligible_score=4,
+            style_scrub=False,
+            audit_level="row",
+        ),
+        model_factories={"dpmlm_rewriter": lambda _context: runtime},
+    )
+    rows = [{"id": "1", "text": "This coooool style should stop."}]
+
+    result = AutoPipelineEngine(context).process_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        output_col="text",
+        replace_text=True,
+    )
+
+    assert runtime.calls
+    assert context.model_load_counts["dpmlm_rewriter"] == 1
+    assert result.rows[0]["text"] == "This cool style should stop."
+    assert result.audit_rows[0]["chosen_candidate"] == "balanced_dpmlm_light"
+    assert result.summary["stages"]["privacy_detection"]["candidate_counts_by_name"][
+        "balanced_dpmlm_light"
+    ] == 1
+
+
+def test_dpmlm_rewrite_skips_rows_without_style_risk():
+    runtime = FakeDpmlmRuntime()
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            allow_model_download=True,
+            disabled_providers=frozenset({"presidio", "scrubadub"}),
+            dpmlm_rewrite=True,
+            style_scrub=True,
+            audit_level="row",
+        ),
+        model_factories={"dpmlm_rewriter": lambda _context: runtime},
+    )
+    rows = [{"id": "1", "text": "Simple text should stay unchanged."}]
+
+    result = AutoPipelineEngine(context).process_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        output_col="text",
+        replace_text=True,
+    )
+
+    assert runtime.calls == []
+    assert context.model_load_counts["dpmlm_rewriter"] == 0
+    assert all(
+        "dpmlm" not in candidate_name
+        for candidate_name in result.summary["stages"]["privacy_detection"][
+            "candidate_counts_by_name"
+        ]
+    )
+
+
+def test_dpmlm_replacement_similarity_rejects_unrelated_tokens():
+    assert replacement_similarity("coooool", "cool") >= 0.55
+    assert replacement_similarity("Ooops", "ugs") < 0.55
 
 
 def test_build_final_pipeline_rows_preserves_schema_and_stage_names():

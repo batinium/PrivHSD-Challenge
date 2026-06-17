@@ -11,6 +11,14 @@ from contextsafe_hsd.models.hf_hsd_classifier_runtime import (
     DEFAULT_HF_HSD_MODEL_PATH,
     DEFAULT_HF_HSD_THRESHOLD,
 )
+from contextsafe_hsd.models.dpmlm_rewrite_runtime import (
+    DEFAULT_DPMLM_EPSILON,
+    DEFAULT_DPMLM_MAX_LENGTH,
+    DEFAULT_DPMLM_MAX_REWRITE_TOKENS,
+    DEFAULT_DPMLM_MIN_ELIGIBLE_SCORE,
+    DEFAULT_DPMLM_MODEL_PATH,
+    DEFAULT_DPMLM_TOP_K,
+)
 
 
 AUTO_MODES = frozenset({"auto"})
@@ -47,6 +55,20 @@ class AutoPipelineConfig:
     generalize_targets: bool | None = False
     style_scrub: bool = True
     style_simplify_language: bool = True
+    dpmlm_rewrite: bool = False
+    dpmlm_model_path: str = DEFAULT_DPMLM_MODEL_PATH
+    dpmlm_device: str = "auto"
+    dpmlm_epsilon: float = DEFAULT_DPMLM_EPSILON
+    dpmlm_max_rewrite_tokens: int = DEFAULT_DPMLM_MAX_REWRITE_TOKENS
+    dpmlm_min_eligible_score: int = DEFAULT_DPMLM_MIN_ELIGIBLE_SCORE
+    dpmlm_top_k: int = DEFAULT_DPMLM_TOP_K
+    dpmlm_max_length: int = DEFAULT_DPMLM_MAX_LENGTH
+    dpmlm_random_seed: int = 0
+    dpmlm_min_row_style_risk: int = 1
+    dpmlm_min_character_retention: float = 0.65
+    dpmlm_max_length_drift: float = 0.45
+    hsd_token_importance_path: str | None = None
+    hsd_token_protect_threshold: float = 0.03
     official_mode: bool = True
     local_llm_enabled: bool = False
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions"
@@ -95,11 +117,27 @@ class AutoPipelineConfig:
             "hf_hsd_device",
             self.hf_hsd_device.strip().lower() or "auto",
         )
+        object.__setattr__(
+            self,
+            "dpmlm_model_path",
+            self.dpmlm_model_path.strip() or DEFAULT_DPMLM_MODEL_PATH,
+        )
+        object.__setattr__(
+            self,
+            "dpmlm_device",
+            self.dpmlm_device.strip().lower() or "auto",
+        )
         if self.author_group_col is not None:
             object.__setattr__(
                 self,
                 "author_group_col",
                 self.author_group_col.strip() or None,
+            )
+        if self.hsd_token_importance_path is not None:
+            object.__setattr__(
+                self,
+                "hsd_token_importance_path",
+                self.hsd_token_importance_path.strip() or None,
             )
         if self.baseline_mode not in {"utility", "balanced", "privacy"}:
             raise ValueError("baseline_mode must be utility, balanced, or privacy")
@@ -116,12 +154,32 @@ class AutoPipelineConfig:
             )
         if self.hf_hsd_device not in DEVICE_POLICIES:
             raise ValueError(f"hf_hsd_device must be one of {sorted(DEVICE_POLICIES)}")
+        if self.dpmlm_device not in DEVICE_POLICIES:
+            raise ValueError(f"dpmlm_device must be one of {sorted(DEVICE_POLICIES)}")
         if not 0.0 <= self.hf_hsd_threshold <= 1.0:
             raise ValueError("hf_hsd_threshold must be between 0 and 1")
         if self.hf_hsd_batch_size < 1:
             raise ValueError("hf_hsd_batch_size must be positive")
         if self.hf_hsd_max_length < 1:
             raise ValueError("hf_hsd_max_length must be positive")
+        if self.dpmlm_epsilon <= 0:
+            raise ValueError("dpmlm_epsilon must be positive")
+        if self.dpmlm_max_rewrite_tokens < 0:
+            raise ValueError("dpmlm_max_rewrite_tokens must be non-negative")
+        if self.dpmlm_min_eligible_score < 0:
+            raise ValueError("dpmlm_min_eligible_score must be non-negative")
+        if self.dpmlm_top_k < 1:
+            raise ValueError("dpmlm_top_k must be positive")
+        if self.dpmlm_max_length < 1:
+            raise ValueError("dpmlm_max_length must be positive")
+        if self.dpmlm_min_row_style_risk < 0:
+            raise ValueError("dpmlm_min_row_style_risk must be non-negative")
+        if not 0 <= self.dpmlm_min_character_retention <= 1:
+            raise ValueError("dpmlm_min_character_retention must be between 0 and 1")
+        if self.dpmlm_max_length_drift < 0:
+            raise ValueError("dpmlm_max_length_drift must be non-negative")
+        if self.hsd_token_protect_threshold < 0:
+            raise ValueError("hsd_token_protect_threshold must be non-negative")
         if self.max_model_batch_size < 1:
             raise ValueError("max_model_batch_size must be positive")
         if self.max_provider_rows is not None and self.max_provider_rows < 0:

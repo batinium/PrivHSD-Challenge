@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1086, initial-scale=1">
+  <title>ContextSafe-HSD Frontend Interaction Diagram</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      width: 1086px;
+      height: 912px;
+      overflow: hidden;
+      background: #eef2f5;
+      font-family:
+        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }
+
+    svg {
+      display: block;
+      height: 912px;
+      width: 1086px;
+    }
+
+    .title {
+      fill: #0f172a;
+      font-size: 31px;
+      font-weight: 830;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      fill: #526173;
+      font-size: 15px;
+      font-weight: 520;
+    }
+
+    .lane-title {
+      fill: #002654;
+      font-size: 14px;
+      font-weight: 820;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .node-title {
+      fill: #142034;
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .node-copy {
+      fill: #526173;
+      font-size: 12px;
+      font-weight: 530;
+    }
+
+    .pill-text {
+      fill: #003399;
+      font-size: 11px;
+      font-weight: 820;
+    }
+
+    .side-note-title {
+      fill: #0f172a;
+      font-size: 13px;
+      font-weight: 820;
+    }
+
+    .side-note {
+      fill: #526173;
+      font-size: 11px;
+      font-weight: 560;
+    }
+
+    .footer-title {
+      fill: #ffffff;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .footer-copy {
+      fill: #dbeafe;
+      font-size: 12px;
+      font-weight: 560;
+    }
+
+    .box {
+      fill: #ffffff;
+      stroke: #d8e0ea;
+      stroke-width: 1.2;
+    }
+
+    .primary-box {
+      fill: #ffffff;
+      stroke: #b6c7e6;
+      stroke-width: 1.4;
+    }
+
+    .accent-box {
+      fill: #f9fbff;
+      stroke: #acc4f7;
+      stroke-width: 1.3;
+    }
+
+    .output-box {
+      fill: #f7fff9;
+      stroke: #aeddbc;
+      stroke-width: 1.3;
+    }
+
+    .review-box {
+      fill: #fffaf0;
+      stroke: #f0c36d;
+      stroke-width: 1.3;
+    }
+
+    .lane {
+      fill: rgba(255, 255, 255, 0.58);
+      stroke: #dbe1e8;
+      stroke-width: 1;
+    }
+
+    .arrow {
+      fill: none;
+      stroke: #003399;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2.4;
+      marker-end: url(#arrow);
+    }
+
+    .muted-arrow {
+      fill: none;
+      stroke: #8aa1bd;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+      marker-end: url(#mutedArrow);
+    }
+
+    .feedback-arrow {
+      fill: none;
+      stroke: #d28a00;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 2;
+      marker-end: url(#feedbackArrow);
+    }
+  </style>
+</head>
+<body>
+  <svg viewBox="0 0 1086 912" role="img" aria-label="ContextSafe-HSD frontend user interaction diagram">
+    <defs>
+      <linearGradient id="pageBg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#f8fafc"/>
+        <stop offset="0.58" stop-color="#edf4ff"/>
+        <stop offset="1" stop-color="#f7f9ef"/>
+      </linearGradient>
+      <filter id="softShadow" x="-16%" y="-16%" width="132%" height="132%">
+        <feDropShadow dx="0" dy="12" stdDeviation="13" flood-color="#23324d" flood-opacity="0.11"/>
+      </filter>
+      <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="6" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L10,6 L2,10 Z" fill="#003399"/>
+      </marker>
+      <marker id="mutedArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L8,5 L2,8 Z" fill="#8aa1bd"/>
+      </marker>
+      <marker id="feedbackArrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+        <path d="M2,2 L8,5 L2,8 Z" fill="#d28a00"/>
+      </marker>
+    </defs>
+
+    <rect width="1086" height="912" fill="url(#pageBg)"/>
+    <circle cx="1013" cy="92" r="150" fill="#fff3c4" opacity="0.38"/>
+    <circle cx="127" cy="796" r="210" fill="#dbeafe" opacity="0.38"/>
+
+    <g transform="translate(38 36)">
+      <rect x="0" y="0" width="56" height="56" rx="13" fill="#ffcc00"/>
+      <text x="28" y="35" text-anchor="middle" fill="#003399" font-size="18" font-weight="880">CS</text>
+      <text class="title" x="76" y="26">ContextSafe-HSD User Interaction Flow</text>
+      <text class="subtitle" x="77" y="51">React/Vite workbench flow for privacy-safe CSV intake, citizen review, analytics, and exports.</text>
+    </g>
+
+    <g transform="translate(904 42)">
+      <rect x="0" y="0" width="142" height="48" rx="24" fill="#ffffff" stroke="#d4deea" filter="url(#softShadow)"/>
+      <circle cx="112" cy="24" r="18" fill="#003399"/>
+      <text x="22" y="21" fill="#0f172a" font-size="13" font-weight="820">Local user</text>
+      <text x="22" y="35" fill="#526173" font-size="11" font-weight="560">Reviewer / operator</text>
+      <text x="112" y="30" text-anchor="middle" fill="#ffffff" font-size="13" font-weight="850">UI</text>
+    </g>
+
+    <g transform="translate(28 118)">
+      <rect class="lane" x="0" y="0" width="286" height="652" rx="14"/>
+      <text class="lane-title" x="24" y="34">1. Intake and setup</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="primary-box" x="24" y="58" width="238" height="106" rx="10"/>
+      </g>
+      <text class="node-title" x="46" y="88">Dashboard: Data Intake</text>
+      <text class="node-copy" x="46" y="112">Choose CSV and detect headers.</text>
+      <text class="node-copy" x="46" y="132">Select text column and private case key.</text>
+      <rect x="46" y="142" width="80" height="18" rx="9" fill="#eef4ff"/>
+      <text class="pill-text" x="86" y="155" text-anchor="middle">file input</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="box" x="24" y="198" width="238" height="118" rx="10"/>
+      </g>
+      <text class="node-title" x="46" y="228">Configure review pipeline</text>
+      <text class="node-copy" x="46" y="252">HF classifier or local LLM backend.</text>
+      <text class="node-copy" x="46" y="272">Optional verifier, PII suggestions,</text>
+      <text class="node-copy" x="46" y="292">citizen restatement, similarity check.</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="accent-box" x="24" y="350" width="238" height="112" rx="10"/>
+      </g>
+      <text class="node-title" x="46" y="379">Run or load processed data</text>
+      <text class="node-copy" x="46" y="403">Run CSV job with progress polling.</text>
+      <text class="node-copy" x="46" y="423">Or list and load saved local results.</text>
+      <rect x="46" y="436" width="72" height="18" rx="9" fill="#eef4ff"/>
+      <text class="pill-text" x="82" y="449" text-anchor="middle">Run CSV</text>
+      <rect x="126" y="436" width="88" height="18" rx="9" fill="#eef4ff"/>
+      <text class="pill-text" x="170" y="449" text-anchor="middle">Saved results</text>
+
+      <g>
+        <rect class="box" x="24" y="506" width="238" height="104" rx="10"/>
+        <text class="node-title" x="46" y="535">Protected preview</text>
+        <text class="node-copy" x="46" y="559">Show restated evidence and gauges:</text>
+        <text class="node-copy" x="46" y="579">privacy gain, cue retention,</text>
+        <text class="node-copy" x="46" y="599">similarity, residual risk.</text>
+      </g>
+
+      <path class="arrow" d="M143 164 L143 193"/>
+      <path class="arrow" d="M143 316 L143 345"/>
+      <path class="muted-arrow" d="M143 462 L143 501"/>
+    </g>
+
+    <g transform="translate(352 118)">
+      <rect class="lane" x="0" y="0" width="356" height="652" rx="14"/>
+      <text class="lane-title" x="24" y="34">2. Frontend state and app navigation</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="output-box" x="46" y="58" width="264" height="88" rx="10"/>
+      </g>
+      <text class="node-title" x="68" y="88">Processed result state</text>
+      <text class="node-copy" x="68" y="112">Result, manifest, audit, insights, cache key,</text>
+      <text class="node-copy" x="68" y="132">review decisions, and progress state.</text>
+
+      <g transform="translate(24 194)">
+        <rect class="primary-box" x="0" y="0" width="144" height="122" rx="10"/>
+        <text class="node-title" x="20" y="31">Dashboard</text>
+        <text class="node-copy" x="20" y="56">Summary metrics</text>
+        <text class="node-copy" x="20" y="76">Safeguards</text>
+        <text class="node-copy" x="20" y="96">Preview and audit strip</text>
+      </g>
+
+      <g transform="translate(188 194)">
+        <rect class="review-box" x="0" y="0" width="144" height="122" rx="10"/>
+        <text class="node-title" x="20" y="31">Citizen Jury</text>
+        <text class="node-copy" x="20" y="56">Risk filter</text>
+        <text class="node-copy" x="20" y="76">Case cards</text>
+        <text class="node-copy" x="20" y="96">Structured labels</text>
+      </g>
+
+      <g transform="translate(24 354)">
+        <rect class="box" x="0" y="0" width="144" height="118" rx="10"/>
+        <text class="node-title" x="20" y="31">Target Groups</text>
+        <text class="node-copy" x="20" y="56">Category table</text>
+        <text class="node-copy" x="20" y="76">Hatred rate</text>
+        <text class="node-copy" x="20" y="96">Context meter</text>
+      </g>
+
+      <g transform="translate(188 354)">
+        <rect class="box" x="0" y="0" width="144" height="118" rx="10"/>
+        <text class="node-title" x="20" y="31">Reports</text>
+        <text class="node-copy" x="20" y="56">Review CSV</text>
+        <text class="node-copy" x="20" y="76">Audit JSON</text>
+        <text class="node-copy" x="20" y="96">Manifest and labels</text>
+      </g>
+
+      <g transform="translate(46 520)">
+        <rect x="0" y="0" width="264" height="74" rx="10" fill="#ffffff" stroke="#d8e0ea"/>
+        <text class="side-note-title" x="20" y="29">Navigation pattern</text>
+        <text class="side-note" x="20" y="49">Sidebar or mobile tabs switch views.</text>
+        <text class="side-note" x="20" y="64">All views read the same processed result.</text>
+      </g>
+
+      <path class="arrow" d="M178 146 L178 188"/>
+      <path class="muted-arrow" d="M178 146 C178 170 96 170 96 188"/>
+      <path class="muted-arrow" d="M178 146 C178 170 260 170 260 188"/>
+      <path class="muted-arrow" d="M178 146 C178 333 96 333 96 348"/>
+      <path class="muted-arrow" d="M178 146 C178 333 260 333 260 348"/>
+    </g>
+
+    <g transform="translate(746 118)">
+      <rect class="lane" x="0" y="0" width="312" height="652" rx="14"/>
+      <text class="lane-title" x="24" y="34">3. Local API and outputs</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="accent-box" x="24" y="58" width="264" height="116" rx="10"/>
+      </g>
+      <text class="node-title" x="46" y="88">CSV job and cache endpoints</text>
+      <text class="node-copy" x="46" y="112">POST /api/csv/cache</text>
+      <text class="node-copy" x="46" y="132">POST /api/csv/jobs then poll job status</text>
+      <text class="node-copy" x="46" y="152">GET recent or saved cache entries</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="box" x="24" y="218" width="264" height="120" rx="10"/>
+      </g>
+      <text class="node-title" x="46" y="248">Local processing boundary</text>
+      <text class="node-copy" x="46" y="272">PII and style protection.</text>
+      <text class="node-copy" x="46" y="292">HSD classifier and optional verifier.</text>
+      <text class="node-copy" x="46" y="312">Restated citizen evidence plus score.</text>
+
+      <g filter="url(#softShadow)">
+        <rect class="review-box" x="24" y="382" width="264" height="122" rx="10"/>
+      </g>
+      <text class="node-title" x="46" y="412">Review label persistence</text>
+      <text class="node-copy" x="46" y="436">GET /api/reviews/{cache_key}</text>
+      <text class="node-copy" x="46" y="456">PUT case status, vote, risk override,</text>
+      <text class="node-copy" x="46" y="476">PII, context, and target corrections.</text>
+
+      <g>
+        <rect class="output-box" x="24" y="548" width="264" height="72" rx="10"/>
+        <text class="node-title" x="46" y="578">Download artifacts</text>
+        <text class="node-copy" x="46" y="602">Protected CSV, audit JSON, manifest,</text>
+        <text class="node-copy" x="46" y="622">and structured review-label export.</text>
+      </g>
+
+      <path class="arrow" d="M156 174 L156 213"/>
+      <path class="feedback-arrow" d="M156 338 L156 376"/>
+      <path class="muted-arrow" d="M156 504 L156 543"/>
+    </g>
+
+    <path class="arrow" d="M290 527 C318 527 318 176 393 176"/>
+    <path class="arrow" d="M314 408 C348 408 348 176 393 176"/>
+    <path class="arrow" d="M310 176 C334 176 334 176 392 176"/>
+    <path class="arrow" d="M708 176 C726 176 726 176 746 176"/>
+    <path class="feedback-arrow" d="M934 500 C934 686 660 698 590 436"/>
+    <path class="muted-arrow" d="M684 411 C718 411 718 583 746 583"/>
+
+    <g transform="translate(56 804)">
+      <rect x="0" y="0" width="974" height="70" rx="12" fill="#002654"/>
+      <text class="footer-title" x="26" y="29">Privacy boundary</text>
+      <text class="footer-copy" x="26" y="50">Raw original text stays in local processing. Citizen jury screens show restated evidence.</text>
+      <text class="footer-copy" x="26" y="65">Review cache stores case IDs and structured labels only.</text>
+      <rect x="782" y="18" width="166" height="34" rx="17" fill="#eef4ff"/>
+      <text x="865" y="40" text-anchor="middle" fill="#003399" font-size="12" font-weight="850">No raw text in review UI</text>
+    </g>
+  </svg>
+</body>
+</html>

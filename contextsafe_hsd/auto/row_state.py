@@ -61,6 +61,10 @@ class RowRoutingDecision:
     use_style_candidate: bool
     review_recommended: bool
     fallback_reason: str | None = None
+    risk_level: str = "unknown"
+    risk_reasons: tuple[str, ...] = ()
+    low_risk_reasons: tuple[str, ...] = ()
+    style_candidate_policy: str | None = None
 
     def audit_record(self) -> dict[str, Any]:
         return {
@@ -68,6 +72,10 @@ class RowRoutingDecision:
             "use_style_candidate": self.use_style_candidate,
             "review_recommended": self.review_recommended,
             "fallback_reason": self.fallback_reason,
+            "risk_level": self.risk_level,
+            "risk_reasons": list(self.risk_reasons),
+            "low_risk_reasons": list(self.low_risk_reasons),
+            "style_candidate_policy": self.style_candidate_policy,
         }
 
 

@@ -21,6 +21,7 @@ QUASI_CONTEXT_PATTERN = re.compile(
     r"[A-Z][A-Za-z0-9.'-]{2,}(?:\s+[A-Z][A-Za-z0-9.'-]{2,}){0,4}\b"
 )
 TARGET_AMBIGUITY_PATTERN = re.compile(r"(?:#\w{5,}|[A-Za-z0-9]\s+[A-Za-z0-9]\s+[A-Za-z0-9])")
+STYLE_CANDIDATE_MIN_RISK = 2
 
 
 def metric_float(metrics: dict[str, Any], key: str, default: float) -> float:
@@ -105,10 +106,49 @@ def cheap_profile(
 
 def route_row(profile: RowRiskProfile) -> RowRoutingDecision:
     use_providers = bool(profile.provider_needed_reasons)
-    use_style_candidate = profile.style_risk_count >= 2
+    use_style_candidate = profile.style_risk_count >= STYLE_CANDIDATE_MIN_RISK
     review_recommended = bool(profile.review_reasons)
+    risk_reasons: list[str] = []
+    low_risk_reasons: list[str] = []
+    if profile.direct_identifier_count_before:
+        risk_reasons.append("deterministic_direct_identifier_detected")
+    if profile.quasi_identifier_count_before:
+        risk_reasons.append("deterministic_quasi_identifier_detected")
+    if profile.baseline_changed:
+        risk_reasons.append("deterministic_baseline_changed")
+    risk_reasons.extend(profile.provider_needed_reasons)
+    if use_style_candidate:
+        risk_reasons.append("style_risk_threshold_met")
+    risk_reasons.extend(profile.review_reasons)
+    if not profile.direct_identifier_count_before:
+        low_risk_reasons.append("no_deterministic_direct_identifier")
+    if not profile.quasi_identifier_count_before:
+        low_risk_reasons.append("no_deterministic_quasi_identifier")
+    if not profile.provider_needed_reasons:
+        low_risk_reasons.append("no_provider_worthy_ambiguity")
+    if not use_style_candidate:
+        low_risk_reasons.append("style_risk_below_threshold")
+    if not profile.review_reasons:
+        low_risk_reasons.append("no_cue_loss_review_signal")
+    risk_level = (
+        "low_privacy_style_risk"
+        if (
+            not profile.baseline_changed
+            and not use_providers
+            and not use_style_candidate
+            and not review_recommended
+        )
+        else "routed_or_changed"
+    )
     return RowRoutingDecision(
         use_providers=use_providers,
         use_style_candidate=use_style_candidate,
         review_recommended=review_recommended,
+        risk_level=risk_level,
+        risk_reasons=tuple(sorted(set(risk_reasons))),
+        low_risk_reasons=tuple(low_risk_reasons),
+        style_candidate_policy=(
+            f"style_scrubbed candidates are generated only when "
+            f"style_risk_count >= {STYLE_CANDIDATE_MIN_RISK}"
+        ),
     )

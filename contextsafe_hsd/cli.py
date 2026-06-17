@@ -24,6 +24,14 @@ from .models.hf_hsd_classifier_runtime import (
     DEFAULT_HF_HSD_MODEL_PATH,
     DEFAULT_HF_HSD_THRESHOLD,
 )
+from .models.dpmlm_rewrite_runtime import (
+    DEFAULT_DPMLM_EPSILON,
+    DEFAULT_DPMLM_MAX_LENGTH,
+    DEFAULT_DPMLM_MAX_REWRITE_TOKENS,
+    DEFAULT_DPMLM_MIN_ELIGIBLE_SCORE,
+    DEFAULT_DPMLM_MODEL_PATH,
+    DEFAULT_DPMLM_TOP_K,
+)
 from .simple_pipeline import SimplifiedPipelineError, run_final_csv_pipeline
 from .submission import SubmissionError, validate_submission
 
@@ -164,6 +172,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tokenizer max length for --hsd-classifier hf.",
     )
     protect.add_argument(
+        "--allow-model-download",
+        action="store_true",
+        help="Allow Transformers to download selected Hugging Face model IDs.",
+    )
+    protect.add_argument(
         "--local-llm-endpoint",
         default="http://localhost:1234/v1/chat/completions",
         help="OpenAI-compatible local chat completions URL.",
@@ -232,6 +245,84 @@ def build_parser() -> argparse.ArgumentParser:
             "When style scrubbing is enabled, simplify a small deterministic "
             "set of high-register words and phrases. On by default."
         ),
+    )
+    protect.add_argument(
+        "--dpmlm-rewrite",
+        action="store_true",
+        help=(
+            "Enable experimental DP-MLM-style masked-LM rewrite candidates. "
+            "Candidates are scored and may be rejected before final selection."
+        ),
+    )
+    protect.add_argument(
+        "--dpmlm-model-path",
+        default=DEFAULT_DPMLM_MODEL_PATH,
+        help="Local path or Hugging Face model id for --dpmlm-rewrite.",
+    )
+    protect.add_argument(
+        "--dpmlm-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device for --dpmlm-rewrite.",
+    )
+    protect.add_argument(
+        "--dpmlm-epsilon",
+        type=float,
+        default=DEFAULT_DPMLM_EPSILON,
+        help="Per-token epsilon for DP-MLM-style sampling.",
+    )
+    protect.add_argument(
+        "--dpmlm-max-rewrite-tokens",
+        type=int,
+        default=DEFAULT_DPMLM_MAX_REWRITE_TOKENS,
+        help="Maximum eligible tokens rewritten per candidate.",
+    )
+    protect.add_argument(
+        "--dpmlm-min-eligible-score",
+        type=int,
+        default=DEFAULT_DPMLM_MIN_ELIGIBLE_SCORE,
+        help="Minimum token risk score for DP-MLM rewriting.",
+    )
+    protect.add_argument(
+        "--dpmlm-top-k",
+        type=int,
+        default=DEFAULT_DPMLM_TOP_K,
+        help="Top masked-LM token logits considered for each rewrite.",
+    )
+    protect.add_argument(
+        "--dpmlm-max-length",
+        type=int,
+        default=DEFAULT_DPMLM_MAX_LENGTH,
+        help="Tokenizer max length for DP-MLM masked-token contexts.",
+    )
+    protect.add_argument(
+        "--dpmlm-random-seed",
+        type=int,
+        default=0,
+        help="Base seed for deterministic DP-MLM candidate sampling.",
+    )
+    protect.add_argument(
+        "--dpmlm-min-row-style-risk",
+        type=int,
+        default=1,
+        help=(
+            "Only try DP-MLM on rows with at least this deterministic style "
+            "risk count. Use 0 for the broad experimental scan."
+        ),
+    )
+    protect.add_argument(
+        "--hsd-token-importance",
+        type=Path,
+        help=(
+            "CSV from scripts/hf_token_importance.py. Tokens above the "
+            "importance threshold are protected from DP-MLM rewriting."
+        ),
+    )
+    protect.add_argument(
+        "--hsd-token-protect-threshold",
+        type=float,
+        default=0.03,
+        help="Minimum absolute classifier delta for protecting a token from DP-MLM.",
     )
     add_author_group_masking_arguments(protect)
 
@@ -330,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
                 command=["contextsafe-hsd", *raw_argv],
                 preset=args.preset,
                 metric_depth="deep" if args.preset == "audit" else "fast",
-                allow_model_download=False,
+                allow_model_download=args.allow_model_download,
                 audit_level="row" if args.preset == "audit" else "summary",
                 llm_review=args.llm_review.replace("-", "_"),
                 hsd_classification_backend=hsd_classifier,
@@ -366,6 +457,20 @@ def main(argv: list[str] | None = None) -> int:
                 generalize_targets=False,
                 style_scrub=args.style_scrub,
                 style_simplify_language=args.style_simplify_language,
+                dpmlm_rewrite=args.dpmlm_rewrite,
+                dpmlm_model_path=args.dpmlm_model_path,
+                dpmlm_device=args.dpmlm_device,
+                dpmlm_epsilon=args.dpmlm_epsilon,
+                dpmlm_max_rewrite_tokens=args.dpmlm_max_rewrite_tokens,
+                dpmlm_min_eligible_score=args.dpmlm_min_eligible_score,
+                dpmlm_top_k=args.dpmlm_top_k,
+                dpmlm_max_length=args.dpmlm_max_length,
+                dpmlm_random_seed=args.dpmlm_random_seed,
+                dpmlm_min_row_style_risk=args.dpmlm_min_row_style_risk,
+                hsd_token_importance_path=str(args.hsd_token_importance)
+                if args.hsd_token_importance
+                else None,
+                hsd_token_protect_threshold=args.hsd_token_protect_threshold,
                 progress_callback=make_progress_printer()
                 if args.progress
                 else None,

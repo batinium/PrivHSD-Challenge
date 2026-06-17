@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Civilian Review Hub Mockup</title>
+  <style>
+    :root {
+      background: #eef2f5;
+      color: #17202a;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #cfd8e3;
+      border-radius: 6px;
+      color: #17202a;
+      cursor: pointer;
+      display: inline-flex;
+      font-weight: 760;
+      gap: 8px;
+      justify-content: center;
+      min-height: 36px;
+      padding: 0 11px;
+      white-space: nowrap;
+    }
+
+    button.primary {
+      background: #003f8f;
+      border-color: #003f8f;
+      color: #ffffff;
+    }
+
+    button.soft {
+      background: #eef4ff;
+      border-color: #b9cbea;
+      color: #003f8f;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 232px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      background: #002654;
+      color: #e8f1ff;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding: 16px 12px;
+    }
+
+    .brand {
+      display: grid;
+      gap: 3px;
+      padding: 8px 10px;
+    }
+
+    .brand strong {
+      color: #ffffff;
+      font-size: 15px;
+    }
+
+    .brand span {
+      color: #b8cbe9;
+      font-size: 12px;
+    }
+
+    .nav {
+      display: grid;
+      gap: 4px;
+    }
+
+    .nav button {
+      background: transparent;
+      border: 0;
+      border-radius: 7px;
+      color: #c5d6ef;
+      justify-content: flex-start;
+      min-height: 38px;
+      padding: 0 10px;
+      width: 100%;
+    }
+
+    .nav button.active {
+      background: #003f8f;
+      color: #ffffff;
+    }
+
+    .sidebar-status {
+      background: #edf4ff;
+      border-radius: 7px;
+      color: #003f8f;
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: auto;
+      padding: 10px;
+    }
+
+    main {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+      padding: 16px;
+    }
+
+    .topbar,
+    .metric,
+    .panel,
+    .batch-row,
+    .group-row,
+    .assignment-row,
+    .case-card,
+    .signal,
+    .result-row {
+      background: #ffffff;
+      border: 1px solid #dbe3ec;
+      border-radius: 8px;
+    }
+
+    .topbar {
+      align-items: center;
+      display: flex;
+      gap: 16px;
+      justify-content: space-between;
+      padding: 13px 15px;
+    }
+
+    .topbar h1 {
+      color: #17202a;
+      font-size: 21px;
+      letter-spacing: 0;
+      margin: 0;
+    }
+
+    .topbar p {
+      color: #627084;
+      font-size: 13px;
+      margin: 4px 0 0;
+    }
+
+    .actions {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .metrics {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .metric {
+      min-height: 92px;
+      padding: 13px;
+    }
+
+    .metric span,
+    .signal span,
+    .mini-label {
+      color: #667485;
+      display: block;
+      font-size: 12px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      color: #17202a;
+      display: block;
+      font-size: 29px;
+      line-height: 1;
+      margin-top: 8px;
+    }
+
+    .metric small {
+      color: #667485;
+      display: block;
+      font-size: 12px;
+      margin-top: 7px;
+    }
+
+    .workspace {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(420px, 1.05fr) minmax(360px, 0.95fr);
+      min-width: 0;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .panel {
+      min-width: 0;
+      padding: 14px;
+    }
+
+    .panel-head {
+      align-items: center;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .panel-head h2 {
+      color: #253142;
+      font-size: 16px;
+      letter-spacing: 0;
+      margin: 0;
+    }
+
+    .panel-head p {
+      color: #667485;
+      font-size: 13px;
+      margin: 3px 0 0;
+    }
+
+    .filterbar {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: minmax(180px, 1fr) 142px 142px;
+      margin-bottom: 10px;
+    }
+
+    .filterbar input,
+    .filterbar select,
+    .send-form input,
+    .send-form select,
+    .send-form textarea {
+      background: #f8fafc;
+      border: 1px solid #cfd8e3;
+      border-radius: 6px;
+      color: #17202a;
+      min-height: 36px;
+      padding: 0 10px;
+      width: 100%;
+    }
+
+    .send-form textarea {
+      min-height: 76px;
+      padding: 9px 10px;
+      resize: vertical;
+    }
+
+    .batch-list,
+    .group-list,
+    .assignment-list,
+    .result-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .batch-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) 92px 112px 96px;
+      min-height: 72px;
+      padding: 10px;
+    }
+
+    .batch-row strong,
+    .group-row strong,
+    .assignment-row strong,
+    .case-card strong,
+    .result-row strong {
+      color: #253142;
+      display: block;
+      font-size: 13px;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .batch-row span,
+    .group-row span,
+    .assignment-row span,
+    .case-card span,
+    .result-row span {
+      color: #667485;
+      display: block;
+      font-size: 12px;
+      line-height: 1.3;
+      margin-top: 4px;
+      overflow-wrap: anywhere;
+    }
+
+    .pill {
+      align-self: start;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+      justify-self: start;
+      padding: 6px 9px;
+      white-space: nowrap;
+    }
+
+    .pill.ready {
+      background: #e7f6ee;
+      color: #0f6a3d;
+    }
+
+    .pill.active {
+      background: #eef4ff;
+      color: #003f8f;
+    }
+
+    .pill.warning {
+      background: #fff6d6;
+      color: #7a5b00;
+    }
+
+    .pill.neutral {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .detail-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-bottom: 12px;
+    }
+
+    .signal {
+      min-height: 82px;
+      padding: 10px;
+    }
+
+    .signal strong {
+      color: #17202a;
+      display: block;
+      font-size: 23px;
+      margin-top: 8px;
+    }
+
+    .case-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .case-card {
+      min-height: 138px;
+      padding: 11px;
+    }
+
+    .case-card p {
+      color: #253142;
+      font-size: 13px;
+      line-height: 1.38;
+      margin: 9px 0 0;
+    }
+
+    .case-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .case-tags .pill {
+      font-size: 11px;
+      padding: 5px 7px;
+    }
+
+    .send-form {
+      display: grid;
+      gap: 9px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .send-form label {
+      color: #3d4b5c;
+      display: grid;
+      font-size: 12px;
+      font-weight: 800;
+      gap: 5px;
+    }
+
+    .send-form label.full {
+      grid-column: 1 / -1;
+    }
+
+    .checks {
+      display: grid;
+      gap: 8px;
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .check {
+      align-items: center;
+      background: #f8fafc;
+      border: 1px solid #dbe3ec;
+      border-radius: 6px;
+      color: #3d4b5c;
+      display: flex;
+      font-size: 12px;
+      font-weight: 800;
+      gap: 8px;
+      min-height: 38px;
+      padding: 0 9px;
+    }
+
+    .check input {
+      accent-color: #003f8f;
+      height: 15px;
+      width: 15px;
+    }
+
+    .group-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) 86px 88px;
+      min-height: 64px;
+      padding: 10px;
+    }
+
+    .assignment-row,
+    .result-row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) 118px;
+      min-height: 62px;
+      padding: 10px;
+    }
+
+    .progress {
+      background: #e6edf4;
+      border-radius: 999px;
+      height: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .progress div {
+      background: #003f8f;
+      height: 100%;
+    }
+
+    .inbox-preview {
+      background: #f8fafc;
+      border: 1px solid #dbe3ec;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .review-card {
+      background: #ffffff;
+      border: 1px solid #dbe3ec;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .review-card p {
+      color: #253142;
+      font-size: 14px;
+      line-height: 1.42;
+      margin: 10px 0;
+    }
+
+    .vote-row {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 10px;
+    }
+
+    .vote-row button {
+      min-height: 34px;
+      padding: 0 8px;
+    }
+
+    @media (max-width: 1180px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+      }
+
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      main {
+        padding: 10px;
+      }
+
+      .topbar,
+      .panel-head {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .topbar > div,
+      .panel-head > div,
+      .topbar,
+      .panel,
+      .workspace,
+      .stack,
+      .batch-row,
+      .group-row,
+      .assignment-row,
+      .result-row,
+      .case-card {
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      h1,
+      h2,
+      p,
+      span,
+      strong,
+      small,
+      label {
+        overflow-wrap: anywhere;
+      }
+
+      .actions,
+      .actions button,
+      .panel-head button,
+      .filterbar,
+      .metrics,
+      .detail-grid,
+      .case-grid,
+      .send-form,
+      .checks,
+      .vote-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+      }
+
+      .batch-row,
+      .group-row,
+      .assignment-row,
+      .result-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <strong>ContextSafe</strong>
+        <span>Civilian review hub</span>
+      </div>
+      <nav class="nav" aria-label="Portal sections">
+        <button class="active" type="button">Review Hub</button>
+        <button type="button">Content Batches</button>
+        <button type="button">Civilian Groups</button>
+        <button type="button">Assignments</button>
+        <button type="button">Results</button>
+        <button type="button">Settings</button>
+      </nav>
+      <div class="sidebar-status">Mode: protected evidence only</div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1>Civilian Review Hub</h1>
+          <p>Send protected hate-speech review cases to civilian reviewer groups and track decisions.</p>
+        </div>
+        <div class="actions">
+          <button class="soft" type="button">Create Batch</button>
+          <button type="button">Preview Reviewer Inbox</button>
+          <button class="primary" type="button">Send Assignments</button>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="Review hub metrics">
+        <div class="metric">
+          <span>Ready Cases</span>
+          <strong>1,284</strong>
+          <small>protected restatements prepared</small>
+        </div>
+        <div class="metric">
+          <span>Balanced Sample</span>
+          <strong>50/50</strong>
+          <small>positive and negative rows</small>
+        </div>
+        <div class="metric">
+          <span>Reviewer Groups</span>
+          <strong>12</strong>
+          <small>trusted civilian cohorts</small>
+        </div>
+        <div class="metric">
+          <span>Consensus</span>
+          <strong>86%</strong>
+          <small>agreement on completed cases</small>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Review Content Batches</h2>
+                <p>Case sets prepared for civilian validation.</p>
+              </div>
+              <button type="button">Build Balanced Batch</button>
+            </div>
+            <div class="filterbar">
+              <input aria-label="Search batches" value="balanced validation">
+              <select aria-label="Batch type">
+                <option>All case sets</option>
+                <option>Balanced sample</option>
+                <option>Classifier positives</option>
+                <option>Negative controls</option>
+              </select>
+              <select aria-label="Batch status">
+                <option>All statuses</option>
+                <option>Ready</option>
+                <option>Assigned</option>
+                <option>Needs check</option>
+              </select>
+            </div>
+            <div class="batch-list">
+              <article class="batch-row">
+                <div>
+                  <strong>Balanced validation sample</strong>
+                  <span>300 cases: 150 positive, 150 negative, protected restatements</span>
+                </div>
+                <span class="pill ready">Ready</span>
+                <span class="pill neutral">General public</span>
+                <span class="pill active">Selected</span>
+              </article>
+              <article class="batch-row">
+                <div>
+                  <strong>High-risk positive cases</strong>
+                  <span>96 cases with threat, dehumanization, or exclusion signals</span>
+                </div>
+                <span class="pill warning">Needs check</span>
+                <span class="pill neutral">Senior reviewers</span>
+                <span class="pill neutral">Draft</span>
+              </article>
+              <article class="batch-row">
+                <div>
+                  <strong>Negative control sample</strong>
+                  <span>180 non-hate rows to test false positives and reviewer calibration</span>
+                </div>
+                <span class="pill ready">Ready</span>
+                <span class="pill neutral">New reviewers</span>
+                <span class="pill neutral">Queued</span>
+              </article>
+              <article class="batch-row">
+                <div>
+                  <strong>Context ambiguity set</strong>
+                  <span>Quote, counterspeech, and negation cases needing civilian judgement</span>
+                </div>
+                <span class="pill active">Assigned</span>
+                <span class="pill neutral">Context panel</span>
+                <span class="pill neutral">Live</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Selected Batch</h2>
+                <p>Balanced validation sample ready for distribution.</p>
+              </div>
+              <button type="button">Open Cases</button>
+            </div>
+            <div class="detail-grid">
+              <div class="signal">
+                <span>Cases</span>
+                <strong>300</strong>
+              </div>
+              <div class="signal">
+                <span>Positive</span>
+                <strong>150</strong>
+              </div>
+              <div class="signal">
+                <span>Negative</span>
+                <strong>150</strong>
+              </div>
+              <div class="signal">
+                <span>Reviews Each</span>
+                <strong>3</strong>
+              </div>
+            </div>
+            <div class="case-grid">
+              <article class="case-card">
+                <strong>Case CS-1048</strong>
+                <span>Classifier positive · protected evidence</span>
+                <p>A user makes a hostile statement toward a protected religious group while referencing exclusion from a public place.</p>
+                <div class="case-tags">
+                  <span class="pill warning">Harm signal</span>
+                  <span class="pill neutral">No raw text</span>
+                </div>
+              </article>
+              <article class="case-card">
+                <strong>Case CS-1192</strong>
+                <span>Classifier negative · protected evidence</span>
+                <p>A user criticizes a policy and mentions a protected group without targeting the group with hate or threat language.</p>
+                <div class="case-tags">
+                  <span class="pill ready">Control row</span>
+                  <span class="pill neutral">No raw text</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Civilian Groups</h2>
+                <p>Reviewer cohorts available for assignment.</p>
+              </div>
+              <button type="button">Manage Groups</button>
+            </div>
+            <div class="group-list">
+              <article class="group-row">
+                <div>
+                  <strong>General public panel</strong>
+                  <span>24 active reviewers · balanced validation</span>
+                </div>
+                <span class="pill ready">Available</span>
+                <span class="pill neutral">3 per case</span>
+              </article>
+              <article class="group-row">
+                <div>
+                  <strong>Context panel</strong>
+                  <span>12 reviewers trained on quotation and counterspeech</span>
+                </div>
+                <span class="pill active">Busy</span>
+                <span class="pill neutral">5 per case</span>
+              </article>
+              <article class="group-row">
+                <div>
+                  <strong>New reviewer calibration</strong>
+                  <span>18 reviewers receiving negative control cases</span>
+                </div>
+                <span class="pill ready">Available</span>
+                <span class="pill neutral">2 per case</span>
+              </article>
+            </div>
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Send to Reviewers</h2>
+                <p>Assign the selected content batch to a civilian group.</p>
+              </div>
+              <button type="button">Save Template</button>
+            </div>
+            <form class="send-form">
+              <label>
+                Content batch
+                <select>
+                  <option>Balanced validation sample</option>
+                  <option>High-risk positive cases</option>
+                  <option>Negative control sample</option>
+                </select>
+              </label>
+              <label>
+                Reviewer group
+                <select>
+                  <option>General public panel</option>
+                  <option>Context panel</option>
+                  <option>New reviewer calibration</option>
+                </select>
+              </label>
+              <label>
+                Due date
+                <input value="2026-06-24">
+              </label>
+              <label>
+                Reviews per case
+                <select>
+                  <option>3 reviewers</option>
+                  <option>5 reviewers</option>
+                  <option>2 reviewers</option>
+                </select>
+              </label>
+              <label class="full">
+                Reviewer note
+                <textarea>Review each protected evidence card and vote whether it contains hate speech, does not contain hate speech, or is uncertain. Positive and negative rows are mixed for calibration.</textarea>
+              </label>
+              <div class="checks">
+                <label class="check"><input type="checkbox" checked> Hide model label</label>
+                <label class="check"><input type="checkbox" checked> Mix positive and negative rows</label>
+                <label class="check"><input type="checkbox" checked> Escalate low consensus</label>
+              </div>
+              <button class="primary" type="button">Send to Group</button>
+              <button type="button">Schedule Send</button>
+            </form>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Active Assignments</h2>
+                <p>Progress by group and content batch.</p>
+              </div>
+              <button type="button">View All</button>
+            </div>
+            <div class="assignment-list">
+              <article class="assignment-row">
+                <div>
+                  <strong>Context panel · ambiguity set</strong>
+                  <span>72 of 120 case reviews complete</span>
+                  <div class="progress"><div style="width: 60%;"></div></div>
+                </div>
+                <span class="pill active">Live</span>
+              </article>
+              <article class="assignment-row">
+                <div>
+                  <strong>New reviewer calibration · negative controls</strong>
+                  <span>210 of 360 case reviews complete</span>
+                  <div class="progress"><div style="width: 58%;"></div></div>
+                </div>
+                <span class="pill active">Live</span>
+              </article>
+              <article class="assignment-row">
+                <div>
+                  <strong>General public panel · balanced sample</strong>
+                  <span>Ready to send to 24 reviewers</span>
+                  <div class="progress"><div style="width: 0%;"></div></div>
+                </div>
+                <span class="pill ready">Ready</span>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Reviewer Inbox Preview</h2>
+                <p>What civilians see when an assignment opens.</p>
+              </div>
+            </div>
+            <div class="inbox-preview">
+              <article class="review-card">
+                <strong>Case CS-1048</strong>
+                <span>Protected evidence · model label hidden</span>
+                <p>A user makes a hostile statement toward a protected religious group while referencing exclusion from a public place.</p>
+                <div class="vote-row">
+                  <button type="button">Hate speech</button>
+                  <button type="button">Not hate</button>
+                  <button type="button">Uncertain</button>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Review Results</h2>
+                <p>Admin summary after civilians submit votes.</p>
+              </div>
+              <button type="button">Open Escalations</button>
+            </div>
+            <div class="result-list">
+              <article class="result-row">
+                <div>
+                  <strong>Consensus accepted</strong>
+                  <span>418 cases reached threshold agreement</span>
+                </div>
+                <span class="pill ready">86%</span>
+              </article>
+              <article class="result-row">
+                <div>
+                  <strong>Low-consensus escalations</strong>
+                  <span>34 cases need moderator or expert review</span>
+                </div>
+                <span class="pill warning">Open</span>
+              </article>
+              <article class="result-row">
+                <div>
+                  <strong>Control-row disagreement</strong>
+                  <span>Negative rows flagged by civilians for sampling audit</span>
+                </div>
+                <span class="pill active">12%</span>
+              </article>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

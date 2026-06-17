@@ -92,3 +92,61 @@ def discover_hf_classifier(config: AutoPipelineConfig) -> dict[str, Any]:
         "max_length": config.hf_hsd_max_length,
         "detail": "Local Transformers binary HSD classifier; no inference during discovery.",
     }
+
+
+def discover_dpmlm_rewriter(config: AutoPipelineConfig) -> dict[str, Any]:
+    if "dpmlm_rewriter" in config.disabled_models or "dpmlm-rewriter" in config.disabled_models:
+        return disabled_status("model")
+    if not config.dpmlm_rewrite:
+        return {
+            "status": "disabled",
+            "kind": "model",
+            "detail": "DP-MLM rewrite candidate generation is disabled unless selected.",
+        }
+    missing = dependency_status(("torch", "transformers"), kind="model")
+    if missing is not None:
+        return missing
+    model_path = Path(config.dpmlm_model_path)
+    looks_like_path = (
+        model_path.is_absolute()
+        or config.dpmlm_model_path.startswith(("./", "../", "data/"))
+        or "\\" in config.dpmlm_model_path
+    )
+    looks_like_hub_id = "/" in config.dpmlm_model_path and not looks_like_path
+    if looks_like_path and not model_path.exists():
+        return {
+            "status": "missing_model",
+            "kind": "model",
+            "model_path": config.dpmlm_model_path,
+            "detail": "Local DP-MLM model path is missing.",
+        }
+    if not model_path.exists() and not looks_like_hub_id and not config.allow_model_download:
+        return {
+            "status": "missing_model",
+            "kind": "model",
+            "model_path": config.dpmlm_model_path,
+            "detail": "Local DP-MLM model path is missing and downloads are disabled.",
+        }
+    if looks_like_hub_id and not config.allow_model_download:
+        return {
+            "status": "missing_model",
+            "kind": "model",
+            "model_path": config.dpmlm_model_path,
+            "detail": "DP-MLM model id requires --allow-model-download.",
+        }
+    return {
+        "status": "available",
+        "kind": "model",
+        "load": "lazy",
+        "model_path": config.dpmlm_model_path,
+        "device": config.dpmlm_device,
+        "epsilon": round(config.dpmlm_epsilon, 6),
+        "max_rewrite_tokens": config.dpmlm_max_rewrite_tokens,
+        "min_eligible_score": config.dpmlm_min_eligible_score,
+        "min_row_style_risk": config.dpmlm_min_row_style_risk,
+        "hsd_token_importance_path": config.hsd_token_importance_path,
+        "hsd_token_protect_threshold": config.hsd_token_protect_threshold,
+        "top_k": config.dpmlm_top_k,
+        "max_length": config.dpmlm_max_length,
+        "detail": "Local Transformers masked-LM rewrite candidate generator; no inference during discovery.",
+    }

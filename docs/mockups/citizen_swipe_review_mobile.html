@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Citizen Swipe Review Mobile Mockups</title>
+  <style>
+    :root {
+      background: #e9edf2;
+      color: #18202b;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .page {
+      display: grid;
+      gap: 24px;
+      margin: 0 auto;
+      max-width: 1680px;
+      padding: 28px;
+    }
+
+    .mockup-header {
+      align-items: end;
+      display: flex;
+      gap: 18px;
+      justify-content: space-between;
+    }
+
+    .mockup-header h1 {
+      color: #121926;
+      font-size: clamp(28px, 3vw, 46px);
+      letter-spacing: 0;
+      line-height: 1.04;
+      margin: 0;
+      max-width: 820px;
+    }
+
+    .mockup-header p {
+      color: #536173;
+      font-size: 15px;
+      line-height: 1.5;
+      margin: 10px 0 0;
+      max-width: 760px;
+    }
+
+    .design-note {
+      background: #ffffff;
+      border: 1px solid #ccd5df;
+      border-radius: 8px;
+      color: #344154;
+      font-size: 13px;
+      font-weight: 780;
+      padding: 10px 12px;
+      white-space: nowrap;
+    }
+
+    .phone-grid {
+      align-items: start;
+      display: grid;
+      gap: 22px;
+      grid-template-columns: repeat(4, minmax(286px, 1fr));
+    }
+
+    .screen-label {
+      color: #435064;
+      font-size: 13px;
+      font-weight: 850;
+      letter-spacing: 0;
+      margin: 0 0 8px 4px;
+      text-transform: uppercase;
+    }
+
+    .phone {
+      background: #10151f;
+      border: 1px solid #253143;
+      border-radius: 34px;
+      box-shadow: 0 28px 68px rgba(15, 23, 42, 0.22);
+      margin: 0 auto;
+      max-width: 390px;
+      min-width: 286px;
+      padding: 10px;
+      width: 100%;
+    }
+
+    .phone-screen {
+      background:
+        radial-gradient(circle at 85% 0%, rgba(73, 139, 193, 0.24), transparent 28%),
+        linear-gradient(180deg, #f9fbfc 0%, #eef3f5 100%);
+      border-radius: 25px;
+      height: 812px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .statusbar {
+      align-items: center;
+      color: #1d2735;
+      display: flex;
+      font-size: 12px;
+      font-weight: 900;
+      height: 32px;
+      justify-content: space-between;
+      padding: 9px 20px 0;
+    }
+
+    .notch {
+      background: #111827;
+      border-radius: 999px;
+      height: 5px;
+      left: 50%;
+      position: absolute;
+      top: 12px;
+      transform: translateX(-50%);
+      width: 58px;
+    }
+
+    .phone-content {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      height: calc(100% - 32px);
+      min-height: 0;
+      overflow: hidden;
+      padding: 15px 16px 86px;
+    }
+
+    .app-top {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    .identity {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .avatar,
+    .app-mark,
+    .lesson-icon,
+    .history-icon {
+      align-items: center;
+      border-radius: 14px;
+      display: inline-flex;
+      flex: 0 0 auto;
+      font-weight: 950;
+      justify-content: center;
+    }
+
+    .app-mark {
+      background: #153b71;
+      color: #ffffff;
+      height: 40px;
+      width: 40px;
+    }
+
+    .avatar {
+      background: #e4f4ee;
+      color: #145235;
+      height: 38px;
+      width: 38px;
+    }
+
+    .identity strong {
+      color: #121926;
+      display: block;
+      font-size: 15px;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .identity span,
+    .subtle {
+      color: #657386;
+      display: block;
+      font-size: 12px;
+      line-height: 1.25;
+      margin-top: 2px;
+    }
+
+    .icon-button {
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #d7dfe8;
+      border-radius: 12px;
+      color: #243245;
+      display: inline-flex;
+      flex: 0 0 auto;
+      font-size: 18px;
+      font-weight: 950;
+      height: 40px;
+      justify-content: center;
+      width: 40px;
+    }
+
+    .hero-panel,
+    .panel,
+    .review-card,
+    .history-card,
+    .lesson-card,
+    .mini-card {
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid #d9e1ea;
+      border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(31, 42, 55, 0.06);
+    }
+
+    .hero-panel {
+      background:
+        linear-gradient(135deg, rgba(21, 59, 113, 0.94), rgba(41, 92, 127, 0.92)),
+        linear-gradient(45deg, #153b71, #2b5c7f);
+      color: #ffffff;
+      min-height: 150px;
+      overflow: hidden;
+      padding: 17px;
+      position: relative;
+    }
+
+    .hero-panel::after {
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+      background-size: 22px 22px;
+      content: "";
+      inset: 0;
+      opacity: 0.45;
+      position: absolute;
+    }
+
+    .hero-panel > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-panel span {
+      color: #c9f0dd;
+      display: block;
+      font-size: 12px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .hero-panel h2 {
+      color: #ffffff;
+      font-size: 27px;
+      letter-spacing: 0;
+      line-height: 1.08;
+      margin: 10px 0 0;
+      max-width: 260px;
+    }
+
+    .hero-panel p {
+      color: #dbe9f4;
+      font-size: 13px;
+      line-height: 1.4;
+      margin: 9px 0 0;
+      max-width: 265px;
+    }
+
+    .primary-row {
+      display: grid;
+      gap: 9px;
+      grid-template-columns: 1.15fr 0.85fr;
+      margin-top: 14px;
+    }
+
+    .primary-row button,
+    .wide-button {
+      align-items: center;
+      border: 0;
+      border-radius: 8px;
+      color: #ffffff;
+      display: inline-flex;
+      font-weight: 880;
+      gap: 8px;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 12px;
+    }
+
+    .primary-row button:first-child,
+    .wide-button {
+      background: #1f7a55;
+    }
+
+    .primary-row button:last-child {
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+    }
+
+    .progress-card {
+      display: grid;
+      gap: 9px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .mini-card {
+      min-height: 94px;
+      padding: 12px;
+    }
+
+    .mini-card span,
+    .panel-title span,
+    .lesson-meta,
+    .history-meta {
+      color: #667386;
+      display: block;
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .mini-card strong {
+      color: #18202b;
+      display: block;
+      font-size: 25px;
+      letter-spacing: 0;
+      line-height: 1;
+      margin-top: 8px;
+    }
+
+    .mini-card small {
+      color: #667386;
+      display: block;
+      font-size: 12px;
+      line-height: 1.3;
+      margin-top: 8px;
+    }
+
+    .panel {
+      padding: 13px;
+    }
+
+    .panel-title {
+      align-items: center;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      margin-bottom: 11px;
+    }
+
+    .panel-title h3 {
+      color: #18202b;
+      font-size: 16px;
+      letter-spacing: 0;
+      margin: 0;
+    }
+
+    .queue-preview,
+    .cue-list,
+    .lesson-list,
+    .history-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .queue-item,
+    .cue-item,
+    .history-row,
+    .lesson-row {
+      background: #f7f9fb;
+      border: 1px solid #dde5ee;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .queue-topline,
+    .history-topline,
+    .lesson-topline {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .queue-topline strong,
+    .history-topline strong,
+    .lesson-topline strong {
+      color: #1e293b;
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .queue-topline span,
+    .tag,
+    .decision-chip {
+      border-radius: 999px;
+      color: #2b3a4f;
+      font-size: 11px;
+      font-weight: 850;
+      line-height: 1;
+      padding: 6px 8px;
+      white-space: nowrap;
+    }
+
+    .queue-topline span {
+      background: #e7eef7;
+    }
+
+    .queue-item p,
+    .cue-item p,
+    .history-row p,
+    .lesson-row p,
+    .card-text p {
+      color: #425064;
+      font-size: 12px;
+      line-height: 1.42;
+      margin: 7px 0 0;
+      overflow-wrap: anywhere;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 9px;
+    }
+
+    .tag {
+      background: #ecf2f7;
+      color: #435064;
+    }
+
+    .tag.warn {
+      background: #fff4d8;
+      color: #755500;
+    }
+
+    .tag.safe {
+      background: #e7f6ee;
+      color: #145235;
+    }
+
+    .bottom-nav {
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #d8e1ea;
+      border-radius: 22px;
+      bottom: 12px;
+      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.16);
+      display: grid;
+      gap: 5px;
+      grid-template-columns: repeat(4, 1fr);
+      left: 14px;
+      padding: 7px;
+      position: absolute;
+      right: 14px;
+    }
+
+    .bottom-nav button {
+      align-items: center;
+      background: transparent;
+      border: 0;
+      border-radius: 16px;
+      color: #657386;
+      display: inline-flex;
+      flex-direction: column;
+      font-size: 10px;
+      font-weight: 850;
+      gap: 3px;
+      justify-content: center;
+      min-height: 49px;
+      min-width: 0;
+      padding: 4px 2px;
+    }
+
+    .bottom-nav button.active {
+      background: #e9f4ef;
+      color: #145235;
+    }
+
+    .nav-icon {
+      display: block;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    .review-shell {
+      gap: 10px;
+      padding-bottom: 96px;
+    }
+
+    .lessons-shell {
+      gap: 10px;
+      padding-bottom: 82px;
+    }
+
+    .lessons-shell .lesson-hero {
+      min-height: 100px;
+      padding: 12px;
+    }
+
+    .lessons-shell .lesson-hero h2 {
+      font-size: 19px;
+    }
+
+    .lessons-shell .lesson-hero p,
+    .lessons-shell .lesson-row p,
+    .lessons-shell .cue-item p {
+      font-size: 11px;
+      line-height: 1.3;
+    }
+
+    .lessons-shell .lesson-card,
+    .lessons-shell .panel {
+      padding: 10px;
+    }
+
+    .lessons-shell .panel-title {
+      margin-bottom: 8px;
+    }
+
+    .lessons-shell .lesson-row {
+      gap: 8px;
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+      padding: 8px;
+    }
+
+    .lessons-shell .lesson-icon {
+      height: 32px;
+      width: 32px;
+    }
+
+    .lessons-shell .cue-list {
+      gap: 7px;
+    }
+
+    .lessons-shell .cue-copy {
+      padding: 8px 8px 8px 0;
+    }
+
+    .review-progress {
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #d9e1ea;
+      border-radius: 8px;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: 11px;
+    }
+
+    .review-progress strong {
+      color: #18202b;
+      display: block;
+      font-size: 14px;
+    }
+
+    .review-progress span {
+      color: #667386;
+      display: block;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .meter {
+      background: #dbe3ec;
+      border-radius: 999px;
+      height: 7px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .meter div {
+      background: #1f7a55;
+      height: 100%;
+      width: 62%;
+    }
+
+    .review-count {
+      background: #edf4ff;
+      border: 1px solid #c9d8f5;
+      border-radius: 999px;
+      color: #153b71;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 7px 10px;
+    }
+
+    .card-stage {
+      flex: 1;
+      min-height: 510px;
+      position: relative;
+    }
+
+    .stack-shadow {
+      background: #e2e8ef;
+      border-radius: 14px;
+      height: 468px;
+      left: 16px;
+      opacity: 0.8;
+      position: absolute;
+      right: 16px;
+      top: 24px;
+      transform: rotate(3deg);
+    }
+
+    .stack-shadow.second {
+      background: #d7e1ea;
+      opacity: 0.62;
+      top: 37px;
+      transform: rotate(-4deg);
+    }
+
+    .review-card {
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+      left: 0;
+      min-height: 500px;
+      padding: 14px;
+      position: absolute;
+      right: 0;
+      top: 0;
+      transform: rotate(-1.5deg);
+    }
+
+    .card-status {
+      align-items: center;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .case-id {
+      color: #667386;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .privacy-chip {
+      background: #e7f6ee;
+      border-radius: 999px;
+      color: #145235;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 6px 8px;
+    }
+
+    .card-text {
+      background: #f8fafc;
+      border: 1px solid #dde5ee;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .card-text span {
+      color: #667386;
+      display: block;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .card-text strong {
+      color: #18202b;
+      display: block;
+      font-size: 18px;
+      line-height: 1.28;
+      margin-top: 8px;
+      overflow-wrap: anywhere;
+    }
+
+    .cue-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .cue-tile {
+      background: #f7f9fb;
+      border: 1px solid #dde5ee;
+      border-radius: 8px;
+      min-height: 82px;
+      padding: 10px;
+    }
+
+    .cue-tile span {
+      color: #667386;
+      display: block;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .cue-tile strong {
+      color: #1e293b;
+      display: block;
+      font-size: 13px;
+      line-height: 1.25;
+      margin-top: 7px;
+    }
+
+    .direction-pad {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr 1fr;
+      margin-top: auto;
+    }
+
+    .direction {
+      align-items: center;
+      border: 1px solid #d8e1ea;
+      border-radius: 8px;
+      display: grid;
+      gap: 5px;
+      justify-items: center;
+      min-height: 66px;
+      padding: 8px 4px;
+    }
+
+    .direction b {
+      align-items: center;
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 18px;
+      height: 30px;
+      justify-content: center;
+      width: 30px;
+    }
+
+    .direction span {
+      color: #435064;
+      font-size: 10px;
+      font-weight: 850;
+      line-height: 1.15;
+      text-align: center;
+    }
+
+    .direction.left b {
+      background: #eef2f7;
+      color: #435064;
+    }
+
+    .direction.up b {
+      background: #fff4d8;
+      color: #755500;
+    }
+
+    .direction.right b {
+      background: #e7f6ee;
+      color: #145235;
+    }
+
+    .action-dock {
+      bottom: 16px;
+      display: grid;
+      gap: 11px;
+      grid-template-columns: 1fr 1fr 1fr;
+      left: 18px;
+      position: absolute;
+      right: 18px;
+    }
+
+    .swipe-action {
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #d8e1ea;
+      border-radius: 19px;
+      box-shadow: 0 14px 26px rgba(15, 23, 42, 0.16);
+      color: #273449;
+      display: inline-flex;
+      flex-direction: column;
+      font-size: 10px;
+      font-weight: 900;
+      gap: 5px;
+      justify-content: center;
+      min-height: 66px;
+      padding: 6px 4px;
+    }
+
+    .swipe-action b {
+      align-items: center;
+      border-radius: 999px;
+      display: inline-flex;
+      font-size: 23px;
+      height: 37px;
+      justify-content: center;
+      width: 37px;
+    }
+
+    .swipe-action.reject b {
+      background: #eef2f7;
+      color: #526174;
+    }
+
+    .swipe-action.escalate b {
+      background: #fff4d8;
+      color: #755500;
+    }
+
+    .swipe-action.confirm b {
+      background: #e7f6ee;
+      color: #145235;
+    }
+
+    .search-row {
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #d8e1ea;
+      border-radius: 8px;
+      display: flex;
+      gap: 8px;
+      min-height: 43px;
+      padding: 0 12px;
+    }
+
+    .search-row span {
+      color: #7a8798;
+      font-size: 13px;
+    }
+
+    .history-summary {
+      display: grid;
+      gap: 9px;
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .history-stat {
+      background: #ffffff;
+      border: 1px solid #d8e1ea;
+      border-radius: 8px;
+      min-height: 74px;
+      padding: 10px;
+    }
+
+    .history-stat span {
+      color: #667386;
+      display: block;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .history-stat strong {
+      color: #18202b;
+      display: block;
+      font-size: 20px;
+      line-height: 1;
+      margin-top: 8px;
+    }
+
+    .segment {
+      background: #e8eef4;
+      border: 1px solid #d2dce7;
+      border-radius: 8px;
+      display: grid;
+      gap: 5px;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 5px;
+    }
+
+    .segment button {
+      background: transparent;
+      border: 0;
+      border-radius: 6px;
+      color: #536173;
+      font-size: 11px;
+      font-weight: 900;
+      min-height: 32px;
+      padding: 0 5px;
+    }
+
+    .segment button.active {
+      background: #ffffff;
+      color: #153b71;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+
+    .history-card {
+      padding: 12px;
+    }
+
+    .history-icon {
+      height: 32px;
+      width: 32px;
+    }
+
+    .history-icon.hate {
+      background: #e7f6ee;
+      color: #145235;
+    }
+
+    .history-icon.not-hate {
+      background: #eef2f7;
+      color: #526174;
+    }
+
+    .history-icon.review {
+      background: #fff4d8;
+      color: #755500;
+    }
+
+    .history-main {
+      align-items: start;
+      display: grid;
+      gap: 10px;
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .decision-chip.hate {
+      background: #e7f6ee;
+      color: #145235;
+    }
+
+    .decision-chip.not-hate {
+      background: #eef2f7;
+      color: #526174;
+    }
+
+    .decision-chip.review {
+      background: #fff4d8;
+      color: #755500;
+    }
+
+    .accuracy-card {
+      background: #153b71;
+      border-radius: 8px;
+      color: #ffffff;
+      padding: 13px;
+    }
+
+    .accuracy-card span {
+      color: #c9f0dd;
+      display: block;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .accuracy-card strong {
+      color: #ffffff;
+      display: block;
+      font-size: 24px;
+      margin-top: 6px;
+    }
+
+    .accuracy-card p {
+      color: #dbe9f4;
+      font-size: 12px;
+      line-height: 1.35;
+      margin: 7px 0 0;
+    }
+
+    .lesson-hero {
+      background: #1f7a55;
+      border-radius: 8px;
+      color: #ffffff;
+      min-height: 122px;
+      padding: 15px;
+    }
+
+    .lesson-hero span {
+      color: #d7f8e8;
+      display: block;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .lesson-hero h2 {
+      color: #ffffff;
+      font-size: 22px;
+      letter-spacing: 0;
+      line-height: 1.12;
+      margin: 8px 0 0;
+    }
+
+    .lesson-hero p {
+      color: #e9fff4;
+      font-size: 12px;
+      line-height: 1.38;
+      margin: 7px 0 0;
+    }
+
+    .lesson-card {
+      padding: 12px;
+    }
+
+    .lesson-row {
+      align-items: center;
+      display: grid;
+      gap: 11px;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .lesson-icon {
+      background: #edf4ff;
+      color: #153b71;
+      height: 38px;
+      width: 38px;
+    }
+
+    .lesson-row p {
+      margin-top: 4px;
+    }
+
+    .lesson-status {
+      background: #e7f6ee;
+      border-radius: 999px;
+      color: #145235;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 6px 8px;
+    }
+
+    .cue-item {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 6px minmax(0, 1fr);
+      padding: 0;
+    }
+
+    .cue-stripe {
+      background: #153b71;
+      border-radius: 8px 0 0 8px;
+    }
+
+    .cue-copy {
+      padding: 10px 10px 10px 0;
+    }
+
+    .cue-copy strong {
+      color: #18202b;
+      display: block;
+      font-size: 13px;
+    }
+
+    .quiz-card {
+      background: #ffffff;
+      border: 1px solid #d8e1ea;
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .quiz-card span {
+      color: #667386;
+      display: block;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .quiz-card p {
+      color: #18202b;
+      font-size: 14px;
+      font-weight: 760;
+      line-height: 1.35;
+      margin: 8px 0 12px;
+    }
+
+    .quiz-options {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .quiz-options button {
+      background: #f7f9fb;
+      border: 1px solid #d8e1ea;
+      border-radius: 8px;
+      color: #2b3a4f;
+      font-size: 12px;
+      font-weight: 900;
+      min-height: 38px;
+    }
+
+    @media (max-width: 1280px) {
+      .phone-grid {
+        grid-template-columns: repeat(2, minmax(286px, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        gap: 18px;
+        padding: 16px 10px;
+      }
+
+      .mockup-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .design-note {
+        white-space: normal;
+      }
+
+      .phone-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .phone {
+        min-width: 0;
+      }
+    }
+
+    @media (max-width: 360px) {
+      .phone {
+        border-radius: 26px;
+        padding: 6px;
+      }
+
+      .phone-screen {
+        border-radius: 21px;
+      }
+
+      .phone-content {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .hero-panel h2 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="mockup-header">
+      <div>
+        <h1>Citizen swipe review mobile mockups</h1>
+        <p>Four citizen-facing screens for reviewing privacy-protected, rephrased hate-speech cases with swipe-left, swipe-right, and swipe-up decisions.</p>
+      </div>
+      <div class="design-note">Mobile first · Protected evidence · Training built in</div>
+    </header>
+
+    <section class="phone-grid" aria-label="Citizen mobile app mockups">
+      <article>
+        <p class="screen-label">Homepage</p>
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="notch" aria-hidden="true"></div>
+            <div class="statusbar"><span>9:41</span><span>5G 92%</span></div>
+            <div class="phone-content">
+              <header class="app-top">
+                <div class="identity">
+                  <div class="app-mark">CS</div>
+                  <div>
+                    <strong>ContextSafe Citizen</strong>
+                    <span>Review queue ready</span>
+                  </div>
+                </div>
+                <button class="icon-button" type="button" aria-label="Notifications">!</button>
+              </header>
+
+              <section class="hero-panel">
+                <span>Today’s civic review</span>
+                <h2>Help classify protected speech cases</h2>
+                <p>Review short restatements where identity details are masked and context cues are preserved.</p>
+                <div class="primary-row">
+                  <button type="button">Start reviewing</button>
+                  <button type="button">Warm up</button>
+                </div>
+              </section>
+
+              <section class="progress-card" aria-label="Review progress">
+                <div class="mini-card">
+                  <span>Queue</span>
+                  <strong>24</strong>
+                  <small>balanced cases assigned</small>
+                </div>
+                <div class="mini-card">
+                  <span>Training</span>
+                  <strong>82%</strong>
+                  <small>cue lessons complete</small>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-title">
+                  <div>
+                    <span>Next batch</span>
+                    <h3>Moderate-risk review set</h3>
+                  </div>
+                  <span class="tag safe">Private</span>
+                </div>
+                <div class="queue-preview">
+                  <article class="queue-item">
+                    <div class="queue-topline">
+                      <strong>Protected restatement</strong>
+                      <span>Case 18</span>
+                    </div>
+                    <p>“[GROUP] members should not be allowed near local housing.”</p>
+                    <div class="tag-row">
+                      <span class="tag warn">Exclusion cue</span>
+                      <span class="tag">Target group</span>
+                    </div>
+                  </article>
+                  <article class="queue-item">
+                    <div class="queue-topline">
+                      <strong>Context check</strong>
+                      <span>Case 19</span>
+                    </div>
+                    <p>Quote may be condemning another user’s attack. Review the surrounding cue carefully.</p>
+                  </article>
+                </div>
+              </section>
+
+              <nav class="bottom-nav" aria-label="Primary navigation">
+                <button class="active" type="button"><span class="nav-icon">⌂</span>Home</button>
+                <button type="button"><span class="nav-icon">◇</span>Review</button>
+                <button type="button"><span class="nav-icon">≡</span>History</button>
+                <button type="button"><span class="nav-icon">?</span>Lessons</button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article>
+        <p class="screen-label">Review Page</p>
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="notch" aria-hidden="true"></div>
+            <div class="statusbar"><span>9:42</span><span>5G 91%</span></div>
+            <div class="phone-content review-shell">
+              <header class="app-top">
+                <div class="identity">
+                  <div class="avatar">A</div>
+                  <div>
+                    <strong>Review stack</strong>
+                    <span>Swipe to classify</span>
+                  </div>
+                </div>
+                <button class="icon-button" type="button" aria-label="Pause review">II</button>
+              </header>
+
+              <section class="review-progress">
+                <div>
+                  <strong>15 of 24 cases reviewed</strong>
+                  <span>Consensus shown only after submission</span>
+                  <div class="meter"><div></div></div>
+                </div>
+                <span class="review-count">+9</span>
+              </section>
+
+              <section class="card-stage" aria-label="Swipe review card">
+                <div class="stack-shadow"></div>
+                <div class="stack-shadow second"></div>
+                <article class="review-card">
+                  <div class="card-status">
+                    <span class="case-id">Case CR-2048</span>
+                    <span class="privacy-chip">Masked</span>
+                  </div>
+                  <div class="card-text">
+                    <span>Rephrased statement</span>
+                    <strong>“People from [GROUP] are dangerous and should be pushed out of public spaces.”</strong>
+                    <p>Original wording is hidden. This paraphrase preserves the potential target and harm signal.</p>
+                  </div>
+                  <div class="cue-grid" aria-label="Detected cues">
+                    <div class="cue-tile">
+                      <span>Target</span>
+                      <strong>Protected group reference is present</strong>
+                    </div>
+                    <div class="cue-tile">
+                      <span>Harm</span>
+                      <strong>Exclusion and threat-like framing</strong>
+                    </div>
+                    <div class="cue-tile">
+                      <span>Context</span>
+                      <strong>Not marked as counterspeech</strong>
+                    </div>
+                    <div class="cue-tile">
+                      <span>Privacy</span>
+                      <strong>No personal identifiers shown</strong>
+                    </div>
+                  </div>
+                  <div class="direction-pad">
+                    <div class="direction left">
+                      <b>←</b>
+                      <span>Not hate</span>
+                    </div>
+                    <div class="direction up">
+                      <b>↑</b>
+                      <span>Send to review</span>
+                    </div>
+                    <div class="direction right">
+                      <b>→</b>
+                      <span>Hate</span>
+                    </div>
+                  </div>
+                </article>
+              </section>
+
+              <div class="action-dock" aria-label="Review actions">
+                <button class="swipe-action reject" type="button"><b>×</b>Not hate</button>
+                <button class="swipe-action escalate" type="button"><b>↑</b>Review</button>
+                <button class="swipe-action confirm" type="button"><b>✓</b>Hate</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article>
+        <p class="screen-label">Review History</p>
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="notch" aria-hidden="true"></div>
+            <div class="statusbar"><span>9:44</span><span>5G 88%</span></div>
+            <div class="phone-content">
+              <header class="app-top">
+                <div class="identity">
+                  <div class="app-mark">CS</div>
+                  <div>
+                    <strong>Review history</strong>
+                    <span>Your submitted decisions</span>
+                  </div>
+                </div>
+                <button class="icon-button" type="button" aria-label="Filter history">⌕</button>
+              </header>
+
+              <div class="search-row">
+                <span>Search case ID or cue type</span>
+              </div>
+
+              <section class="history-summary" aria-label="History summary">
+                <div class="history-stat">
+                  <span>Hate</span>
+                  <strong>38</strong>
+                </div>
+                <div class="history-stat">
+                  <span>Not hate</span>
+                  <strong>51</strong>
+                </div>
+                <div class="history-stat">
+                  <span>Review</span>
+                  <strong>12</strong>
+                </div>
+              </section>
+
+              <div class="segment" role="tablist" aria-label="History filters">
+                <button class="active" type="button">All</button>
+                <button type="button">Hate</button>
+                <button type="button">Clear</button>
+                <button type="button">Review</button>
+              </div>
+
+              <section class="history-card">
+                <div class="panel-title">
+                  <div>
+                    <span>Feedback</span>
+                    <h3>Accuracy trend</h3>
+                  </div>
+                  <span class="tag safe">+4%</span>
+                </div>
+                <div class="accuracy-card">
+                  <span>Consensus alignment</span>
+                  <strong>86%</strong>
+                  <p>Most missed cases involved quoted speech or satire context. Lessons were added to your queue.</p>
+                </div>
+              </section>
+
+              <section class="history-list" aria-label="Submitted case history">
+                <article class="history-row">
+                  <div class="history-main">
+                    <div class="history-icon hate">✓</div>
+                    <div>
+                      <div class="history-topline">
+                        <strong>CR-2048</strong>
+                        <span class="decision-chip hate">Hate</span>
+                      </div>
+                      <p>Targeted exclusion cue with generalized harm toward [GROUP].</p>
+                      <span class="history-meta">Submitted today · matched consensus</span>
+                    </div>
+                  </div>
+                </article>
+                <article class="history-row">
+                  <div class="history-main">
+                    <div class="history-icon review">↑</div>
+                    <div>
+                      <div class="history-topline">
+                        <strong>CR-2039</strong>
+                        <span class="decision-chip review">Review</span>
+                      </div>
+                      <p>Ambiguous quote context; moderator panel requested.</p>
+                      <span class="history-meta">Yesterday · under review</span>
+                    </div>
+                  </div>
+                </article>
+              </section>
+
+              <nav class="bottom-nav" aria-label="Primary navigation">
+                <button type="button"><span class="nav-icon">⌂</span>Home</button>
+                <button type="button"><span class="nav-icon">◇</span>Review</button>
+                <button class="active" type="button"><span class="nav-icon">≡</span>History</button>
+                <button type="button"><span class="nav-icon">?</span>Lessons</button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article>
+        <p class="screen-label">Lessons</p>
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="notch" aria-hidden="true"></div>
+            <div class="statusbar"><span>9:45</span><span>5G 87%</span></div>
+            <div class="phone-content lessons-shell">
+              <header class="app-top">
+                <div class="identity">
+                  <div class="app-mark">CS</div>
+                  <div>
+                    <strong>Lessons</strong>
+                    <span>Train before reviewing</span>
+                  </div>
+                </div>
+                <button class="icon-button" type="button" aria-label="Training settings">⋯</button>
+              </header>
+
+              <section class="lesson-hero">
+                <span>Citizen training</span>
+                <h2>Spot cues without seeing private text</h2>
+                <p>Practice on protected restatements and learn when to escalate instead of guessing.</p>
+              </section>
+
+              <section class="lesson-card">
+                <div class="panel-title">
+                  <div>
+                    <span>Recommended</span>
+                    <h3>Next lessons</h3>
+                  </div>
+                  <span class="tag">4 modules</span>
+                </div>
+                <div class="lesson-list">
+                  <article class="lesson-row">
+                    <div class="lesson-icon">1</div>
+                    <div>
+                      <div class="lesson-topline">
+                        <strong>Target plus attack</strong>
+                      </div>
+                      <p>Identify protected-group references paired with hostility or inferiority claims.</p>
+                    </div>
+                    <span class="lesson-status">Done</span>
+                  </article>
+                  <article class="lesson-row">
+                    <div class="lesson-icon">2</div>
+                    <div>
+                      <div class="lesson-topline">
+                        <strong>Threat and exclusion cues</strong>
+                      </div>
+                      <p>Distinguish policy criticism from calls to remove or harm a group.</p>
+                    </div>
+                    <span class="lesson-status">12m</span>
+                  </article>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-title">
+                  <div>
+                    <span>Cue checklist</span>
+                    <h3>Before you swipe</h3>
+                  </div>
+                </div>
+                <div class="cue-list">
+                  <article class="cue-item">
+                    <div class="cue-stripe"></div>
+                    <div class="cue-copy">
+                      <strong>Who is targeted?</strong>
+                      <p>Look for a protected group or a masked group placeholder.</p>
+                    </div>
+                  </article>
+                  <article class="cue-item">
+                    <div class="cue-stripe"></div>
+                    <div class="cue-copy">
+                      <strong>Claim, cue, context</strong>
+                      <p>Threats, exclusion, or blanket blame raise risk. Swipe up when context is missing.</p>
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <nav class="bottom-nav" aria-label="Primary navigation">
+                <button type="button"><span class="nav-icon">⌂</span>Home</button>
+                <button type="button"><span class="nav-icon">◇</span>Review</button>
+                <button type="button"><span class="nav-icon">≡</span>History</button>
+                <button class="active" type="button"><span class="nav-icon">?</span>Lessons</button>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

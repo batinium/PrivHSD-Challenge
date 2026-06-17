@@ -16,7 +16,9 @@ from contextsafe_hsd.detectors import (
     detect_spans,
     merge_spans,
 )
+from contextsafe_hsd.cue_checks import row_cue_report
 from contextsafe_hsd.metrics import aggregate_metrics, row_metric_fast, row_metric_for_depth
+from contextsafe_hsd.models.dpmlm_rewrite_runtime import stable_row_seed
 from contextsafe_hsd.pipeline import PrivatizerConfig, apply_replacements, privatize_text
 from contextsafe_hsd.span_providers.base import SpanCandidate
 from contextsafe_hsd.style import length_drift, style_risk_count
@@ -55,6 +57,50 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 
 STRICT_RESIDUAL_QUASI_SOURCES = frozenset({"context_location", "regex"})
 STRICT_RESIDUAL_REGEX_QUASI_TYPES = frozenset({"AGE", "DATE", "ORGANIZATION"})
+LINEAR_SCORE_WEIGHTS = {
+    "direct_identifier_reduction": 4.0,
+    "quasi_identifier_reduction": 1.5,
+    "provider_span_credit_capped": 0.7,
+    "style_risk_reduction": 0.4,
+    "hsd_guarded_rewrite_credit_capped": 0.15,
+    "target_cue_retention": 1.5,
+    "utility_cue_retention": 1.5,
+    "character_utility_retention": 1.0,
+    "length_drift_penalty": -0.7,
+    "remaining_style_risk_penalty": -0.05,
+}
+LINEAR_SCORE_FORMULA = (
+    "direct_identifier_reduction*4.0 + "
+    "quasi_identifier_reduction*1.5 + "
+    "min(provider_accepted_span_count, 4)*0.7 + "
+    "style_risk_reduction*0.4 + "
+    "min(hsd_guarded_dpmlm_changed_tokens, 4)*0.15 + "
+    "target_cue_retention*1.5 + "
+    "utility_cue_retention*1.5 + "
+    "character_utility_retention - "
+    "length_drift*0.7 - "
+    "remaining_style_risk*0.05"
+)
+SELECTION_POLICY = {
+    "score_type": "linear_weighted_proxy",
+    "formula": LINEAR_SCORE_FORMULA,
+    "hard_rejects": [
+        "target_cue_loss",
+        "utility_cue_loss",
+        "direct_identifier_increase",
+        "new_identifier_signal",
+        "length_drift",
+    ],
+    "tie_breakers": [
+        "higher_linear_score",
+        "fewer_residual_direct_identifiers",
+        "fewer_residual_quasi_identifiers",
+        "higher_target_cue_retention",
+        "higher_utility_cue_retention",
+        "higher_character_utility_retention",
+        "shorter_output_text",
+    ],
+}
 
 
 def provider_count(metadata: dict[str, Any]) -> int:
@@ -96,6 +142,7 @@ def score_auto_candidate(
     )
     accepted_provider_spans = provider_count(candidate.metadata)
     strict_cleanup = candidate.metadata.get("strict_residual_cleanup") or {}
+    dpmlm_rewrite = candidate.metadata.get("dpmlm_rewrite") or {}
     character_retention = metric_float(metrics, "character_utility_retention", 1.0)
     target_retention = metric_float(metrics, "target_cue_retention", 1.0)
     utility_retention = metric_float(metrics, "utility_cue_retention", 1.0)
@@ -105,6 +152,36 @@ def score_auto_candidate(
         for entity_type in HIGH_CONFIDENCE_DIRECT_TYPES
     )
     drift = length_drift(original, candidate.text)
+    provider_span_credit = min(accepted_provider_spans, 4)
+    remaining_style_risk = max(0, original_style - style_reduction)
+    hsd_guard = dpmlm_rewrite.get("hsd_token_guard") or {}
+    hsd_guard_active = bool(hsd_guard.get("source_path"))
+    hsd_guarded_rewrite_credit = (
+        min(int(dpmlm_rewrite.get("changed_token_count", 0) or 0), 4)
+        if hsd_guard_active
+        else 0
+    )
+    linear_inputs = {
+        "direct_identifier_reduction": float(direct_reduction),
+        "quasi_identifier_reduction": float(quasi_reduction),
+        "provider_span_credit_capped": float(provider_span_credit),
+        "style_risk_reduction": float(style_reduction),
+        "hsd_guarded_rewrite_credit_capped": float(hsd_guarded_rewrite_credit),
+        "target_cue_retention": target_retention,
+        "utility_cue_retention": utility_retention,
+        "character_utility_retention": character_retention,
+        "length_drift_penalty": drift,
+        "remaining_style_risk_penalty": float(remaining_style_risk),
+    }
+    score_breakdown = {
+        name: {
+            "value": round(value, 4),
+            "weight": weight,
+            "contribution": round(value * weight, 4),
+        }
+        for name, value in linear_inputs.items()
+        for weight in [LINEAR_SCORE_WEIGHTS[name]]
+    }
     hard_rejects: list[str] = []
     if candidate.name != "balanced":
         if target_retention < 1.0:
@@ -121,21 +198,16 @@ def score_auto_candidate(
             hard_rejects.append("new_identifier_signal")
         if drift > 0.65:
             hard_rejects.append("length_drift")
-    score = (
-        direct_reduction * 4.0
-        + quasi_reduction * 1.5
-        + min(accepted_provider_spans, 4) * 0.7
-        + style_reduction * 0.4
-        + target_retention * 1.5
-        + utility_retention * 1.5
-        + character_retention
-        - drift * 0.7
-        - max(0, original_style - style_reduction) * 0.05
+    score = sum(
+        value * LINEAR_SCORE_WEIGHTS[name] for name, value in linear_inputs.items()
     )
     return {
         "name": candidate.name,
         "source": candidate.source,
         "score": round(score, 4),
+        "score_type": "linear_weighted_proxy",
+        "score_formula": LINEAR_SCORE_FORMULA,
+        "score_breakdown": score_breakdown,
         "accepted": not hard_rejects,
         "hard_reject_reasons": hard_rejects,
         "metrics": {
@@ -148,7 +220,9 @@ def score_auto_candidate(
             "length_drift": round(drift, 4),
             "style_risk_count": candidate_style,
             "provider_accepted_span_count": accepted_provider_spans,
+            "hsd_guarded_rewrite_credit": hsd_guarded_rewrite_credit,
             "strict_residual_cleanup": strict_cleanup or None,
+            "dpmlm_rewrite": dpmlm_rewrite or None,
             "hard_privacy_cleanup": hard_privacy_cleanup,
         },
     }
@@ -700,7 +774,7 @@ class AutoPipelineEngine:
                 metadata={},
             )
         ]
-        if state.decision.use_style_candidate or self.context.config.style_scrub:
+        if self.context.config.style_scrub and state.decision.use_style_candidate:
             style_result = privatize_text(
                 state.original,
                 PrivatizerConfig(
@@ -729,7 +803,101 @@ class AutoPipelineEngine:
                     spans=state.provider_candidates,
                 )
             )
+        if (
+            self.context.config.dpmlm_rewrite
+            and state.profile.style_risk_count
+            >= self.context.config.dpmlm_min_row_style_risk
+        ):
+            dpmlm_candidate = self._candidate_from_dpmlm(state, base=candidates[-1])
+            if dpmlm_candidate is not None:
+                candidates.append(dpmlm_candidate)
         return self._with_strict_residual_cleanup_candidates(candidates)
+
+    def _candidate_from_dpmlm(
+        self,
+        state: AutoRowState,
+        *,
+        base: AutoCandidate,
+    ) -> AutoCandidate | None:
+        runtime = self.context.ensure_dpmlm_rewriter()
+        if runtime is None:
+            return None
+        extra_protected_tokens = self.context.hsd_protected_tokens_for(
+            row_id=state.row_id,
+            row_index=state.row_index,
+        )
+        try:
+            result = runtime.rewrite(
+                base.text,
+                seed=stable_row_seed(
+                    self.context.config.dpmlm_random_seed,
+                    state.row_index,
+                    state.original,
+                ),
+                max_rewrite_tokens=self.context.config.dpmlm_max_rewrite_tokens,
+                min_eligible_score=self.context.config.dpmlm_min_eligible_score,
+                extra_protected_tokens=extra_protected_tokens,
+            )
+        except Exception as exc:
+            state.model_errors.append(
+                {
+                    "model": "dpmlm_rewriter",
+                    "error_class": type(exc).__name__,
+                }
+            )
+            self.context.audit_counters[
+                f"model_runtime_error:dpmlm_rewriter:{type(exc).__name__}"
+            ] += 1
+            return None
+        if result.changed_token_count == 0 or result.text == base.text:
+            self.context.audit_counters["dpmlm_rewrite_skipped:no_token_change"] += 1
+            return None
+        metrics = row_metric_fast(state.original, result.text)
+        character_retention = metric_float(
+            metrics,
+            "character_utility_retention",
+            1.0,
+        )
+        drift = length_drift(state.original, result.text)
+        cue_report = row_cue_report(
+            row_index=state.row_index,
+            row_id=state.row_id,
+            original=state.original,
+            privatized=result.text,
+            threshold=1.0,
+        )
+        if cue_report["loss_groups"]:
+            self.context.audit_counters["dpmlm_rewrite_rejected:cue_loss"] += 1
+            return None
+        if character_retention < self.context.config.dpmlm_min_character_retention:
+            self.context.audit_counters[
+                "dpmlm_rewrite_rejected:low_character_retention"
+            ] += 1
+            return None
+        if drift > self.context.config.dpmlm_max_length_drift:
+            self.context.audit_counters["dpmlm_rewrite_rejected:length_drift"] += 1
+            return None
+        metadata = dict(base.metadata)
+        metadata["dpmlm_rewrite"] = {
+            **result.metadata(),
+            "base_candidate": base.name,
+            "model_id": getattr(runtime, "model_id", "unknown"),
+            "model_path": getattr(runtime, "model_path", "unknown"),
+            "epsilon": round(float(getattr(runtime, "epsilon", 0.0)), 6),
+            "hsd_token_guard": {
+                "source_path": self.context.config.hsd_token_importance_path,
+                "protect_threshold": self.context.config.hsd_token_protect_threshold,
+                "protected_token_count": len(extra_protected_tokens),
+            },
+            "character_utility_retention": character_retention,
+            "length_drift": round(drift, 4),
+        }
+        return AutoCandidate(
+            name=f"{base.name}_dpmlm_light",
+            text=result.text,
+            source=f"{base.source}+dpmlm_light",
+            metadata=metadata,
+        )
 
     def _with_strict_residual_cleanup_candidates(
         self,
@@ -853,6 +1021,7 @@ class AutoPipelineEngine:
             "changed": state.original != chosen_text,
             "risk_profile": state.profile.audit_record(),
             "routing": state.decision.audit_record(),
+            "selection_policy": SELECTION_POLICY,
             "accepted_provider_spans_by_provider": dict(
                 sorted(accepted_provider_counts.items())
             ),

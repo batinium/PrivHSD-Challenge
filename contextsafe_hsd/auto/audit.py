@@ -181,6 +181,20 @@ def build_stage_summary(
                 "mode": config.baseline_mode,
                 "always_run": True,
             },
+            "style_candidate": {
+                "enabled": bool(config.style_scrub),
+                "policy": (
+                    "routed only when the cheap profile reports "
+                    "style_risk_count >= 2"
+                ),
+                "simplify_language": bool(
+                    getattr(config, "style_simplify_language", True)
+                ),
+                "candidate_count": int(candidate_name_counts.get("style_scrubbed", 0)),
+                "strict_candidate_count": int(
+                    candidate_name_counts.get("style_scrubbed_strict_pii", 0)
+                ),
+            },
             "pii_assist": pii_assist_summary(
                 provider_statuses,
                 provider_load_counts,
