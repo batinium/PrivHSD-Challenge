@@ -498,6 +498,7 @@ def build_final_pipeline_rows(
     author_group_min_author_rows: int = 2,
     generalize_targets: bool | None = False,
     style_scrub: bool = True,
+    style_simplify_language: bool = True,
     provider_factories: Mapping[str, Any] | None = None,
     model_factories: Mapping[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
@@ -557,6 +558,7 @@ def build_final_pipeline_rows(
         author_group_min_author_rows=author_group_min_author_rows,
         generalize_targets=generalize_targets,
         style_scrub=style_scrub,
+        style_simplify_language=style_simplify_language,
         official_mode=False,
     )
     context = AutoPipelineContext.create(
@@ -682,6 +684,7 @@ def build_final_pipeline_rows(
             "hf_hsd_max_length": config.hf_hsd_max_length,
             "author_group_masking": config.author_group_masking,
             "style_scrub": config.style_scrub,
+            "style_simplify_language": config.style_simplify_language,
         },
     }
 
@@ -729,6 +732,7 @@ def run_final_csv_pipeline(
     author_group_min_author_rows: int = 2,
     generalize_targets: bool | None = False,
     style_scrub: bool = True,
+    style_simplify_language: bool = True,
     provider_factories: Mapping[str, Any] | None = None,
     model_factories: Mapping[str, Any] | None = None,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
@@ -772,6 +776,7 @@ def run_final_csv_pipeline(
         author_group_min_author_rows=author_group_min_author_rows,
         generalize_targets=generalize_targets,
         style_scrub=style_scrub,
+        style_simplify_language=style_simplify_language,
         provider_factories=provider_factories,
         model_factories=model_factories,
         progress_callback=progress_callback,
@@ -819,6 +824,7 @@ def run_final_csv_pipeline(
         "metric_depth": metric_depth,
         "replace_text": True,
         "style_scrub": result["config"]["style_scrub"],
+        "style_simplify_language": result["config"]["style_simplify_language"],
         "author_group_masking": result["config"]["author_group_masking"],
         "exact_format_submission": True,
         "llm_review": result["config"]["llm_review"],

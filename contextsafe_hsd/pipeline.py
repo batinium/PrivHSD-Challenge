@@ -23,6 +23,7 @@ class PrivatizerConfig:
     generalize_targets: bool | None = None
     include_context_detectors: bool = True
     style_scrub: bool = False
+    style_simplify_language: bool = True
 
     def __post_init__(self) -> None:
         if self.mode not in MODES:
@@ -153,7 +154,10 @@ def privatize_text(
         "style_counts_by_type": {},
     }
     if config.style_scrub:
-        style_result = scrub_style(privatized)
+        style_result = scrub_style(
+            privatized,
+            simplify_language=config.style_simplify_language,
+        )
         privatized = style_result.text
         transformations = transformations + style_result.transformations
         style_metrics = dict(style_result.metrics)

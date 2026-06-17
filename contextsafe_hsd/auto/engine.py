@@ -707,6 +707,9 @@ class AutoPipelineEngine:
                     mode=self.context.config.baseline_mode,
                     generalize_targets=self.context.config.generalize_targets,
                     style_scrub=True,
+                    style_simplify_language=(
+                        self.context.config.style_simplify_language
+                    ),
                 ),
             )
             candidates.append(

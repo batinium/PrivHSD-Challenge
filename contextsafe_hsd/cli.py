@@ -224,6 +224,15 @@ def build_parser() -> argparse.ArgumentParser:
             "target/action/negation cues. On by default."
         ),
     )
+    protect.add_argument(
+        "--style-simplify-language",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "When style scrubbing is enabled, simplify a small deterministic "
+            "set of high-register words and phrases. On by default."
+        ),
+    )
     add_author_group_masking_arguments(protect)
 
     validate = subparsers.add_parser(
@@ -356,6 +365,7 @@ def main(argv: list[str] | None = None) -> int:
                 author_group_min_author_rows=args.author_group_min_author_rows,
                 generalize_targets=False,
                 style_scrub=args.style_scrub,
+                style_simplify_language=args.style_simplify_language,
                 progress_callback=make_progress_printer()
                 if args.progress
                 else None,

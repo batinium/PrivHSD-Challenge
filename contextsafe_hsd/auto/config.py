@@ -46,6 +46,7 @@ class AutoPipelineConfig:
     hf_hsd_max_length: int = DEFAULT_HF_HSD_MAX_LENGTH
     generalize_targets: bool | None = False
     style_scrub: bool = True
+    style_simplify_language: bool = True
     official_mode: bool = True
     local_llm_enabled: bool = False
     local_llm_endpoint: str = "http://localhost:1234/v1/chat/completions"
