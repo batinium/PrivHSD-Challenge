@@ -10,7 +10,15 @@ The working tree was clean before `plan.md` was added.
 
 ## Goal
 
-Turn the current Glimo / PrivHSD backend pipeline into a reusable Python package and publish the custom DeHateBERT checkpoint on Hugging Face.
+Turn the current Glimo / PrivHSD active backend pipeline into a reusable Python package and publish the custom DeHateBERT checkpoint on Hugging Face.
+
+Build the PyPI package in a new repo-root directory:
+
+```text
+glimo-hsd/
+```
+
+The package should be self-contained for publication. The existing app/backend code can be used as the source of truth while extracting logic, but the built wheel must not depend on importing files from the parent repo.
 
 The intended external user experience:
 
@@ -22,7 +30,7 @@ result = process_csv(
     config=PipelineConfig(
         text_col="text",
         label_col="hs",
-        model_id="batinium/glimo-dehatebert-privhsd",
+        model_id="batinium/glimo-dehatebert-hsd",
         restatement_backend="qwen",
         final_scrub=True,
     ),
@@ -39,7 +47,7 @@ glimo-hsd process input.csv \
   --text-col text \
   --label-col hs \
   --out outputs/run_001 \
-  --model-id batinium/glimo-dehatebert-privhsd \
+  --model-id batinium/glimo-dehatebert-hsd \
   --final-scrub
 ```
 
@@ -47,9 +55,12 @@ glimo-hsd process input.csv \
 
 - Do not package model weights inside the PyPI package.
 - Do not publish raw challenge data or uploaded admin CSVs.
+- Do not touch the mobile app, admin dashboard frontend, or reviewer UI in this packaging phase.
 - Do not make the mobile app depend on the package directly.
 - Do not require a local LLM for classification-only use.
 - Do not break the existing admin/backend flow while extracting the package API.
+- Do not include DPMLM, retired experiments, notebooks, old challenge scripts, or legacy systems in the package.
+- Do not run full dataset pipeline jobs during implementation verification.
 
 ## Recommended Naming
 
@@ -67,9 +78,44 @@ import glimo_hsd
 
 Low-risk migration option:
 
-- Keep existing `contextsafe_hsd` internals initially.
-- Add `src/glimo_hsd/` as the stable public wrapper namespace.
-- Move internals only after tests prove parity.
+- Keep existing `contextsafe_hsd` internals in place initially.
+- Create `glimo-hsd/src/glimo_hsd/` as the stable public package namespace.
+- Copy or extract only active pipeline modules into `glimo-hsd/src/glimo_hsd/`.
+- Do not rename or delete existing backend modules until the isolated package passes tests.
+- After the package is stable, optionally update the backend to import from `glimo_hsd`; keep that as a later integration step.
+
+## Repository Boundary
+
+The new package lives under:
+
+```text
+/home/bati/projects/PrivHSD-Challenge/glimo-hsd/
+```
+
+That directory should contain everything needed for PyPI:
+
+```text
+glimo-hsd/
+  pyproject.toml
+  README.md
+  LICENSE
+  src/glimo_hsd/
+  tests/
+  examples/
+  docs/
+```
+
+Keep existing application code outside this package:
+
+```text
+contextsafe_hsd/       existing backend/app code, source reference only
+mobile/                do not touch in this phase
+workbench/             do not touch in this phase
+data/                  never package
+dpmlm_artefacts/       never package
+```
+
+The package should not import `contextsafe_hsd` in a release build. Temporary local adapters are acceptable only during early extraction and must be removed before publishing.
 
 ## Expected Deliverables
 
@@ -131,45 +177,67 @@ result.output_dir
 Target structure:
 
 ```text
-src/glimo_hsd/
-  __init__.py
-  config.py
-  pipeline.py
-  results.py
-  io.py
-  cli.py
+glimo-hsd/
+  pyproject.toml
+  README.md
+  LICENSE
+  src/
+    glimo_hsd/
+      __init__.py
+      config.py
+      pipeline.py
+      results.py
+      io.py
+      cli.py
 
-  steps/
-    __init__.py
-    pii.py
-    classify.py
-    token_importance.py
-    restate.py
-    deviation_audit.py
-    final_scrub.py
+      steps/
+        __init__.py
+        pii.py
+        classify.py
+        token_importance.py
+        restate.py
+        deviation_audit.py
+        final_scrub.py
 
-  models/
-    __init__.py
-    dehatebert.py
-    registry.py
+      models/
+        __init__.py
+        dehatebert.py
+        registry.py
 
-  backends/
-    __init__.py
-    qwen.py
-    hf_transformers.py
-    local_http.py
+      backends/
+        __init__.py
+        qwen.py
+        hf_transformers.py
+        local_http.py
 
-  schemas/
-    __init__.py
-    columns.py
-    manifest.py
+      schemas/
+        __init__.py
+        columns.py
+        manifest.py
+
+  tests/
+    test_pipeline.py
+    test_cli.py
+    test_manifest.py
+
+  examples/
+    process_labeled_csv.py
+    process_unlabeled_csv.py
+    classify_only.py
+    audit_restatements.py
+
+  scripts/
+    export_dehatebert_for_hf.py
+
+  docs/
+    python_package.md
 ```
 
-If moving code is too risky for the first pass, create wrapper modules in `src/glimo_hsd/` that call current `contextsafe_hsd` functions.
+If moving code is too risky for the first pass, create temporary wrapper modules in `glimo-hsd/src/glimo_hsd/` that call current `contextsafe_hsd` functions for local parity tests. Before PyPI publishing, replace those wrappers with copied/extracted active pipeline code so the package is self-contained.
 
 ## Dependency Strategy
 
-Use optional extras in `pyproject.toml`.
+Use optional extras in `glimo-hsd/pyproject.toml`.
 
 Suggested extras:
 
@@ -185,7 +253,7 @@ glimo-hsd[all]         all runtime extras
 Model weights should be loaded from:
 
 ```text
-batinium/glimo-dehatebert-privhsd
+batinium/glimo-dehatebert-hsd
 ```
 
 or from a local model directory.
@@ -246,7 +314,7 @@ output_dir/
   "source_path": "...",
   "text_col": "text",
   "label_col": "hs",
-  "model_id": "batinium/glimo-dehatebert-privhsd",
+  "model_id": "batinium/glimo-dehatebert-hsd",
   "model_revision": null,
   "steps": {
     "pii_scrub": {"status": "complete", "path": "scrubbed.csv"},
@@ -284,6 +352,44 @@ source_hash
 ```
 
 Citizen-facing reviewer exports can stay minimal unless lookup requires the hashes.
+
+## Runtime Verification Sample Policy
+
+After implementation, verify runtime behavior with only a 5-row sample CSV. Do not run the full dataset or large cached jobs unless the user explicitly asks.
+
+The 5-row sample should include:
+
+```text
+2 hate speech rows
+3 normal rows
+```
+
+Use a package-local temporary output directory, for example:
+
+```text
+glimo-hsd/tmp/sample_run/
+```
+
+That directory must be ignored by git and removable after verification.
+
+Recommended sample commands:
+
+```bash
+cd glimo-hsd
+python -m glimo_hsd.cli process tests/fixtures/sample_5.csv \
+  --text-col text \
+  --label-col hs \
+  --out tmp/sample_run \
+  --final-scrub
+```
+
+If local LLM restatement is unavailable or would be slow, run the sample once with:
+
+```bash
+--restatement-backend none
+```
+
+Then run one 5-row restatement test only after the backend is configured.
 
 ## Labeled and Unlabeled CSV Behavior
 
@@ -339,7 +445,7 @@ PipelineConfig(
 Publish the custom DeHateBERT model as a separate model repo:
 
 ```text
-batinium/glimo-dehatebert-privhsd
+batinium/glimo-dehatebert-hsd
 ```
 
 Recommended contents:
@@ -387,14 +493,14 @@ Upload commands later:
 
 ```bash
 hf auth whoami
-hf repos create batinium/glimo-dehatebert-privhsd --type model --exist-ok
-hf upload batinium/glimo-dehatebert-privhsd path/to/exported_model --type model
+hf repos create batinium/glimo-dehatebert-hsd --type model --exist-ok
+hf upload batinium/glimo-dehatebert-hsd path/to/exported_model --type model
 ```
 
 If the model folder is large:
 
 ```bash
-hf upload-large-folder batinium/glimo-dehatebert-privhsd path/to/exported_model --type model
+hf upload-large-folder batinium/glimo-dehatebert-hsd path/to/exported_model --type model
 ```
 
 ## PyPI Release Plan
@@ -404,6 +510,7 @@ Use TestPyPI first.
 Build:
 
 ```bash
+cd glimo-hsd
 python -m pip install -U build twine
 python -m build
 twine check dist/*
@@ -433,26 +540,31 @@ twine upload dist/*
 
 ### Phase 0: Safety Check
 
-- Confirm `git status --short --branch` is clean.
+- Confirm `git status --short --branch`.
+- If there are unrelated frontend changes, leave them alone.
+- Do not edit files under `mobile/` or frontend directories for this package work.
+- Ensure files to be touched are limited to `glimo-hsd/`, package docs, package tests, and possibly small backend reference tests if absolutely needed.
 - Do not commit `data/admin_uploads/`, `data/outputs/`, model artifacts, or raw datasets.
-- Run baseline tests before packaging changes.
+- Run backend baseline tests before packaging changes.
 
 Baseline commands:
 
 ```bash
 python -m ruff check contextsafe_hsd tests scripts
 python -m pytest -q
-cd mobile && npm run lint
-cd mobile && npx tsc --noEmit
 ```
 
 ### Phase 1: Add Package Skeleton
 
-- Add `src/glimo_hsd/`.
+- Add `glimo-hsd/`.
+- Add `glimo-hsd/src/glimo_hsd/`.
 - Add `glimo_hsd.__init__`.
 - Add config/result dataclasses.
-- Add wrapper around current backend bundle function.
-- Add minimal `pyproject.toml` packaging metadata if not already suitable.
+- Add package-local tests under `glimo-hsd/tests/`.
+- Add package-local examples under `glimo-hsd/examples/`.
+- Add `glimo-hsd/pyproject.toml`.
+- Add a wrapper around the current backend bundle function only if needed for first parity tests.
+- Mark any wrapper that imports `contextsafe_hsd` as temporary and not publishable.
 
 ### Phase 2: Extract Stable Pipeline Function
 
@@ -463,6 +575,8 @@ process_csv(input_csv: str | Path, config: PipelineConfig) -> PipelineResult
 ```
 
 This should call the same backend code used by the admin upload/job flow.
+
+For the first local version, it may call the existing backend function. For the PyPI version, the active implementation must live inside `glimo-hsd/src/glimo_hsd/`.
 
 Acceptance:
 
@@ -511,6 +625,7 @@ Acceptance:
 - CLI can process a labeled CSV.
 - CLI can process an unlabeled CSV by classifying first.
 - CLI reuses cached outputs unless config/input changes.
+- Runtime acceptance should use only the 5-row sample CSV.
 
 ### Phase 5: Model Loader Cleanup
 
@@ -536,9 +651,9 @@ Acceptance:
 Create an export script:
 
 ```bash
-python scripts/export_dehatebert_for_hf.py \
+python glimo-hsd/scripts/export_dehatebert_for_hf.py \
   --checkpoint path/to/checkpoint \
-  --out dist/hf/glimo-dehatebert-privhsd
+  --out dist/hf/glimo-dehatebert-hsd
 ```
 
 Script should write:
@@ -561,11 +676,11 @@ Acceptance:
 Add:
 
 ```text
-docs/python_package.md
-examples/process_labeled_csv.py
-examples/process_unlabeled_csv.py
-examples/classify_only.py
-examples/audit_restatements.py
+glimo-hsd/docs/python_package.md
+glimo-hsd/examples/process_labeled_csv.py
+glimo-hsd/examples/process_unlabeled_csv.py
+glimo-hsd/examples/classify_only.py
+glimo-hsd/examples/audit_restatements.py
 ```
 
 README should include:
@@ -589,12 +704,16 @@ Add tests for:
 - CLI smoke test.
 - Result paths.
 - No raw upload/cache data committed.
+- 5-row fixture pipeline smoke behavior.
 
 Test command:
 
 ```bash
+cd glimo-hsd
 python -m pytest -q
 ```
+
+Do not use large source CSVs in package tests. Keep fixtures tiny and synthetic.
 
 ### Phase 9: Release
 
@@ -656,31 +775,46 @@ python -m ruff check contextsafe_hsd tests scripts
 python -m pytest -q
 ```
 
+Do not run or modify the mobile/frontend checks for this packaging task unless the user explicitly asks.
+
 Then inspect the current backend bundle entry points:
 
 ```bash
 rg "bundle|Pipeline|restatement|dehatebert|token_importance|manifest" contextsafe_hsd scripts tests
 ```
 
-Create `src/glimo_hsd/` wrappers around existing behavior first. Do not move large chunks until the wrapper API is tested.
+Create a new package directory:
+
+```bash
+mkdir -p glimo-hsd/src/glimo_hsd
+mkdir -p glimo-hsd/tests glimo-hsd/examples glimo-hsd/scripts glimo-hsd/docs
+```
+
+Create `glimo-hsd/src/glimo_hsd/` wrappers around existing active behavior first if needed. Do not move large chunks until the wrapper API is tested. Before publishing, remove any dependency on importing `contextsafe_hsd` from inside the package.
 
 Minimum first PR/commit should add:
 
-- `src/glimo_hsd/__init__.py`
-- `src/glimo_hsd/config.py`
-- `src/glimo_hsd/results.py`
-- `src/glimo_hsd/pipeline.py`
-- `src/glimo_hsd/cli.py`
+- `glimo-hsd/pyproject.toml`
+- `glimo-hsd/README.md`
+- `glimo-hsd/src/glimo_hsd/__init__.py`
+- `glimo-hsd/src/glimo_hsd/config.py`
+- `glimo-hsd/src/glimo_hsd/results.py`
+- `glimo-hsd/src/glimo_hsd/pipeline.py`
+- `glimo-hsd/src/glimo_hsd/cli.py`
 - tests for `process_csv`
-- package metadata updates
+- package metadata updates inside `glimo-hsd/`
 
 Acceptance for first commit:
 
 ```bash
-python -m ruff check contextsafe_hsd glimo_hsd tests scripts
+python -m ruff check contextsafe_hsd tests scripts
+python -m pytest -q
+cd glimo-hsd
+python -m ruff check src tests
 python -m pytest -q
 python -m build
 ```
 
-If `src/` layout is used, adjust ruff/test commands accordingly.
+The first publishable release must also pass an isolated install test from the built wheel, outside the monorepo.
 
+For runtime pipeline verification after implementation, use only the 5-row sample policy above. Avoid generating large caches or outputs.

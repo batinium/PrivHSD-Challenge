@@ -14,12 +14,18 @@ import {
   reviewSeedItems,
   tutorialReviewItems,
 } from '@/data/review-data';
+import { staticReviewSeedItems } from '@/data/static-review-pool';
+import { isStaticReviewMode } from '@/config/runtime';
 import { useOnboarding } from '@/state/onboarding';
 
 export type ClassifiedDecision = Exclude<ReviewDecision, 'pending'>;
 const API_BASE_URL = 'http://127.0.0.1:8765';
 const REVIEW_BATCH_SIZE = 5;
 const REVIEW_POOL_LIMIT = 100;
+const bundledReviewSeedItems =
+  isStaticReviewMode && staticReviewSeedItems.length > 0
+    ? staticReviewSeedItems
+    : reviewSeedItems;
 
 export type ReviewerStats = {
   id: string;
@@ -179,13 +185,15 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
     isTutorialVisible,
     nextTutorialStep,
   } = useOnboarding();
-  const [reviewPool, setReviewPool] = useState<ReviewItem[]>(reviewSeedItems);
-  const [items, setItems] = useState<ReviewItem[]>(() => drawReviewBatch(reviewSeedItems));
+  const [reviewPool, setReviewPool] = useState<ReviewItem[]>(bundledReviewSeedItems);
+  const [items, setItems] = useState<ReviewItem[]>(() => drawReviewBatch(bundledReviewSeedItems));
   const [tutorialItems, setTutorialItems] = useState<ReviewItem[]>(tutorialReviewItems);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTutorialIndex, setActiveTutorialIndex] = useState(0);
   const [isLoadingReviewBatch, setIsLoadingReviewBatch] = useState(false);
-  const [reviewQueueMessage, setReviewQueueMessage] = useState('Demo batch');
+  const [reviewQueueMessage, setReviewQueueMessage] = useState(
+    isStaticReviewMode ? 'Frozen batch' : 'Demo batch',
+  );
   const [sessionStats, setSessionStats] = useState<ReviewerStats>({
     ...currentReviewerBase,
     totalClassified: 0,
@@ -226,6 +234,13 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
 
     setIsLoadingReviewBatch(true);
     try {
+      if (isStaticReviewMode) {
+        setReviewPool(bundledReviewSeedItems);
+        setItems(drawReviewBatch(bundledReviewSeedItems));
+        setActiveIndex(0);
+        setReviewQueueMessage('Frozen batch');
+        return;
+      }
       const livePool = await fetchReviewPool();
       const nextPool = livePool.length > 0 ? livePool : reviewSeedItems;
       setReviewPool(nextPool);
@@ -393,6 +408,10 @@ function toStanding(stats: ReviewerStats): ReviewerStanding {
 }
 
 async function fetchReviewPool(): Promise<ReviewItem[]> {
+  if (isStaticReviewMode) {
+    return bundledReviewSeedItems;
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/review-seed?limit=${REVIEW_POOL_LIMIT}`);
   if (!response.ok) {
     throw new Error(`Review queue request failed with ${response.status}`);

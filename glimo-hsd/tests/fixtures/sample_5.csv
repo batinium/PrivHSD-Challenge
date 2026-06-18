@@ -1,0 +1,6 @@
+id,text,hs,meta
+1,Email john@example.com while attacking immigrants with hostile abuse.,1,keep-a
+2,The comment quotes a slur and says a religious group is inferior.,1,keep-b
+3,Please review ticket CASE-1234 for the community meeting.,0,keep-c
+4,Contact me at https://example.com for the school schedule.,0,keep-d
+5,I disagree with the policy but do not attack any group.,0,keep-e

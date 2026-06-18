@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glimo-hsd"
+version = "0.1.1"
+description = "Glimo HSD privacy-preserving CSV pipeline for harmful-speech datasets."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Glimo" }]
+keywords = ["privacy", "hate-speech-detection", "nlp", "text-anonymization"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = []
+
+[project.optional-dependencies]
+hf = [
+  "huggingface-hub>=0.24",
+  "safetensors>=0.4",
+  "torch>=2.2",
+  "transformers>=4.43",
+]
+llm = []
+api = ["fastapi>=0.115", "uvicorn>=0.30"]
+dev = ["build>=1.2", "pytest>=8.0", "ruff>=0.8", "twine>=5.0"]
+all = [
+  "fastapi>=0.115",
+  "huggingface-hub>=0.24",
+  "safetensors>=0.4",
+  "torch>=2.2",
+  "transformers>=4.43",
+  "uvicorn>=0.30",
+]
+
+[project.urls]
+Homepage = "https://huggingface.co/batinium/glimo-dehatebert-hsd"
+Repository = "https://huggingface.co/batinium/glimo-dehatebert-hsd"
+
+[project.scripts]
+glimo-hsd = "glimo_hsd.cli:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

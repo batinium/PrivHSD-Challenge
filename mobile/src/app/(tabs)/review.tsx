@@ -2,10 +2,13 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   Animated,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  type TextStyle,
   View,
+  type ViewStyle,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -25,6 +28,49 @@ import { guardRestatement } from '@/utils/privacy';
 
 const SWIPE_THRESHOLD = 110;
 const SWIPE_EXIT_DISTANCE = 420;
+const MIN_RESTATEMENT_FONT_SIZE = 8;
+const RESTATEMENT_AVERAGE_CHAR_WIDTH = 0.52;
+const RESTATEMENT_LINE_HEIGHT_RATIO = 4 / 3;
+
+type BrowserSelectionHost = {
+  getSelection?: () => { removeAllRanges?: () => void } | null;
+};
+
+type WebSwipeSurfaceStyle = ViewStyle & {
+  WebkitUserSelect?: 'none';
+  touchAction?: 'none';
+  userSelect?: 'none';
+};
+
+type WebTextFitStyle = TextStyle & {
+  overflowWrap?: 'anywhere';
+  wordBreak?: 'break-word';
+};
+
+const WEB_SWIPE_SURFACE_STYLE: WebSwipeSurfaceStyle | null =
+  Platform.OS === 'web'
+    ? {
+        WebkitUserSelect: 'none',
+        touchAction: 'none',
+        userSelect: 'none',
+      }
+    : null;
+
+const WEB_RESTATEMENT_TEXT_STYLE: WebTextFitStyle | null =
+  Platform.OS === 'web'
+    ? {
+        overflowWrap: 'anywhere',
+        wordBreak: 'break-word',
+      }
+    : null;
+
+function clearBrowserSelection() {
+  if (Platform.OS !== 'web') {
+    return;
+  }
+
+  (globalThis as BrowserSelectionHost).getSelection?.()?.removeAllRanges?.();
+}
 
 export default function CitizenReview() {
   const rootRef = useRef<View>(null);
@@ -233,8 +279,10 @@ export default function CitizenReview() {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => !isSubmittingDecision,
         onMoveShouldSetPanResponder: (_, gesture) =>
           !isSubmittingDecision && (Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8),
+        onPanResponderGrant: clearBrowserSelection,
         onPanResponderMove: Animated.event([null, { dx: position.x, dy: position.y }], {
           useNativeDriver: false,
         }),
@@ -252,6 +300,8 @@ export default function CitizenReview() {
             resetCard();
           }
         },
+        onPanResponderTerminationRequest: () => false,
+        onShouldBlockNativeResponder: () => true,
       }),
     [commitDecision, isSubmittingDecision, position, resetCard],
   );
@@ -325,6 +375,7 @@ export default function CitizenReview() {
                   {...panResponder.panHandlers}
                   style={[
                     styles.animatedCard,
+                    WEB_SWIPE_SURFACE_STYLE,
                     { height: cardHeight, width: cardWidth },
                     {
                       transform: [
@@ -390,7 +441,9 @@ export default function CitizenReview() {
                         transform: [{ rotate: '-14deg' }, { scale: rejectScale }],
                       },
                     ]}>
-                    <Text style={[styles.decisionBadgeText, styles.rejectBadgeText]}>NO</Text>
+                    <Text selectable={false} style={[styles.decisionBadgeText, styles.rejectBadgeText]}>
+                      NO
+                    </Text>
                   </Animated.View>
                   <Animated.View
                     pointerEvents="none"
@@ -402,7 +455,9 @@ export default function CitizenReview() {
                         transform: [{ rotate: '12deg' }, { scale: confirmScale }],
                       },
                     ]}>
-                    <Text style={[styles.decisionBadgeText, styles.confirmBadgeText]}>YES</Text>
+                    <Text selectable={false} style={[styles.decisionBadgeText, styles.confirmBadgeText]}>
+                      YES
+                    </Text>
                   </Animated.View>
                   <Animated.View
                     pointerEvents="none"
@@ -414,7 +469,9 @@ export default function CitizenReview() {
                         transform: [{ rotate: '-3deg' }, { scale: uncertainScale }],
                       },
                     ]}>
-                    <Text style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>
+                    <Text
+                      selectable={false}
+                      style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>
                       REVIEW
                     </Text>
                   </Animated.View>
@@ -499,11 +556,44 @@ function ReviewCard({
 }: ReviewCardProps) {
   const guarded = guardRestatement(item.restatement);
   const caseId = makePublicCaseId(item.source, item.protectedText);
+  const baseRestatementFontSize = compact ? 21 : 24;
+  const reservedCardHeight = compact ? 96 : 108;
+  const availableTextHeight = Math.max(cardHeight - reservedCardHeight, compact ? 210 : 232);
+  const availableTextWidth = Math.max(cardWidth - (compact ? 32 : 40), 220);
+  const normalizedRestatementLength = Math.max(
+    1,
+    guarded.text.replace(/\s+/g, ' ').trim().length,
+  );
+  let fittedRestatementFontSize = baseRestatementFontSize;
+
+  while (fittedRestatementFontSize > MIN_RESTATEMENT_FONT_SIZE) {
+    const lineHeight = Math.ceil(fittedRestatementFontSize * RESTATEMENT_LINE_HEIGHT_RATIO);
+    const charsPerLine = Math.max(
+      12,
+      Math.floor(
+        availableTextWidth /
+          (fittedRestatementFontSize * RESTATEMENT_AVERAGE_CHAR_WIDTH),
+      ),
+    );
+    const estimatedLineCount = Math.ceil(normalizedRestatementLength / charsPerLine);
+
+    if (estimatedLineCount * lineHeight <= availableTextHeight) {
+      break;
+    }
+
+    fittedRestatementFontSize -= 1;
+  }
+
+  const fittedRestatementStyle = {
+    fontSize: fittedRestatementFontSize,
+    lineHeight: Math.ceil(fittedRestatementFontSize * RESTATEMENT_LINE_HEIGHT_RATIO),
+  };
 
   return (
     <View
       style={[
         styles.card,
+        WEB_SWIPE_SURFACE_STYLE,
         { height: cardHeight, width: cardWidth },
         compact && styles.cardCompact,
         stacked && styles.cardStacked,
@@ -515,12 +605,25 @@ function ReviewCard({
         contentFit="contain"
       />
       <View style={styles.cardTop}>
-        <Text style={styles.caseText}>{caseId}</Text>
+        <Text selectable={false} style={styles.caseText}>
+          {caseId}
+        </Text>
       </View>
 
       <View style={styles.restatementBlock}>
-        <Text style={styles.cardLabel}>Glimo protected restatement</Text>
-        <Text style={[styles.restatementText, compact && styles.restatementTextCompact]}>
+        <Text selectable={false} style={styles.cardLabel}>
+          Glimo protected restatement
+        </Text>
+        <Text
+          adjustsFontSizeToFit
+          minimumFontScale={MIN_RESTATEMENT_FONT_SIZE / baseRestatementFontSize}
+          selectable={false}
+          style={[
+            styles.restatementText,
+            compact && styles.restatementTextCompact,
+            WEB_RESTATEMENT_TEXT_STYLE,
+            fittedRestatementStyle,
+          ]}>
           {guarded.text}
         </Text>
       </View>
@@ -797,6 +900,7 @@ const styles = StyleSheet.create({
   restatementBlock: {
     gap: 12,
     flex: 1,
+    minHeight: 0,
     justifyContent: 'center',
   },
   cardLabel: {
@@ -807,9 +911,11 @@ const styles = StyleSheet.create({
   },
   restatementText: {
     color: AppColors.ink,
+    flexShrink: 1,
     fontSize: 24,
     lineHeight: 32,
     fontWeight: '800',
+    maxWidth: '100%',
   },
   restatementTextCompact: {
     fontSize: 21,

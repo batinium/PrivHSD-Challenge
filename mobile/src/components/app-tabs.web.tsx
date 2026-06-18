@@ -11,6 +11,7 @@ import { Pressable, View, StyleSheet } from 'react-native';
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
+import { isStaticReviewMode } from '@/config/runtime';
 import { AppColors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function AppTabs() {
@@ -24,9 +25,11 @@ export default function AppTabs() {
           <TabTrigger name="leaderboard" href="/leaderboard" asChild>
             <TabButton>Rank</TabButton>
           </TabTrigger>
-          <TabTrigger name="console" href="/console" asChild>
-            <TabButton>Console</TabButton>
-          </TabTrigger>
+          {!isStaticReviewMode ? (
+            <TabTrigger name="console" href="/console" asChild>
+              <TabButton>Console</TabButton>
+            </TabTrigger>
+          ) : null}
         </CustomTabList>
       </TabList>
       <TabSlot style={styles.tabSlot} />

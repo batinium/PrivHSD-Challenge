@@ -38,6 +38,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "export:static-review": "python ../scripts/export_static_review_pool.py && EXPO_PUBLIC_STATIC_REVIEW_MODE=1 expo export --platform web --output-dir dist-review",
     "lint": "expo lint"
   },
   "private": true

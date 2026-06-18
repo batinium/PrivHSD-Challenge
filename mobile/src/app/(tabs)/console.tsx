@@ -10,9 +10,11 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlimoShieldBackground } from '@/components/glimo-shield-background';
+import { isStaticReviewMode } from '@/config/runtime';
 import { AppColors } from '@/constants/theme';
 import {
   AdminDisposition,
@@ -77,9 +79,19 @@ type AdminJob = {
   id: string;
   uploadId: string;
   filename: string;
-  status: 'created' | 'queued' | 'running' | 'complete' | 'failed';
+  status:
+    | 'created'
+    | 'queued'
+    | 'running'
+    | 'stopping'
+    | 'complete'
+    | 'failed'
+    | 'interrupted'
+    | 'stopped';
   stage: string;
   error?: string;
+  canResume?: boolean;
+  isActive?: boolean;
   updatedAt: string;
   progress?: {
     processed?: number;
@@ -95,6 +107,14 @@ type AdminJob = {
 };
 
 export default function AdminDashboard() {
+  if (isStaticReviewMode) {
+    return <Redirect href="/review" />;
+  }
+
+  return <AdminDashboardLive />;
+}
+
+function AdminDashboardLive() {
   const [bundleStepsOpen, setBundleStepsOpen] = useState(false);
   const [triageFilter, setTriageFilter] = useState<TriageFilter>('all');
   const [triageSearch, setTriageSearch] = useState('');
@@ -112,6 +132,8 @@ export default function AdminDashboard() {
   const [apiMessage, setApiMessage] = useState('Connect the local API on port 8765.');
   const [isUploading, setIsUploading] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [resumingJobId, setResumingJobId] = useState('');
+  const [stoppingJobId, setStoppingJobId] = useState('');
   const [textCol, setTextCol] = useState('text');
   const [idCol, setIdCol] = useState('ID');
   const [labelCol, setLabelCol] = useState('hs');
@@ -153,24 +175,6 @@ export default function AdminDashboard() {
   const rowCount = activeUpload?.rowCount ?? activeBundle?.protectedCsv?.row_count ?? frozenBatch.rows;
   const liveDataLoaded = caseItems !== adminCaseItems;
 
-  useEffect(() => {
-    refreshPersistentState();
-    // The initial refresh intentionally runs once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!activeJob || !['queued', 'running'].includes(activeJob.status)) {
-      return;
-    }
-    const timer = setInterval(() => {
-      refreshJob(activeJob.id);
-    }, 2500);
-    return () => clearInterval(timer);
-    // Polling should follow the active job identity/status only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJob?.id, activeJob?.status]);
-
   function setDisposition(value: AdminDisposition) {
     if (!selectedCase) {
       return;
@@ -179,6 +183,10 @@ export default function AdminDashboard() {
   }
 
   async function refreshPersistentState() {
+    if (isStaticReviewMode) {
+      setApiMessage('Static review package. Backend API disabled.');
+      return;
+    }
     try {
       const [uploadPayload, jobPayload] = await Promise.all([
         requestJson<{ uploads: UploadedCsv[] }>('/api/admin/uploads'),
@@ -187,8 +195,11 @@ export default function AdminDashboard() {
       setUploads(uploadPayload.uploads);
       setJobs(jobPayload.jobs);
       setApiMessage('Local API connected.');
+      const latestResumable = jobPayload.jobs.find((job) => canResumeJob(job) || isJobActive(job));
       const latestComplete = jobPayload.jobs.find((job) => job.status === 'complete');
-      if (latestComplete && !activeJob) {
+      if (latestResumable && !activeJob) {
+        selectIncompleteJob(latestResumable);
+      } else if (latestComplete && !activeJob) {
         await loadJob(latestComplete);
       }
     } catch (error) {
@@ -197,6 +208,10 @@ export default function AdminDashboard() {
   }
 
   function chooseCsvFile() {
+    if (isStaticReviewMode) {
+      setApiMessage('Static review package. Backend API disabled.');
+      return;
+    }
     if (Platform.OS !== 'web' || typeof document === 'undefined') {
       setApiMessage('CSV file picker is currently available in the web console.');
       return;
@@ -217,6 +232,10 @@ export default function AdminDashboard() {
   }
 
   async function uploadSelectedCsv(): Promise<UploadedCsv | null> {
+    if (isStaticReviewMode) {
+      setApiMessage('Static review package. Backend API disabled.');
+      return null;
+    }
     if (!selectedFile) {
       setApiMessage('Choose a CSV file first.');
       return null;
@@ -245,6 +264,10 @@ export default function AdminDashboard() {
   }
 
   async function startProcessing() {
+    if (isStaticReviewMode) {
+      setApiMessage('Static review package. Backend API disabled.');
+      return;
+    }
     setIsStarting(true);
     try {
       const upload = activeUpload ?? (await uploadSelectedCsv());
@@ -275,6 +298,49 @@ export default function AdminDashboard() {
     }
   }
 
+  async function resumeJob(job: AdminJob) {
+    setResumingJobId(job.id);
+    try {
+      const payload = await requestJson<{ job: AdminJob }>(
+        `/api/admin/jobs/${job.id}/resume`,
+        {
+          method: 'POST',
+          body: JSON.stringify({}),
+        },
+      );
+      setActiveJob(payload.job);
+      setJobs((current) => upsertById(current, payload.job));
+      setApiMessage(`Processing ${payload.job.status}: ${payload.job.stage}.`);
+      if (payload.job.status === 'complete') {
+        await loadJob(payload.job);
+      }
+    } catch (error) {
+      setApiMessage(errorMessage(error));
+    } finally {
+      setResumingJobId('');
+    }
+  }
+
+  async function stopJob(job: AdminJob) {
+    setStoppingJobId(job.id);
+    try {
+      const payload = await requestJson<{ job: AdminJob }>(
+        `/api/admin/jobs/${job.id}/stop`,
+        {
+          method: 'POST',
+          body: JSON.stringify({}),
+        },
+      );
+      setActiveJob(payload.job);
+      setJobs((current) => upsertById(current, payload.job));
+      setApiMessage(`Processing ${payload.job.status}: ${payload.job.stage}.`);
+    } catch (error) {
+      setApiMessage(errorMessage(error));
+    } finally {
+      setStoppingJobId('');
+    }
+  }
+
   async function refreshJob(jobId: string) {
     try {
       const payload = await requestJson<{ job: AdminJob }>(`/api/admin/jobs/${jobId}`);
@@ -287,9 +353,37 @@ export default function AdminDashboard() {
       if (payload.job.status === 'failed') {
         setApiMessage(payload.job.error || 'Processing failed.');
       }
+      if (payload.job.status === 'interrupted') {
+        setApiMessage('Processing was interrupted. Resume to continue from cached artifacts.');
+      }
+      if (payload.job.status === 'stopped') {
+        setApiMessage('Processing is stopped. Resume to continue from cached artifacts.');
+      }
     } catch (error) {
       setApiMessage(errorMessage(error));
     }
+  }
+
+  function selectJob(job: AdminJob) {
+    if (job.status === 'complete') {
+      loadJob(job);
+      return;
+    }
+    selectIncompleteJob(job);
+  }
+
+  function selectIncompleteJob(job: AdminJob) {
+    setActiveJob(job);
+    setJobs((current) => upsertById(current, job));
+    if (job.status === 'interrupted') {
+      setApiMessage('Processing was interrupted. Resume to continue from cached artifacts.');
+      return;
+    }
+    if (job.status === 'failed') {
+      setApiMessage(job.error || 'Processing failed. Resume to retry from cached artifacts.');
+      return;
+    }
+    setApiMessage(`Processing ${job.status}: ${job.stage}.`);
   }
 
   async function loadJob(job: AdminJob) {
@@ -318,6 +412,27 @@ export default function AdminDashboard() {
     setIdCol(preferredColumn(columns, ['ID', 'id', 'row_id'], idCol));
     setLabelCol(preferredColumn(columns, ['hs', 'label', 'hate', 'class'], labelCol));
   }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      refreshPersistentState();
+    }, 0);
+    return () => clearTimeout(timer);
+    // The initial refresh intentionally runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!activeJob || !['queued', 'running'].includes(activeJob.status)) {
+      return;
+    }
+    const timer = setInterval(() => {
+      refreshJob(activeJob.id);
+    }, 2500);
+    return () => clearInterval(timer);
+    // Polling should follow the active job identity/status only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.id, activeJob?.status]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -434,15 +549,46 @@ export default function AdminDashboard() {
 
           <View style={styles.runList}>
             {jobs.slice(0, 6).map((job) => (
-              <Pressable key={job.id} onPress={() => loadJob(job)} style={styles.runRow}>
-                <View style={styles.caseRowMain}>
-                  <Text style={styles.caseTitle}>{job.filename}</Text>
-                  <Text style={styles.caseMeta}>
-                    {job.id} / {job.options?.textCol ?? 'text'} / {job.options?.labelCol ?? 'hs'}
-                  </Text>
+              <View key={job.id} style={styles.runRow}>
+                <Pressable onPress={() => selectJob(job)} style={styles.runRowSelect}>
+                  <View style={styles.caseRowMain}>
+                    <Text style={styles.caseTitle}>{job.filename}</Text>
+                    <Text style={styles.caseMeta}>
+                      {job.id} / {job.options?.textCol ?? 'text'} / {job.options?.labelCol ?? 'hs'}
+                    </Text>
+                  </View>
+                </Pressable>
+                <View style={styles.runActions}>
+                  <Text style={[styles.riskBadge, jobStatusStyle(job.status)]}>{job.status}</Text>
+                  {canStopJob(job) ? (
+                    <Pressable
+                      onPress={() => stopJob(job)}
+                      disabled={Boolean(stoppingJobId)}
+                      style={[
+                        styles.stopButton,
+                        Boolean(stoppingJobId) && styles.buttonDisabled,
+                      ]}>
+                      <Text style={styles.stopButtonText}>
+                        {stoppingJobId === job.id ? 'Stopping' : 'Stop'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {canResumeJob(job) ? (
+                    <Pressable
+                      onPress={() => resumeJob(job)}
+                      disabled={Boolean(resumingJobId) || isStarting || Boolean(stoppingJobId)}
+                      style={[
+                        styles.resumeButton,
+                        (Boolean(resumingJobId) || isStarting || Boolean(stoppingJobId)) &&
+                          styles.buttonDisabled,
+                      ]}>
+                      <Text style={styles.resumeButtonText}>
+                        {resumingJobId === job.id ? 'Resuming' : 'Resume'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
-                <Text style={[styles.riskBadge, jobStatusStyle(job.status)]}>{job.status}</Text>
-              </Pressable>
+              </View>
             ))}
           </View>
         </View>
@@ -821,6 +967,12 @@ function jobStatusStyle(status: string) {
   if (status === 'failed') {
     return styles.riskHigh;
   }
+  if (status === 'interrupted') {
+    return styles.riskMedium;
+  }
+  if (status === 'stopping') {
+    return styles.riskMedium;
+  }
   if (status === 'running' || status === 'queued') {
     return styles.riskMedium;
   }
@@ -828,6 +980,27 @@ function jobStatusStyle(status: string) {
     return styles.riskOk;
   }
   return styles.riskLow;
+}
+
+function canResumeJob(job: AdminJob) {
+  return (
+    Boolean(job.canResume) ||
+    job.status === 'created' ||
+    job.status === 'failed' ||
+    job.status === 'interrupted' ||
+    job.status === 'stopped'
+  );
+}
+
+function canStopJob(job: AdminJob) {
+  return isJobActive(job) && job.status !== 'stopping';
+}
+
+function isJobActive(job: AdminJob) {
+  return Boolean(job.isActive) || (
+    (job.status === 'queued' || job.status === 'running' || job.status === 'stopping') &&
+    !job.canResume
+  );
 }
 
 function preferredColumn(columns: string[], candidates: string[], fallback: string) {
@@ -1162,6 +1335,43 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     backgroundColor: '#F9FAFB',
+  },
+  runRowSelect: {
+    flex: 1,
+  },
+  runActions: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  resumeButton: {
+    backgroundColor: AppColors.ink,
+    borderColor: AppColors.ink,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  resumeButtonText: {
+    color: AppColors.panel,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  stopButton: {
+    backgroundColor: AppColors.coral,
+    borderColor: AppColors.coral,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  stopButtonText: {
+    color: AppColors.panel,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   pathGrid: {
     gap: 8,

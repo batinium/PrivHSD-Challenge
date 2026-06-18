@@ -9,10 +9,12 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import io
 import json
+import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import re
+import tempfile
 import threading
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -66,6 +68,17 @@ DEFAULT_LABEL_COLUMNS = (
 )
 DEFAULT_ADMIN_RUNS_DIR = ROOT / "data" / "admin_uploads"
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
+ACTIVE_JOB_STATUSES = {"queued", "running", "stopping"}
+RESUMABLE_JOB_STATUSES = {"created", "failed", "interrupted", "stopped"}
+TRANSIENT_JOB_FIELDS = {"canResume", "isActive"}
+
+
+class JobStopped(Exception):
+    """Raised when a queued backend job is stopped by the user."""
+
+    def __init__(self, job: dict[str, Any]) -> None:
+        super().__init__("job stopped")
+        self.job = job
 
 
 @dataclass(frozen=True)
@@ -101,12 +114,33 @@ def file_sha256(path: Path) -> str | None:
 def read_json(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    content = path.read_text(encoding="utf-8")
+    if not content.strip():
+        return None
+    return json.loads(content)
 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    content = json.dumps(value, ensure_ascii=False, indent=2) + "\n"
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 def utc_now() -> str:
@@ -274,7 +308,10 @@ def read_job(config: ApiConfig, job_id: str) -> dict[str, Any] | None:
 
 
 def write_job(job: dict[str, Any]) -> None:
-    write_json(Path(str(job["jobPath"])), job)
+    persisted = {
+        key: value for key, value in job.items() if key not in TRANSIENT_JOB_FIELDS
+    }
+    write_json(Path(str(job["jobPath"])), persisted)
 
 
 def list_jobs(config: ApiConfig) -> list[dict[str, Any]]:
@@ -370,15 +407,31 @@ def admin_bundle_for_job(config: ApiConfig, job_id: str) -> dict[str, Any]:
 
 
 def update_job_status(job: dict[str, Any], **updates: Any) -> dict[str, Any]:
-    updated = dict(job)
+    updated = {
+        key: value for key, value in job.items() if key not in TRANSIENT_JOB_FIELDS
+    }
     updated.update(updates)
     updated["updatedAt"] = utc_now()
     write_job(updated)
     return updated
 
 
-def execute_backend_job(config: ApiConfig, job: dict[str, Any]) -> dict[str, Any]:
+def execute_backend_job(
+    config: ApiConfig,
+    job: dict[str, Any],
+    *,
+    cancel_event: threading.Event | None = None,
+) -> dict[str, Any]:
     options = dict(job["options"])
+    if cancel_event and cancel_event.is_set():
+        job = update_job_status(
+            job,
+            status="stopped",
+            stage="stopped",
+            progress=stopped_progress(job),
+            error="",
+        )
+        raise JobStopped(job)
     job = update_job_status(
         job,
         status="running",
@@ -389,6 +442,15 @@ def execute_backend_job(config: ApiConfig, job: dict[str, Any]) -> dict[str, Any
 
     def progress(event: dict[str, object]) -> None:
         nonlocal job
+        if cancel_event and cancel_event.is_set():
+            job = update_job_status(
+                job,
+                status="stopped",
+                stage="stopped",
+                progress=stopped_progress(job),
+                error="",
+            )
+            raise JobStopped(job)
         job = update_job_status(
             job,
             status="running",
@@ -399,6 +461,15 @@ def execute_backend_job(config: ApiConfig, job: dict[str, Any]) -> dict[str, Any
                 "detail": str(event.get("detail") or ""),
             },
         )
+        if cancel_event and cancel_event.is_set():
+            job = update_job_status(
+                job,
+                status="stopped",
+                stage="stopped",
+                progress=stopped_progress(job),
+                error="",
+            )
+            raise JobStopped(job)
 
     manifest = run_backend_bundle(
         Path(str(job["sourcePath"])),
@@ -423,6 +494,15 @@ def execute_backend_job(config: ApiConfig, job: dict[str, Any]) -> dict[str, Any
         command=["api_server", "backend-bundle", str(job["sourcePath"])],
     )
     outputs = manifest.get("outputs", {})
+    if cancel_event and cancel_event.is_set():
+        job = update_job_status(
+            job,
+            status="stopped",
+            stage="stopped",
+            progress=stopped_progress(job),
+            error="",
+        )
+        raise JobStopped(job)
     return update_job_status(
         job,
         status="complete",
@@ -431,6 +511,28 @@ def execute_backend_job(config: ApiConfig, job: dict[str, Any]) -> dict[str, Any
         outputs=outputs,
         completedAt=utc_now(),
     )
+
+
+def interrupted_progress(job: dict[str, Any]) -> dict[str, Any]:
+    raw_progress = job.get("progress")
+    progress = dict(raw_progress) if isinstance(raw_progress, dict) else {}
+    last_detail = str(progress.get("detail") or "").strip()
+    detail = "Interrupted before completion. Resume to continue from cached artifacts."
+    if last_detail and "Interrupted before completion" not in last_detail:
+        detail = f"{detail} Last update: {last_detail}"
+    progress["detail"] = detail
+    return progress
+
+
+def stopped_progress(job: dict[str, Any]) -> dict[str, Any]:
+    raw_progress = job.get("progress")
+    progress = dict(raw_progress) if isinstance(raw_progress, dict) else {}
+    last_detail = str(progress.get("detail") or "").strip()
+    detail = "Stopped by user. Resume to continue from cached artifacts."
+    if last_detail and "Stopped by user" not in last_detail:
+        detail = f"{detail} Last update: {last_detail}"
+    progress["detail"] = detail
+    return progress
 
 
 def bundle_manifest(config: ApiConfig) -> dict[str, Any] | None:
@@ -714,10 +816,10 @@ class ContextSafeApiHandler(BaseHTTPRequestHandler):
             self.write_json({"uploads": list_uploads(self.server.config)})
             return
         if path == "/api/admin/jobs":
-            self.write_json({"jobs": list_jobs(self.server.config)})
+            self.write_json({"jobs": self.server.list_jobs_for_response()})
             return
         if len(parts) == 4 and parts[:3] == ["api", "admin", "jobs"]:
-            job = read_job(self.server.config, parts[3])
+            job = self.server.read_job_for_response(parts[3])
             if not job:
                 self.write_json(
                     {"error": "not_found", "path": path},
@@ -751,6 +853,7 @@ class ContextSafeApiHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        parts = [part for part in path.strip("/").split("/") if part]
         try:
             payload = self.read_json_body()
             if path == "/api/admin/uploads":
@@ -765,6 +868,15 @@ class ContextSafeApiHandler(BaseHTTPRequestHandler):
                 job = self.server.start_job(payload)
                 status = HTTPStatus.OK if job["status"] == "complete" else HTTPStatus.ACCEPTED
                 self.write_json({"job": job}, status=status)
+                return
+            if len(parts) == 5 and parts[:3] == ["api", "admin", "jobs"] and parts[4] == "resume":
+                job = self.server.resume_job(parts[3])
+                status = HTTPStatus.OK if job["status"] == "complete" else HTTPStatus.ACCEPTED
+                self.write_json({"job": job}, status=status)
+                return
+            if len(parts) == 5 and parts[:3] == ["api", "admin", "jobs"] and parts[4] == "stop":
+                job = self.server.stop_job(parts[3])
+                self.write_json({"job": job})
                 return
             self.write_json({"error": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
         except json.JSONDecodeError as exc:
@@ -814,36 +926,150 @@ class ContextSafeApiServer(ThreadingHTTPServer):
         super().__init__(server_address, ContextSafeApiHandler)
         self.config = config
         self.active_jobs: dict[str, threading.Thread] = {}
+        self.job_cancel_events: dict[str, threading.Event] = {}
         self.jobs_lock = threading.Lock()
+
+    def is_job_active(self, job_id: str) -> bool:
+        with self.jobs_lock:
+            thread = self.active_jobs.get(job_id)
+            return bool(thread and thread.is_alive())
+
+    def decorate_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        active = self.is_job_active(str(job["id"]))
+        status = str(job.get("status") or "created")
+        decorated = dict(job)
+        decorated["isActive"] = active
+        decorated["canResume"] = status in RESUMABLE_JOB_STATUSES or (
+            status in ACTIVE_JOB_STATUSES and not active
+        )
+        return decorated
+
+    def sync_job_for_response(self, job: dict[str, Any]) -> dict[str, Any]:
+        active = self.is_job_active(str(job["id"]))
+        status = str(job.get("status") or "created")
+        manifest_value = job.get("manifestPath")
+        manifest_path = Path(str(manifest_value)) if manifest_value else None
+        if manifest_path and manifest_path.exists() and status != "complete" and not active:
+            manifest = read_json(manifest_path) or {}
+            outputs = manifest.get("outputs") if isinstance(manifest, dict) else {}
+            job = update_job_status(
+                job,
+                status="complete",
+                stage="complete",
+                progress={"processed": 1, "total": 1, "detail": "Bundle complete."},
+                outputs=outputs if isinstance(outputs, dict) else {},
+                completedAt=job.get("completedAt") or utc_now(),
+            )
+        elif status in ACTIVE_JOB_STATUSES and not active:
+            job = update_job_status(
+                job,
+                status="interrupted",
+                stage="interrupted",
+                progress=interrupted_progress(job),
+            )
+        return self.decorate_job(job)
+
+    def read_job_for_response(self, job_id: str) -> dict[str, Any] | None:
+        job = read_job(self.config, job_id)
+        if not job:
+            return None
+        return self.sync_job_for_response(job)
+
+    def list_jobs_for_response(self) -> list[dict[str, Any]]:
+        jobs = [self.sync_job_for_response(job) for job in list_jobs(self.config)]
+        return sorted(jobs, key=lambda item: str(item.get("updatedAt", "")), reverse=True)
 
     def start_job(self, payload: dict[str, Any]) -> dict[str, Any]:
         job = build_job(self.config, payload)
         if job["status"] == "complete":
+            return self.decorate_job(job)
+        return self.queue_job(job, detail="Queued.")
+
+    def resume_job(self, job_id: str) -> dict[str, Any]:
+        job = read_job(self.config, job_id)
+        if not job:
+            raise ValueError(f"unknown job: {job_id}")
+        job = self.sync_job_for_response(job)
+        if job["status"] == "complete":
             return job
+        return self.queue_job(
+            job,
+            detail="Queued resume from cached artifacts.",
+            preserve_progress=True,
+        )
+
+    def stop_job(self, job_id: str) -> dict[str, Any]:
+        job = read_job(self.config, job_id)
+        if not job:
+            raise ValueError(f"unknown job: {job_id}")
+        with self.jobs_lock:
+            thread = self.active_jobs.get(job_id)
+            cancel_event = self.job_cancel_events.get(job_id)
+            if thread and thread.is_alive() and cancel_event:
+                cancel_event.set()
+                progress = dict(job.get("progress")) if isinstance(job.get("progress"), dict) else {}
+                progress["detail"] = "Stop requested. Waiting for current step checkpoint."
+                job = update_job_status(
+                    job,
+                    status="stopping",
+                    stage=str(job.get("stage") or "stopping"),
+                    progress=progress,
+                    error="",
+                )
+                stopping_job = dict(job)
+                stopping_job["isActive"] = True
+                stopping_job["canResume"] = False
+                return stopping_job
+        return self.sync_job_for_response(job)
+
+    def queue_job(
+        self,
+        job: dict[str, Any],
+        *,
+        detail: str,
+        preserve_progress: bool = False,
+    ) -> dict[str, Any]:
         with self.jobs_lock:
             thread = self.active_jobs.get(str(job["id"]))
             if thread and thread.is_alive():
-                return job
+                active_job = dict(job)
+                active_job["isActive"] = True
+                active_job["canResume"] = False
+                return active_job
+            cancel_event = threading.Event()
+            progress = (
+                dict(job.get("progress"))
+                if preserve_progress and isinstance(job.get("progress"), dict)
+                else {"processed": 0, "total": 0}
+            )
+            progress["detail"] = detail
             job = update_job_status(
                 job,
                 status="queued",
                 stage="queued",
-                progress={"processed": 0, "total": 0, "detail": "Queued."},
+                progress=progress,
                 error="",
             )
             thread = threading.Thread(
                 target=self._run_job_thread,
-                args=(dict(job),),
+                args=(dict(job), cancel_event),
                 name=f"contextsafe-job-{job['id']}",
                 daemon=True,
             )
             self.active_jobs[str(job["id"])] = thread
+            self.job_cancel_events[str(job["id"])] = cancel_event
             thread.start()
-            return job
+        return self.decorate_job(job)
 
-    def _run_job_thread(self, job: dict[str, Any]) -> None:
+    def _run_job_thread(
+        self,
+        job: dict[str, Any],
+        cancel_event: threading.Event,
+    ) -> None:
         try:
-            execute_backend_job(self.config, job)
+            execute_backend_job(self.config, job, cancel_event=cancel_event)
+        except JobStopped:
+            pass
         except Exception as exc:  # pragma: no cover - exercised by integration use.
             update_job_status(
                 job,
@@ -854,6 +1080,7 @@ class ContextSafeApiServer(ThreadingHTTPServer):
         finally:
             with self.jobs_lock:
                 self.active_jobs.pop(str(job["id"]), None)
+                self.job_cancel_events.pop(str(job["id"]), None)
 
 
 def build_parser() -> argparse.ArgumentParser:

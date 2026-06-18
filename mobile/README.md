@@ -16,6 +16,29 @@ Start the app:
 npm run web
 ```
 
+Build a backend-free review package:
+
+```bash
+npm run export:static-review
+```
+
+This writes `dist-review/` with static review data bundled into the app. Static
+review mode opens directly on the Review screen, hides the admin Console tab,
+and does not call the local API.
+
+To bundle a different reviewer-facing dataset before export:
+
+```bash
+cd ..
+python scripts/export_static_review_pool.py \
+  --protected-csv data/path/to/protected.csv \
+  --validation-json data/path/to/manifest-or-validation.json \
+  --limit 1000
+cd mobile
+```
+
+Then run `npm run export:static-review`.
+
 The app currently runs with seeded data from the locked baseline:
 
 `data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`

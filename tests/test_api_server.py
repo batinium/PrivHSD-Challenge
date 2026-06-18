@@ -1,16 +1,24 @@
 import csv
 import json
+import threading
+import time
 
+from contextsafe_hsd import api_server as api_server_module
 from contextsafe_hsd.api_server import (
     ApiConfig,
+    ContextSafeApiServer,
+    JobStopped,
     admin_bundle_summary,
     admin_cases,
     build_job,
+    execute_backend_job,
     list_jobs,
     list_uploads,
     persist_upload,
     read_job,
     review_seed,
+    update_job_status,
+    write_json,
 )
 
 
@@ -293,3 +301,235 @@ def test_build_job_persists_reusable_job_record(tmp_path):
     assert reloaded["uploadId"] == upload["id"]
     assert reloaded["options"]["textCol"] == "text"
     assert list_jobs(config)[0]["id"] == job["id"]
+
+
+def test_read_job_treats_empty_record_as_unavailable(tmp_path):
+    config = ApiConfig(admin_runs_dir=tmp_path)
+    upload = persist_upload(
+        config,
+        filename="incoming.csv",
+        content="ID,text,hs\nr1,hello,0\n",
+    )
+    job = build_job(
+        config,
+        {
+            "uploadId": upload["id"],
+            "textCol": "text",
+            "idCol": "ID",
+            "labelCol": "hs",
+        },
+    )
+
+    job_path = tmp_path / upload["id"] / "runs" / job["id"] / "job.json"
+    job_path.write_text("", encoding="utf-8")
+
+    assert read_job(config, job["id"]) is None
+    assert list_jobs(config) == []
+
+
+def test_write_json_replaces_file_and_cleans_temp_file(tmp_path):
+    path = tmp_path / "job.json"
+    path.write_text('{"old": true}\n', encoding="utf-8")
+
+    write_json(path, {"new": "value"})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"new": "value"}
+    assert list(tmp_path.glob(".job.json.*.tmp")) == []
+
+
+def test_stale_running_job_is_marked_interrupted_and_resumable(tmp_path):
+    config = ApiConfig(admin_runs_dir=tmp_path)
+    upload = persist_upload(
+        config,
+        filename="incoming.csv",
+        content="ID,text,hs\nr1,hello,0\n",
+    )
+    job = build_job(
+        config,
+        {
+            "uploadId": upload["id"],
+            "textCol": "text",
+            "idCol": "ID",
+            "labelCol": "hs",
+        },
+    )
+    update_job_status(
+        job,
+        status="running",
+        stage="llm_restatement",
+        progress={
+            "processed": 5889,
+            "total": 6792,
+            "detail": "Selected row-level masked output.",
+        },
+    )
+    server = ContextSafeApiServer(("127.0.0.1", 0), config)
+    try:
+        response = server.read_job_for_response(job["id"])
+    finally:
+        server.server_close()
+
+    assert response is not None
+    assert response["status"] == "interrupted"
+    assert response["stage"] == "interrupted"
+    assert response["canResume"] is True
+    assert response["isActive"] is False
+    assert response["progress"]["processed"] == 5889
+    assert response["progress"]["total"] == 6792
+    assert "Selected row-level masked output." in response["progress"]["detail"]
+
+    persisted = read_job(config, job["id"])
+    assert persisted is not None
+    assert persisted["status"] == "interrupted"
+    assert "canResume" not in persisted
+    assert "isActive" not in persisted
+
+
+def test_resume_job_queues_interrupted_job_from_cached_artifacts(tmp_path, monkeypatch):
+    config = ApiConfig(admin_runs_dir=tmp_path)
+    upload = persist_upload(
+        config,
+        filename="incoming.csv",
+        content="ID,text,hs\nr1,hello,0\n",
+    )
+    job = build_job(
+        config,
+        {
+            "uploadId": upload["id"],
+            "textCol": "text",
+            "idCol": "ID",
+            "labelCol": "hs",
+        },
+    )
+    update_job_status(
+        job,
+        status="interrupted",
+        stage="interrupted",
+        progress={
+            "processed": 5889,
+            "total": 6792,
+            "detail": "Interrupted before completion.",
+        },
+    )
+    calls: list[str] = []
+
+    def fake_execute_backend_job(
+        _config: ApiConfig,
+        queued_job: dict[str, object],
+        *,
+        cancel_event: threading.Event | None = None,
+    ) -> dict[str, object]:
+        assert cancel_event is not None
+        calls.append(str(queued_job["id"]))
+        return update_job_status(
+            queued_job,
+            status="complete",
+            stage="complete",
+            progress={"processed": 1, "total": 1, "detail": "Bundle complete."},
+            outputs={},
+            completedAt="done",
+        )
+
+    monkeypatch.setattr(
+        api_server_module,
+        "execute_backend_job",
+        fake_execute_backend_job,
+    )
+    server = ContextSafeApiServer(("127.0.0.1", 0), config)
+    try:
+        resumed = server.resume_job(job["id"])
+        for _ in range(50):
+            persisted = read_job(config, job["id"])
+            if persisted and persisted["status"] == "complete":
+                break
+            time.sleep(0.01)
+    finally:
+        server.server_close()
+
+    assert resumed["status"] == "queued"
+    assert resumed["canResume"] is False
+    assert resumed["progress"]["processed"] == 5889
+    assert resumed["progress"]["total"] == 6792
+    assert resumed["progress"]["detail"] == "Queued resume from cached artifacts."
+    assert calls == [job["id"]]
+    assert read_job(config, job["id"])["status"] == "complete"
+
+
+def test_execute_backend_job_honors_pre_start_stop(tmp_path):
+    config = ApiConfig(admin_runs_dir=tmp_path)
+    upload = persist_upload(
+        config,
+        filename="incoming.csv",
+        content="ID,text,hs\nr1,hello,0\n",
+    )
+    job = build_job(
+        config,
+        {
+            "uploadId": upload["id"],
+            "textCol": "text",
+            "idCol": "ID",
+            "labelCol": "hs",
+        },
+    )
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    try:
+        execute_backend_job(config, job, cancel_event=cancel_event)
+    except JobStopped as exc:
+        stopped_job = exc.job
+    else:  # pragma: no cover - defensive branch.
+        raise AssertionError("expected JobStopped")
+
+    assert stopped_job["status"] == "stopped"
+    assert stopped_job["stage"] == "stopped"
+    assert "Stopped by user" in stopped_job["progress"]["detail"]
+    assert read_job(config, job["id"])["status"] == "stopped"
+
+
+def test_stop_job_marks_active_job_as_stopping(tmp_path):
+    config = ApiConfig(admin_runs_dir=tmp_path)
+    upload = persist_upload(
+        config,
+        filename="incoming.csv",
+        content="ID,text,hs\nr1,hello,0\n",
+    )
+    job = build_job(
+        config,
+        {
+            "uploadId": upload["id"],
+            "textCol": "text",
+            "idCol": "ID",
+            "labelCol": "hs",
+        },
+    )
+    running_job = update_job_status(
+        job,
+        status="running",
+        stage="baseline",
+        progress={
+            "processed": 10,
+            "total": 20,
+            "detail": "Built deterministic privacy baseline.",
+        },
+    )
+    release_thread = threading.Event()
+    thread = threading.Thread(target=release_thread.wait)
+    thread.start()
+    cancel_event = threading.Event()
+    server = ContextSafeApiServer(("127.0.0.1", 0), config)
+    try:
+        server.active_jobs[running_job["id"]] = thread
+        server.job_cancel_events[running_job["id"]] = cancel_event
+
+        response = server.stop_job(running_job["id"])
+    finally:
+        release_thread.set()
+        thread.join(timeout=1)
+        server.server_close()
+
+    assert response["status"] == "stopping"
+    assert response["isActive"] is True
+    assert response["canResume"] is False
+    assert cancel_event.is_set()
+    assert read_job(config, running_job["id"])["status"] == "stopping"
