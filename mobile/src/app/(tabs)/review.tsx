@@ -17,7 +17,7 @@ import {
   TutorialSpotlightLayout,
 } from '@/components/onboarding-tutorial';
 import { AppColors } from '@/constants/theme';
-import { ReviewItem } from '@/data/review-data';
+import { ReviewItem, tutorialDecisionGuides } from '@/data/review-data';
 import { TutorialTarget, useOnboarding } from '@/state/onboarding';
 import { ClassifiedDecision, useReviewProgress } from '@/state/review-progress';
 import { guardRestatement } from '@/utils/privacy';
@@ -37,7 +37,12 @@ export default function CitizenReview() {
   const [tutorialTargets, setTutorialTargets] = useState<
     Partial<Record<TutorialTarget, TutorialSpotlightLayout>>
   >({});
-  const { finishTutorial, isTutorialActive } = useOnboarding();
+  const {
+    finishTutorial,
+    isTutorialActive,
+    isTutorialVisible,
+    setTutorialFeedback,
+  } = useOnboarding();
   const {
     activeIndex,
     activeItem,
@@ -194,6 +199,13 @@ export default function CitizenReview() {
       if (!item) {
         return;
       }
+      const tutorialGuide = tutorialDecisionGuides[item.id];
+      if (isTutorialActive && tutorialGuide && decision !== tutorialGuide.expectedDecision) {
+        setTutorialFeedback(tutorialGuide.wrongChoiceMessage);
+        resetCard();
+        return;
+      }
+
       setIsSubmittingDecision(true);
       Animated.timing(position, {
         toValue,
@@ -205,7 +217,16 @@ export default function CitizenReview() {
         setIsSubmittingDecision(false);
       });
     },
-    [activeIndex, isSubmittingDecision, items, position, recordDecision],
+    [
+      activeIndex,
+      isSubmittingDecision,
+      isTutorialActive,
+      items,
+      position,
+      recordDecision,
+      resetCard,
+      setTutorialFeedback,
+    ],
   );
 
   const panResponder = useMemo(
@@ -350,7 +371,7 @@ export default function CitizenReview() {
                         transform: [{ rotate: '-14deg' }, { scale: rejectScale }],
                       },
                     ]}>
-                    <Text style={[styles.decisionBadgeText, styles.rejectBadgeText]}>X</Text>
+                    <Text style={[styles.decisionBadgeText, styles.rejectBadgeText]}>NO</Text>
                   </Animated.View>
                   <Animated.View
                     pointerEvents="none"
@@ -374,7 +395,9 @@ export default function CitizenReview() {
                         transform: [{ rotate: '-3deg' }, { scale: uncertainScale }],
                       },
                     ]}>
-                    <Text style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>?</Text>
+                    <Text style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>
+                      REVIEW
+                    </Text>
                   </Animated.View>
                 </Animated.View>
               </>
@@ -416,13 +439,13 @@ export default function CitizenReview() {
               disabled={!activeItem || isSubmittingDecision}
               onPress={() => commitDecision('not_hatred', { x: -SWIPE_EXIT_DISTANCE, y: 32 })}
               style={[styles.actionButton, styles.rejectButton]}>
-              <Text style={styles.rejectText}>X</Text>
+              <Text style={styles.rejectText}>NO</Text>
             </Pressable>
             <Pressable
               disabled={!activeItem || isSubmittingDecision}
               onPress={markUncertain}
               style={styles.actionButton}>
-              <Text style={styles.maybeText}>?</Text>
+              <Text style={styles.reviewText}>REVIEW</Text>
             </Pressable>
             <Pressable
               disabled={!activeItem || isSubmittingDecision}
@@ -432,7 +455,7 @@ export default function CitizenReview() {
             </Pressable>
           </View>
         </View>
-        {isTutorialActive && <OnboardingTutorial targets={tutorialTargets} />}
+        {isTutorialVisible && <OnboardingTutorial targets={tutorialTargets} />}
       </View>
     </SafeAreaView>
   );
@@ -646,7 +669,7 @@ const styles = StyleSheet.create({
   },
   decisionBadge: {
     position: 'absolute',
-    minWidth: 72,
+    minWidth: 78,
     minHeight: 54,
     borderRadius: 8,
     borderWidth: 4,
@@ -802,7 +825,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   actionButton: {
-    width: 74,
+    width: 84,
     height: 58,
     borderRadius: 29,
     alignItems: 'center',
@@ -826,12 +849,12 @@ const styles = StyleSheet.create({
   },
   rejectText: {
     color: AppColors.coral,
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
   },
-  maybeText: {
+  reviewText: {
     color: AppColors.amber,
-    fontSize: 24,
+    fontSize: 13,
     fontWeight: '900',
   },
   confirmText: {

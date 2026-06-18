@@ -165,7 +165,12 @@ type ReviewProgressContextValue = {
 const ReviewProgressContext = createContext<ReviewProgressContextValue | undefined>(undefined);
 
 export function ReviewProgressProvider({ children }: { children: ReactNode }) {
-  const { isTutorialActive, nextTutorialStep, tutorialStep } = useOnboarding();
+  const {
+    clearTutorialFeedback,
+    completeTrainingCards,
+    isTutorialActive,
+    nextTutorialStep,
+  } = useOnboarding();
   const [items, setItems] = useState<ReviewItem[]>(reviewSeedItems);
   const [tutorialItems, setTutorialItems] = useState<ReviewItem[]>(tutorialReviewItems);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -208,7 +213,10 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
           current.map((item) => (item.id === itemId ? { ...item, decision } : item)),
         );
         setActiveTutorialIndex((current) => current + 1);
-        if (tutorialStep.target === 'actions') {
+        clearTutorialFeedback();
+        if (activeTutorialIndex >= tutorialReviewItems.length - 1) {
+          completeTrainingCards();
+        } else {
           nextTutorialStep();
         }
         return;
@@ -220,7 +228,13 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
       setActiveIndex((current) => current + 1);
       setSessionStats((current) => addDecisionToStats(current, decision));
     },
-    [isTutorialActive, nextTutorialStep, tutorialStep.target],
+    [
+      activeTutorialIndex,
+      clearTutorialFeedback,
+      completeTrainingCards,
+      isTutorialActive,
+      nextTutorialStep,
+    ],
   );
 
   const resetReviewQueue = useCallback(() => {

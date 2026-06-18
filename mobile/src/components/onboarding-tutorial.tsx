@@ -19,7 +19,7 @@ type OnboardingTutorialProps = {
 };
 
 const SPOTLIGHT_PADDING = 8;
-const BUBBLE_HEIGHT = 228;
+const BUBBLE_HEIGHT = 260;
 
 export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
   const windowSize = useWindowDimensions();
@@ -29,8 +29,10 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
   });
   const {
     finishTutorial,
+    isTutorialFarewell,
     nextTutorialStep,
     skipTutorial,
+    tutorialFeedback,
     tutorialStep,
     tutorialStepCount,
     tutorialStepIndex,
@@ -49,7 +51,7 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
   const bubbleTop = hasRoomBelow
     ? bubbleBelow
     : clamp(spotlight.y - BUBBLE_HEIGHT - 18, 16, height - BUBBLE_HEIGHT - 16);
-  const isFinalStep = tutorialStepIndex === tutorialStepCount - 1;
+  const canAdvanceWithButton = !tutorialStep.requiresDecision;
 
   function handleOverlayLayout(event: LayoutChangeEvent) {
     const { height: nextHeight, width: nextWidth } = event.nativeEvent.layout;
@@ -63,7 +65,7 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
   }
 
   function handlePrimaryPress() {
-    if (isFinalStep) {
+    if (isTutorialFarewell) {
       finishTutorial();
     } else {
       nextTutorialStep();
@@ -144,25 +146,40 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
         />
         <View style={styles.bubble}>
           <View style={styles.bubbleHeader}>
-            <Text style={styles.stepCount}>
-              {tutorialStepIndex + 1}/{tutorialStepCount}
-            </Text>
-            <Pressable onPress={skipTutorial} style={styles.skipButton}>
-              <Text style={styles.skipText}>Skip</Text>
-            </Pressable>
+            {isTutorialFarewell ? (
+              <Text style={styles.stepCount}>Real deck loaded</Text>
+            ) : (
+              <Text style={styles.stepCount}>
+                Training {tutorialStepIndex + 1}/{tutorialStepCount}
+              </Text>
+            )}
+            {!isTutorialFarewell && (
+              <Pressable onPress={skipTutorial} style={styles.skipButton}>
+                <Text style={styles.skipText}>Skip</Text>
+              </Pressable>
+            )}
           </View>
           <Text style={styles.title}>{tutorialStep.title}</Text>
           <Text style={styles.body}>{tutorialStep.body}</Text>
-          <View style={styles.buttonRow}>
-            {!isFinalStep && (
-              <Pressable onPress={finishTutorial} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Finish now</Text>
+          {tutorialFeedback && (
+            <View style={styles.feedbackBox}>
+              <Text style={styles.feedbackText}>{tutorialFeedback}</Text>
+            </View>
+          )}
+          {tutorialStep.requiresDecision && (
+            <View style={styles.choicePrompt}>
+              <Text style={styles.choicePromptText}>
+                Choose {tutorialStep.decisionLabel} below to continue.
+              </Text>
+            </View>
+          )}
+          {(canAdvanceWithButton || isTutorialFarewell) && (
+            <View style={styles.buttonRow}>
+              <Pressable onPress={handlePrimaryPress} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>{tutorialStep.primaryLabel}</Text>
               </Pressable>
-            )}
-            <Pressable onPress={handlePrimaryPress} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>{tutorialStep.primaryLabel}</Text>
-            </Pressable>
-          </View>
+            </View>
+          )}
         </View>
       </View>
     </View>
@@ -285,6 +302,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '700',
+  },
+  feedbackBox: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F3B6C2',
+    backgroundColor: AppColors.coralSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  feedbackText: {
+    color: AppColors.ink,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  choicePrompt: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F4D96B',
+    backgroundColor: AppColors.goldSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  choicePromptText: {
+    color: AppColors.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   buttonRow: {
     flexDirection: 'row',
