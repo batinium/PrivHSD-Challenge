@@ -77,6 +77,8 @@ without a clear private-score gain.
 ## Public Runtime
 
 - `protect`
+- `template-after-baseline`
+- `evidence-after-baseline`
 - `validate-submission`
 - `profile-dataset`
 
@@ -111,6 +113,52 @@ valid CSV with `799` changed text cells, and matches the saved
 
 Use `--no-pii-assist --no-candidate-selection` only for deterministic-only smoke
 tests; that path was faster but hurt the score.
+
+For labeled benchmark data, the high-risk template probe can be emitted as a
+separate post-baseline CSV by adding:
+
+```bash
+--template-after-baseline-output OUTPUT.template.protected.csv \
+--template-label-source column \
+--template-label-col hs
+```
+
+or by running:
+
+```bash
+python -m contextsafe_hsd.cli template-after-baseline \
+  --source INPUT.csv \
+  --baseline OUTPUT.csv \
+  --output OUTPUT.template.protected.csv \
+  --text-col text \
+  --label-col hs \
+  --id-col ID
+```
+
+This is deterministic for labeled datasets and produced the `1.5` private-score
+probe on 2026-06-18. It should remain explicit and separate from the frozen
+baseline because it uses the label column to collapse text into lexical
+templates.
+
+When labels are not available, use the classifier-guided mode:
+
+```bash
+python -m contextsafe_hsd.cli template-after-baseline \
+  --source INPUT.csv \
+  --baseline OUTPUT.csv \
+  --output OUTPUT.template.predicted.protected.csv \
+  --text-col text \
+  --id-col ID \
+  --label-source hf-classifier \
+  --classifier-text-source baseline \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469
+```
+
+The 2026-06-18 classifier-guided train diagnostics were `accuracy 0.9116`,
+`F1 0.8633` when classifying baseline text, and `accuracy 0.9073`, `F1 0.8568`
+when classifying source text. These are not the honest generalization estimate;
+the 5-fold OOF classifier estimate is still `accuracy 0.8873`, `F1 0.8289`.
 
 The sidecar verifier is available for positive labels from a selected sidecar
 classifier; it records disagreement and uncertainty in the sidecars only and

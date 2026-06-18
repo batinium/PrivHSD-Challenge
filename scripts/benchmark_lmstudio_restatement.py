@@ -47,6 +47,8 @@ MANUAL_SMALL_MODEL_MARKERS = (
 )
 JSON_OBJECT_PATTERN = re.compile(r"\{", re.S)
 WORD_PATTERN = re.compile(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
+BRACKET_TOKEN_PATTERN = re.compile(r"\[[A-Z][A-Z0-9_:-]*\]")
+TOOL_NAME = "record_comment_restatement"
 
 
 SYSTEM_PROMPT = """Return compact JSON only. Do not explain. /no_think
@@ -75,6 +77,16 @@ Rules:
 
 Return exactly this JSON object:
 {"restatement":"...","meaning_preserved":true,"hs_label_preserved":true,"target_direction_preserved":true,"pii_removed":true}"""
+
+TOOL_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
+    "Return compact JSON only. Do not explain. /no_think",
+    f"Call the required {TOOL_NAME} tool. Do not explain. /no_think",
+).replace(
+    "Return exactly this JSON object:\n"
+    '{"restatement":"...","meaning_preserved":true,"hs_label_preserved":true,'
+    '"target_direction_preserved":true,"pii_removed":true}',
+    "Return the restatement and boolean checks by calling the required tool.",
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +123,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=700)
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
     parser.add_argument("--max-retries", type=int, default=2)
+    parser.add_argument(
+        "--tool-calling",
+        action="store_true",
+        help="Require the model to return the restatement via an LM Studio tool call.",
+    )
     parser.add_argument(
         "--include-risky-models",
         action="store_true",
@@ -233,7 +250,10 @@ def read_rows(args: argparse.Namespace) -> list[SourceRow]:
     return rows
 
 
-def allocate_counts(bucket_sizes: dict[tuple[bool, str], int], sample_size: int) -> dict[tuple[bool, str], int]:
+def allocate_counts(
+    bucket_sizes: dict[tuple[bool, ...], int],
+    sample_size: int,
+) -> dict[tuple[bool, ...], int]:
     keys = sorted(bucket_sizes)
     if not keys or sample_size <= 0:
         return {}
@@ -278,16 +298,40 @@ def sample_rows(rows: list[SourceRow], *, sample_size: int, seed: int) -> list[S
     return sorted(selected[:sample_size], key=lambda row: row.row_index)
 
 
+def restatement_tool_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "restatement",
+            "meaning_preserved",
+            "hs_label_preserved",
+            "target_direction_preserved",
+            "pii_removed",
+        ],
+        "properties": {
+            "restatement": {"type": "string"},
+            "meaning_preserved": {"type": "boolean"},
+            "hs_label_preserved": {"type": "boolean"},
+            "target_direction_preserved": {"type": "boolean"},
+            "pii_removed": {"type": "boolean"},
+        },
+    }
+
+
 def make_payload(args: argparse.Namespace, model_id: str, row: SourceRow) -> dict[str, Any]:
     user_payload = {
         "id": row.row_id,
         "hs": row.label,
         "text": row.text,
     }
-    return {
+    payload: dict[str, Any] = {
         "model": model_id,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "system",
+                "content": TOOL_SYSTEM_PROMPT if args.tool_calling else SYSTEM_PROMPT,
+            },
             {
                 "role": "user",
                 "content": "/no_think\n" + json.dumps(user_payload, ensure_ascii=False),
@@ -297,6 +341,23 @@ def make_payload(args: argparse.Namespace, model_id: str, row: SourceRow) -> dic
         "top_p": args.top_p,
         "max_tokens": args.max_tokens,
     }
+    if args.tool_calling:
+        payload["tools"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": TOOL_NAME,
+                    "description": (
+                        "Record a privacy-safe restatement and preservation checks "
+                        "for one hate-speech-review comment."
+                    ),
+                    "parameters": restatement_tool_schema(),
+                    "strict": True,
+                },
+            }
+        ]
+        payload["tool_choice"] = "required"
+    return payload
 
 
 def extract_message_content(response: dict[str, Any]) -> str:
@@ -312,7 +373,33 @@ def extract_message_content(response: dict[str, Any]) -> str:
     return ""
 
 
+def extract_tool_payload(response: dict[str, Any]) -> dict[str, Any]:
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError("response missing choices")
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError("response missing message")
+    for tool_call in message.get("tool_calls") or []:
+        if not isinstance(tool_call, dict):
+            continue
+        function = tool_call.get("function")
+        if not isinstance(function, dict):
+            continue
+        if function.get("name") != TOOL_NAME:
+            continue
+        return parse_json_object(function.get("arguments", ""))
+    function_call = message.get("function_call")
+    if isinstance(function_call, dict) and function_call.get("name") == TOOL_NAME:
+        return parse_json_object(function_call.get("arguments", ""))
+    raise RuntimeError(f"response did not contain {TOOL_NAME} tool call")
+
+
 def parse_json_object(content: str) -> dict[str, Any]:
+    if isinstance(content, dict):
+        return content
+    if not isinstance(content, str):
+        raise RuntimeError("content was not a JSON string")
     stripped = content.strip()
     if stripped.startswith("```"):
         stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.I)
@@ -346,8 +433,12 @@ def request_restatement(
     for attempt in range(1, args.max_retries + 1):
         try:
             response = post_json(chat_endpoint(args.endpoint), payload, args.timeout_seconds)
-            content = extract_message_content(response)
-            parsed = parse_json_object(content)
+            if args.tool_calling:
+                parsed = extract_tool_payload(response)
+                content = json.dumps(parsed, ensure_ascii=False)
+            else:
+                content = extract_message_content(response)
+                parsed = parse_json_object(content)
             return parsed, content, "", time.perf_counter() - started
         except Exception as exc:  # noqa: BLE001 - record model/API failures.
             last_error = exc
@@ -390,6 +481,10 @@ def counter_positive_delta(before: Counter[str], after: Counter[str]) -> Counter
     return delta
 
 
+def bracket_token_counts(text: str) -> Counter[str]:
+    return Counter(BRACKET_TOKEN_PATTERN.findall(text))
+
+
 def score_row(row: SourceRow, parsed: dict[str, Any] | None, error_text: str, elapsed: float) -> dict[str, Any]:
     restatement = ""
     parse_ok = parsed is not None
@@ -425,6 +520,10 @@ def score_row(row: SourceRow, parsed: dict[str, Any] | None, error_text: str, el
         if placeholder_count_before
         else 1.0
     )
+    bracket_tokens_before = bracket_token_counts(row.text)
+    bracket_tokens_after = bracket_token_counts(restatement) if nonempty else Counter()
+    bracket_token_loss = counter_positive_delta(bracket_tokens_before, bracket_tokens_after)
+    bracket_token_gain = counter_positive_delta(bracket_tokens_after, bracket_tokens_before)
     metrics = row_metric_fast(row.text, restatement) if nonempty else {}
     target_category_retention = float(metrics.get("target_category_retention", 0.0))
     target_cue_retention = float(metrics.get("target_cue_retention", 0.0))
@@ -439,6 +538,7 @@ def score_row(row: SourceRow, parsed: dict[str, Any] | None, error_text: str, el
         and all(model_checks.values())
         and residual_high_conf == 0
         and not exact_leaks
+        and not bracket_token_gain
         and target_category_retention >= 0.95
     )
     return {
@@ -465,6 +565,10 @@ def score_row(row: SourceRow, parsed: dict[str, Any] | None, error_text: str, el
         "placeholder_counts_after": dict(sorted(placeholders_after.items())),
         "placeholder_loss_counts": dict(sorted(placeholder_loss.items())),
         "placeholder_gain_counts": dict(sorted(placeholder_gain.items())),
+        "bracket_token_counts_before": dict(sorted(bracket_tokens_before.items())),
+        "bracket_token_counts_after": dict(sorted(bracket_tokens_after.items())),
+        "bracket_token_loss_counts": dict(sorted(bracket_token_loss.items())),
+        "bracket_token_gain_counts": dict(sorted(bracket_token_gain.items())),
         "meaning_preserved": model_checks["meaning_preserved"],
         "hs_label_preserved": model_checks["hs_label_preserved"],
         "target_direction_preserved": model_checks["target_direction_preserved"],
@@ -642,6 +746,16 @@ def summarize_model(model_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]
         ),
         "placeholder_loss_total": mapping_value_sum(rows, "placeholder_loss_counts"),
         "placeholder_loss_rows": rows_with_mapping_values(rows, "placeholder_loss_counts"),
+        "bracket_token_gain_total": mapping_value_sum(rows, "bracket_token_gain_counts"),
+        "bracket_token_gain_rows": rows_with_mapping_values(
+            rows,
+            "bracket_token_gain_counts",
+        ),
+        "bracket_token_loss_total": mapping_value_sum(rows, "bracket_token_loss_counts"),
+        "bracket_token_loss_rows": rows_with_mapping_values(
+            rows,
+            "bracket_token_loss_counts",
+        ),
         "exact_copy_count": truthy_count(rows, "exact_copy"),
         "too_short_count": truthy_count(rows, "too_short"),
         "too_long_count": truthy_count(rows, "too_long"),
@@ -683,6 +797,10 @@ def write_rows_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "placeholder_counts_after",
         "placeholder_loss_counts",
         "placeholder_gain_counts",
+        "bracket_token_counts_before",
+        "bracket_token_counts_after",
+        "bracket_token_loss_counts",
+        "bracket_token_gain_counts",
         "error",
         "original_high_confidence_direct",
         "residual_high_confidence_direct",

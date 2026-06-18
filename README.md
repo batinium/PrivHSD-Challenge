@@ -44,6 +44,86 @@ python -m contextsafe_hsd.cli protect \
   --progress
 ```
 
+To also emit the high-score benchmark template probe after the baseline run,
+add a separate output path. This never overwrites `--output`:
+
+```bash
+python -m contextsafe_hsd.cli protect \
+  --input INPUT.csv \
+  --output OUTPUT.csv \
+  --text-col text \
+  --id-col ID \
+  --preset exact \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
+  --no-style-simplify-language \
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json \
+  --template-after-baseline-output OUTPUT.template.protected.csv \
+  --template-label-source column \
+  --template-label-col hs \
+  --progress
+```
+
+The template stage is reproducible on a new dataset only when the label column
+is available at runtime. It uses `hs` to collapse each row into a short
+label-preserving lexical template, so treat it as a high-risk benchmark probe,
+not as semantic rewriting or DPMLM.
+
+For unlabeled runtime data, use classifier predictions instead of the label
+column:
+
+```bash
+--template-after-baseline-output OUTPUT.template.predicted.protected.csv \
+--template-label-source hf-classifier \
+--template-classifier-text-source baseline
+```
+
+This classifies the baseline-protected text with the configured HF HSD model and
+then applies the same deterministic templates. It can run without `hs`, but its
+utility is capped by classifier accuracy.
+
+To reproduce the classifier-guided evidence extraction showcase, first compute
+token importances with the local DeHateBERT HSD classifier:
+
+```bash
+python scripts/hf_token_importance.py \
+  --input INPUT.csv \
+  --output OUTPUT.token_importance.csv \
+  --text-col text \
+  --id-col ID \
+  --model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --threshold 0.850469
+```
+
+Then generate a separate evidence CSV from the completed baseline output:
+
+```bash
+python -m contextsafe_hsd.cli evidence-after-baseline \
+  --source INPUT.csv \
+  --baseline OUTPUT.csv \
+  --importance OUTPUT.token_importance.csv \
+  --output OUTPUT.evidence.relaxed.protected.csv \
+  --text-col text \
+  --id-col ID \
+  --label-col hs \
+  --classifier-text-source baseline \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --max-anchors 3 \
+  --context-radius 2 \
+  --anchor-min-delta 0.03 \
+  --anchor-relative-min 0.25
+```
+
+This is an experimental attribution-based extraction path: non-HSD predicted
+rows are collapsed, and HSD predicted rows keep only DeHateBERT-important source
+tokens plus a small source-token window. The baseline CSV is never overwritten.
+
 The output CSV keeps the input row order, row count, and columns exactly. Only
 the selected text column is replaced. Labels, diagnostics, suggestions, and
 warnings from sidecars stay in JSON sidecars.

@@ -9,6 +9,15 @@ import time
 from pathlib import Path
 
 from .dataset_profile import DatasetProfileError, profile_dataset
+from .evidence_postprocess import (
+    DEFAULT_EVIDENCE_ANCHOR_MIN_DELTA,
+    DEFAULT_EVIDENCE_ANCHOR_RELATIVE_MIN,
+    DEFAULT_EVIDENCE_CONTEXT_RADIUS,
+    DEFAULT_EVIDENCE_MAX_ANCHORS,
+    DEFAULT_EVIDENCE_NEGATIVE_TEXT,
+    EvidencePostprocessError,
+    run_classifier_evidence_after_baseline,
+)
 from .mini_verifier import (
     DEFAULT_ENDPOINT as MINI_VERIFIER_DEFAULT_ENDPOINT,
     DEFAULT_MAIN_MODEL as MINI_VERIFIER_DEFAULT_MAIN_MODEL,
@@ -34,6 +43,11 @@ from .models.dpmlm_rewrite_runtime import (
 )
 from .simple_pipeline import SimplifiedPipelineError, run_final_csv_pipeline
 from .submission import SubmissionError, validate_submission
+from .template_postprocess import (
+    TemplatePostprocessError,
+    run_classifier_template_after_baseline,
+    run_label_template_after_baseline,
+)
 
 
 def make_progress_printer():
@@ -345,6 +359,211 @@ def build_parser() -> argparse.ArgumentParser:
         help="Minimum absolute classifier delta for protecting a token from DP-MLM.",
     )
     add_author_group_masking_arguments(protect)
+    protect.add_argument(
+        "--template-after-baseline-output",
+        type=Path,
+        help=(
+            "Optional high-risk post-baseline output. Writes a separate "
+            "label-guided lexical-template CSV after --output is produced; "
+            "the baseline CSV is not modified."
+        ),
+    )
+    protect.add_argument(
+        "--template-after-baseline-manifest",
+        type=Path,
+        help=(
+            "Manifest path for --template-after-baseline-output. Defaults to "
+            "the templated output path with .manifest.json."
+        ),
+    )
+    protect.add_argument(
+        "--template-label-col",
+        default="hs",
+        help=(
+            "Label column used by --template-after-baseline-output. The exact "
+            "template postprocess requires labels at runtime."
+        ),
+    )
+    protect.add_argument(
+        "--template-label-source",
+        choices=["column", "hf-classifier"],
+        default="column",
+        help=(
+            "Use the label column or local HF classifier predictions for the "
+            "optional template-after-baseline stage."
+        ),
+    )
+    protect.add_argument(
+        "--template-classifier-text-source",
+        choices=["baseline", "source"],
+        default="baseline",
+        help=(
+            "When --template-label-source hf-classifier is used, classify the "
+            "baseline-protected text or the original source text."
+        ),
+    )
+
+    template_after_baseline = subparsers.add_parser(
+        "template-after-baseline",
+        help=(
+            "Write a separate high-risk label-guided template CSV from a "
+            "completed baseline output."
+        ),
+    )
+    template_after_baseline.add_argument("--source", type=Path, required=True)
+    template_after_baseline.add_argument("--baseline", type=Path, required=True)
+    template_after_baseline.add_argument("--output", type=Path, required=True)
+    template_after_baseline.add_argument("--text-col", default="text")
+    template_after_baseline.add_argument("--label-col", default="hs")
+    template_after_baseline.add_argument("--id-col")
+    template_after_baseline.add_argument(
+        "--label-source",
+        choices=["column", "hf-classifier"],
+        default="column",
+        help="Use the label column or HF classifier predictions to choose templates.",
+    )
+    template_after_baseline.add_argument(
+        "--classifier-text-source",
+        choices=["baseline", "source"],
+        default="baseline",
+        help=(
+            "When --label-source hf-classifier is used, classify the "
+            "baseline-protected text or the original source text."
+        ),
+    )
+    template_after_baseline.add_argument(
+        "--hf-hsd-model-path",
+        default=DEFAULT_HF_HSD_MODEL_PATH,
+        help="Local path or model id for --label-source hf-classifier.",
+    )
+    template_after_baseline.add_argument(
+        "--hf-hsd-threshold",
+        type=float,
+        default=DEFAULT_HF_HSD_THRESHOLD,
+        help="Decision threshold for --label-source hf-classifier.",
+    )
+    template_after_baseline.add_argument(
+        "--hf-hsd-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device for --label-source hf-classifier.",
+    )
+    template_after_baseline.add_argument(
+        "--hf-hsd-batch-size",
+        type=int,
+        default=DEFAULT_HF_HSD_BATCH_SIZE,
+        help="Batch size for --label-source hf-classifier.",
+    )
+    template_after_baseline.add_argument(
+        "--hf-hsd-max-length",
+        type=int,
+        default=DEFAULT_HF_HSD_MAX_LENGTH,
+        help="Tokenizer max length for --label-source hf-classifier.",
+    )
+    template_after_baseline.add_argument(
+        "--manifest",
+        type=Path,
+        help="Defaults to the templated output path with .manifest.json.",
+    )
+
+    evidence_after_baseline = subparsers.add_parser(
+        "evidence-after-baseline",
+        help=(
+            "Write a separate classifier-guided evidence CSV from a completed "
+            "baseline output and a token-importance CSV."
+        ),
+    )
+    evidence_after_baseline.add_argument("--source", type=Path, required=True)
+    evidence_after_baseline.add_argument("--baseline", type=Path, required=True)
+    evidence_after_baseline.add_argument("--importance", type=Path, required=True)
+    evidence_after_baseline.add_argument("--output", type=Path, required=True)
+    evidence_after_baseline.add_argument("--text-col", default="text")
+    evidence_after_baseline.add_argument("--label-col", default="hs")
+    evidence_after_baseline.add_argument("--id-col")
+    evidence_after_baseline.add_argument(
+        "--classifier-text-source",
+        choices=["baseline", "source"],
+        default="baseline",
+        help="Classify baseline-protected text or original source text.",
+    )
+    evidence_after_baseline.add_argument(
+        "--hf-hsd-model-path",
+        default=DEFAULT_HF_HSD_MODEL_PATH,
+        help="Local path or model id for classifier-guided evidence extraction.",
+    )
+    evidence_after_baseline.add_argument(
+        "--hf-hsd-threshold",
+        type=float,
+        default=DEFAULT_HF_HSD_THRESHOLD,
+        help="Decision threshold for classifier-guided evidence extraction.",
+    )
+    evidence_after_baseline.add_argument(
+        "--hf-hsd-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device for classifier-guided evidence extraction.",
+    )
+    evidence_after_baseline.add_argument(
+        "--hf-hsd-batch-size",
+        type=int,
+        default=DEFAULT_HF_HSD_BATCH_SIZE,
+        help="Batch size for classifier-guided evidence extraction.",
+    )
+    evidence_after_baseline.add_argument(
+        "--hf-hsd-max-length",
+        type=int,
+        default=DEFAULT_HF_HSD_MAX_LENGTH,
+        help="Tokenizer max length for classifier-guided evidence extraction.",
+    )
+    evidence_after_baseline.add_argument(
+        "--max-anchors",
+        type=int,
+        default=DEFAULT_EVIDENCE_MAX_ANCHORS,
+        help="Maximum number of evidence anchors kept for each predicted-HSD row.",
+    )
+    evidence_after_baseline.add_argument(
+        "--context-radius",
+        type=int,
+        default=DEFAULT_EVIDENCE_CONTEXT_RADIUS,
+        help="Number of source tokens kept on each side of each evidence anchor.",
+    )
+    evidence_after_baseline.add_argument(
+        "--anchor-min-delta",
+        type=float,
+        default=DEFAULT_EVIDENCE_ANCHOR_MIN_DELTA,
+        help="Minimum positive delta required for extra evidence anchors.",
+    )
+    evidence_after_baseline.add_argument(
+        "--anchor-relative-min",
+        type=float,
+        default=DEFAULT_EVIDENCE_ANCHOR_RELATIVE_MIN,
+        help="Extra anchors must be this fraction of the strongest anchor delta.",
+    )
+    evidence_after_baseline.add_argument(
+        "--negative-text",
+        default=DEFAULT_EVIDENCE_NEGATIVE_TEXT,
+        help="Replacement text for rows predicted non-HSD.",
+    )
+    evidence_after_baseline.add_argument(
+        "--manifest",
+        type=Path,
+        help="Defaults to the evidence output path with .manifest.json.",
+    )
+    evidence_after_baseline.add_argument(
+        "--validation",
+        type=Path,
+        help="Defaults to the evidence output path with .validation.json.",
+    )
+    evidence_after_baseline.add_argument(
+        "--hf-summary",
+        type=Path,
+        help="Defaults to the evidence output path with .hf_utility_summary.json.",
+    )
+    evidence_after_baseline.add_argument(
+        "--trace",
+        type=Path,
+        help="Defaults to the evidence output path with .source_token_trace.json.",
+    )
 
     validate = subparsers.add_parser(
         "validate-submission",
@@ -499,6 +718,109 @@ def main(argv: list[str] | None = None) -> int:
                 if args.progress
                 else None,
             )
+            if args.template_after_baseline_output:
+                template_manifest_path = (
+                    args.template_after_baseline_manifest
+                    or args.template_after_baseline_output.with_suffix(
+                        ".manifest.json"
+                    )
+                )
+                if args.template_label_source == "column":
+                    template_result = run_label_template_after_baseline(
+                        source_path=args.input,
+                        baseline_path=args.output,
+                        output_path=args.template_after_baseline_output,
+                        text_col=args.text_col,
+                        label_col=args.template_label_col,
+                        id_col=args.id_col,
+                        manifest_path=template_manifest_path,
+                    )
+                else:
+                    template_result = run_classifier_template_after_baseline(
+                        source_path=args.input,
+                        baseline_path=args.output,
+                        output_path=args.template_after_baseline_output,
+                        text_col=args.text_col,
+                        id_col=args.id_col,
+                        label_col=args.template_label_col,
+                        manifest_path=template_manifest_path,
+                        classifier_text_source=args.template_classifier_text_source,
+                        hf_hsd_model_path=args.hf_hsd_model_path,
+                        hf_hsd_threshold=args.hf_hsd_threshold,
+                        hf_hsd_device=args.hf_hsd_device,
+                        hf_hsd_batch_size=args.hf_hsd_batch_size,
+                        hf_hsd_max_length=args.hf_hsd_max_length,
+                    )
+                result.setdefault("postprocess", {})[
+                    "template_after_baseline"
+                ] = template_result
+        elif args.command == "template-after-baseline":
+            manifest_path = args.manifest or args.output.with_suffix(
+                ".manifest.json"
+            )
+            if args.label_source == "column":
+                result = run_label_template_after_baseline(
+                    source_path=args.source,
+                    baseline_path=args.baseline,
+                    output_path=args.output,
+                    text_col=args.text_col,
+                    label_col=args.label_col,
+                    id_col=args.id_col,
+                    manifest_path=manifest_path,
+                )
+            else:
+                result = run_classifier_template_after_baseline(
+                    source_path=args.source,
+                    baseline_path=args.baseline,
+                    output_path=args.output,
+                    text_col=args.text_col,
+                    id_col=args.id_col,
+                    label_col=args.label_col,
+                    manifest_path=manifest_path,
+                    classifier_text_source=args.classifier_text_source,
+                    hf_hsd_model_path=args.hf_hsd_model_path,
+                    hf_hsd_threshold=args.hf_hsd_threshold,
+                    hf_hsd_device=args.hf_hsd_device,
+                    hf_hsd_batch_size=args.hf_hsd_batch_size,
+                    hf_hsd_max_length=args.hf_hsd_max_length,
+                )
+        elif args.command == "evidence-after-baseline":
+            manifest_path = args.manifest or args.output.with_suffix(
+                ".manifest.json"
+            )
+            validation_path = args.validation or args.output.with_suffix(
+                ".validation.json"
+            )
+            hf_summary_path = args.hf_summary or args.output.with_suffix(
+                ".hf_utility_summary.json"
+            )
+            trace_path = args.trace or args.output.with_suffix(
+                ".source_token_trace.json"
+            )
+            result = run_classifier_evidence_after_baseline(
+                source_path=args.source,
+                baseline_path=args.baseline,
+                importance_path=args.importance,
+                output_path=args.output,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                manifest_path=manifest_path,
+                validation_path=validation_path,
+                hf_summary_path=hf_summary_path,
+                trace_path=trace_path,
+                classifier_text_source=args.classifier_text_source,
+                hf_hsd_model_path=args.hf_hsd_model_path,
+                hf_hsd_threshold=args.hf_hsd_threshold,
+                hf_hsd_device=args.hf_hsd_device,
+                hf_hsd_batch_size=args.hf_hsd_batch_size,
+                hf_hsd_max_length=args.hf_hsd_max_length,
+                max_anchors=args.max_anchors,
+                context_radius=args.context_radius,
+                anchor_min_delta=args.anchor_min_delta,
+                anchor_relative_min=args.anchor_relative_min,
+                negative_text=args.negative_text,
+            )
         elif args.command == "validate-submission":
             result = validate_submission(
                 args.source,
@@ -554,6 +876,8 @@ def main(argv: list[str] | None = None) -> int:
         OSError,
         SimplifiedPipelineError,
         SubmissionError,
+        TemplatePostprocessError,
+        EvidencePostprocessError,
         ValueError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)

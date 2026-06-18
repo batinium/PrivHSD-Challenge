@@ -170,6 +170,8 @@ def test_protect_parser_is_small_and_defaults_to_deterministic_review():
 
     assert set(parser._subparsers._actions[1].choices) == {
         "protect",
+        "template-after-baseline",
+        "evidence-after-baseline",
         "validate-submission",
         "profile-dataset",
         "mini-verifier-eval",

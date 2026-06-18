@@ -53,6 +53,101 @@ on, and a `style_scrubbed` candidate is generated for every row before
 selection. It preserves row order, row count, and all input columns; only the
 configured text column is replaced.
 
+## Optional Template Probe After Baseline
+
+If a benchmark run has labels available, the aggressive template probe can be
+emitted after the baseline run as a separate CSV:
+
+```bash
+python -m contextsafe_hsd.cli protect \
+  --input INPUT.csv \
+  --output OUTPUT.csv \
+  --text-col text \
+  --id-col ID \
+  --preset exact \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
+  --no-style-simplify-language \
+  --manifest OUTPUT.manifest.json \
+  --audit OUTPUT.audit.json \
+  --template-after-baseline-output OUTPUT.template.protected.csv \
+  --template-label-source column \
+  --template-label-col hs \
+  --progress
+```
+
+This does not overwrite `OUTPUT.csv`; it writes
+`OUTPUT.template.protected.csv` and a `.manifest.json` sidecar. The method is
+deterministic for a given dataset and ID column, but it requires the `hs` label
+column. For unlabeled future data, this exact label-guided version is not
+reproducible without first predicting labels.
+
+For unlabeled runtime data, predict the label locally:
+
+```bash
+python -m contextsafe_hsd.cli template-after-baseline \
+  --source INPUT.csv \
+  --baseline OUTPUT.csv \
+  --output OUTPUT.template.predicted.protected.csv \
+  --text-col text \
+  --id-col ID \
+  --label-source hf-classifier \
+  --classifier-text-source baseline \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469
+```
+
+On the locked train baseline, classifying baseline-protected text produced
+`accuracy 0.9116`, `F1 0.8633` against `hs`. Classifying original source text
+with the same final checkpoint produced `accuracy 0.9073`, `F1 0.8568`. These
+are train-split diagnostics; the honest held-out estimate remains the 5-fold
+out-of-fold classifier score.
+
+To run it after an already completed baseline:
+
+```bash
+python -m contextsafe_hsd.cli template-after-baseline \
+  --source INPUT.csv \
+  --baseline OUTPUT.csv \
+  --output OUTPUT.template.protected.csv \
+  --text-col text \
+  --label-col hs \
+  --id-col ID
+```
+
+## Optional Evidence Extraction After Baseline
+
+For the post-event evidence-abstraction showcase, compute token importances and
+then run `evidence-after-baseline`. This produces a separate CSV plus manifest,
+validation, local HF utility summary, and source-token trace sidecars.
+
+Relaxed phrase setting:
+
+```bash
+python -m contextsafe_hsd.cli evidence-after-baseline \
+  --source data/train/train_split.csv \
+  --baseline data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv \
+  --importance data/outputs/dpmlm_sweep_20260617/token_importance_train.csv \
+  --output data/outputs/evidence_tokens_classifier_relaxed_20260618/train_split.evidence_tokens_classifier_relaxed_on_baseline.protected.csv \
+  --text-col text \
+  --id-col ID \
+  --label-col hs \
+  --classifier-text-source baseline \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --max-anchors 3 \
+  --context-radius 2 \
+  --anchor-min-delta 0.03 \
+  --anchor-relative-min 0.25
+```
+
+The locked baseline is not overwritten. The output is experimental
+classifier-guided evidence extraction, not a semantic rewrite.
+
 The 2026-06-18 recovered train run on `data/train/train_split.csv` (`1154`
 rows) completed in `1251.76s` wall time and wrote a valid CSV to
 `data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`.

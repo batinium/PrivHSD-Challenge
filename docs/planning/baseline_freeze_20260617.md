@@ -60,12 +60,36 @@ For upload-only CSV generation, `--hsd-classifier off` is acceptable because the
 sidecar classifier does not change the exact output CSV. The locked mobile path
 uses the HF classifier so queue labels and audit summaries are available.
 
+## Optional High-Score Template Probe
+
+The frozen baseline remains the no-simplify protected CSV above. For benchmark
+experiments where `hs` labels are available, the aggressive lexical-template
+probe can be run after the baseline into a separate file:
+
+```bash
+python -m contextsafe_hsd.cli template-after-baseline \
+  --source data/train/train_split.csv \
+  --baseline data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv \
+  --output data/outputs/label_template_hsd_lexical_20260618/train_split.label_template_hsd_lexical.protected.csv \
+  --text-col text \
+  --label-col hs \
+  --id-col ID
+```
+
+This stage is deterministic and does not modify the baseline artifact. It is
+reproducible on new labeled datasets with the same contract, but it is a
+high-risk label-guided benchmark probe rather than DPMLM or semantic rewriting.
+For unlabeled data, run the same command with `--label-source hf-classifier`
+and `--classifier-text-source baseline`; this uses the local HF model prediction
+instead of `hs` and therefore inherits classifier errors.
+
 ## Result Log
 
 | Run | Candidate | Private score | Notes |
 | --- | --- | ---: | --- |
 | #17 | `train_split.no_simplify.protected` | `0.3721` | selected baseline |
 | 2026-06-18 | `train_split.no_simplify_hf.recovered.protected` | `0.37` | locked profile; CSV-identical to #17 |
+| 2026-06-18 | `train_split.label_template_hsd_lexical.protected` | `1.5` | high-risk post-baseline template probe |
 | #18 | `train_split.full_style.protected` | `0.3702` | essentially tied, slightly worse |
 | #23 | `train_split.semantic_cluster_guarded.protected` | `0.3696` | no score gain for added complexity |
 | #24 | `train_split.semantic_cluster_ranked.protected` | `0.2524` | topic masking became destructive |
