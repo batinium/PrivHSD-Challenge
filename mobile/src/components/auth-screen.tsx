@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlimoShieldBackground } from '@/components/glimo-shield-background';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/state/onboarding';
 
 type AuthMode = 'login' | 'signup';
 type LoginRole = 'Admin' | 'Reviewer';
@@ -30,6 +31,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const { width } = useWindowDimensions();
   const isWide = width >= 820;
   const isSignup = mode === 'signup';
+  const { startTutorial } = useOnboarding();
   const [role, setRole] = useState<LoginRole>('Reviewer');
   const [remember, setRemember] = useState(true);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
@@ -41,8 +43,9 @@ export function AuthScreen({ mode }: AuthScreenProps) {
 
   const captchaCode = captchaCodes[captchaIndex];
 
-  function continueToConsole() {
-    router.replace('/console');
+  function continueToWorkspace() {
+    startTutorial();
+    router.replace('/review');
   }
 
   function goToAlternateAuth() {
@@ -66,29 +69,38 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           <View style={[styles.shell, isWide && styles.shellWide]}>
-            <View style={[styles.brandPanel, isWide && styles.brandPanelWide]}>
-              <Image
-                source={require('@/assets/glimo_mascot_text_below.png')}
-                style={styles.brandMascot}
-                contentFit="contain"
-              />
-              <View style={styles.brandCopy}>
-                <Text style={styles.eyebrow}>Protected review</Text>
-                <Text style={styles.title}>Glimo access</Text>
-                <Text style={styles.subtitle}>
-                  {isSignup
-                    ? 'Create access for the review workspace.'
-                    : 'Sign in to continue to the review workspace.'}
-                </Text>
+            {isWide && (
+              <View style={[styles.brandPanel, styles.brandPanelWide]}>
+                <Image
+                  source={require('@/assets/glimo_mascot_text_below.png')}
+                  style={styles.brandMascot}
+                  contentFit="contain"
+                />
+                <View style={styles.brandCopy}>
+                  <Text style={styles.eyebrow}>Protected review</Text>
+                  <Text style={styles.title}>Glimo access</Text>
+                  <Text style={styles.subtitle}>
+                    {isSignup
+                      ? 'Create access for the review workspace.'
+                      : 'Sign in to continue to the review workspace.'}
+                  </Text>
+                </View>
+                <View style={styles.statusRow}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.statusText}>Local demo environment</Text>
+                </View>
               </View>
-              <View style={styles.statusRow}>
-                <View style={styles.statusDot} />
-                <Text style={styles.statusText}>Local demo environment</Text>
-              </View>
-            </View>
+            )}
 
             <View style={styles.formCard}>
-              <View style={styles.formHeader}>
+              {!isWide && (
+                <Image
+                  source={require('@/assets/glimo_mascot.png')}
+                  style={styles.formMascot}
+                  contentFit="contain"
+                />
+              )}
+              <View style={[styles.formHeader, !isWide && styles.formHeaderMobile]}>
                 <Text style={styles.formTitle}>{isSignup ? 'Create account' : 'Sign in'}</Text>
                 <Text style={styles.formSubtitle}>
                   {isSignup ? 'Request reviewer access.' : 'Use your reviewer account.'}
@@ -217,7 +229,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 </View>
               )}
 
-              <Pressable onPress={continueToConsole} style={styles.primaryButton}>
+              <Pressable onPress={continueToWorkspace} style={styles.primaryButton}>
                 <Text style={styles.primaryButtonText}>
                   {isSignup ? 'Create account' : 'Sign in'}
                 </Text>
@@ -356,6 +368,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 430,
     alignSelf: 'center',
+    position: 'relative',
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderWidth: 1,
     borderColor: AppColors.line,
@@ -370,6 +383,19 @@ const styles = StyleSheet.create({
   },
   formHeader: {
     gap: 6,
+  },
+  formHeaderMobile: {
+    minHeight: 62,
+    justifyContent: 'center',
+    paddingLeft: 72,
+  },
+  formMascot: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    width: 54,
+    height: 62,
+    zIndex: 1,
   },
   formTitle: {
     color: AppColors.ink,

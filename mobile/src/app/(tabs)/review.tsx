@@ -8,12 +8,19 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlimoShieldBackground } from '@/components/glimo-shield-background';
+import {
+  OnboardingTutorial,
+  TutorialSpotlightLayout,
+} from '@/components/onboarding-tutorial';
 import { AppColors } from '@/constants/theme';
-import { ReviewDecision, ReviewItem, reviewSeedItems } from '@/data/review-data';
+import { ReviewItem } from '@/data/review-data';
+import { TutorialTarget, useOnboarding } from '@/state/onboarding';
+import { ClassifiedDecision, useReviewProgress } from '@/state/review-progress';
 import { guardRestatement } from '@/utils/privacy';
 
 const SWIPE_THRESHOLD = 110;
@@ -22,15 +29,54 @@ const HASH_OFFSET = 0x811c9dc5;
 const HASH_PRIME = 0x01000193;
 
 export default function CitizenReview() {
-  const [items, setItems] = useState(reviewSeedItems);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [position] = useState(() => new Animated.ValueXY());
+  const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
+  const [tutorialTargets, setTutorialTargets] = useState<
+    Partial<Record<TutorialTarget, TutorialSpotlightLayout>>
+  >({});
+  const { finishTutorial, isTutorialActive } = useOnboarding();
+  const {
+    activeIndex,
+    activeItem,
+    items,
+    recordDecision,
+    remainingCount,
+    resetReviewQueue,
+  } = useReviewProgress();
   const { width, height } = useWindowDimensions();
   const isCompact = height < 720 || width < 380;
   const cardWidth = Math.min(width - 36, 430);
   const cardHeight = Math.min(Math.max(height - (isCompact ? 292 : 320), 340), 472);
-  const activeItem = items[activeIndex];
-  const remainingCount = Math.max(items.length - activeIndex, 0);
+
+  const captureTutorialTarget = useCallback(
+    (target: TutorialTarget, borderRadius = 16) =>
+      (event: LayoutChangeEvent) => {
+        const { height: targetHeight, width: targetWidth, x, y } = event.nativeEvent.layout;
+        const nextTarget = {
+          borderRadius,
+          height: targetHeight,
+          width: targetWidth,
+          x,
+          y,
+        };
+
+        setTutorialTargets((current) => {
+          const currentTarget = current[target];
+          if (
+            currentTarget &&
+            currentTarget.height === nextTarget.height &&
+            currentTarget.width === nextTarget.width &&
+            currentTarget.x === nextTarget.x &&
+            currentTarget.y === nextTarget.y
+          ) {
+            return current;
+          }
+
+          return { ...current, [target]: nextTarget };
+        });
+      },
+    [],
+  );
 
   const rotate = position.x.interpolate({
     inputRange: [-220, 0, 220],
@@ -77,31 +123,34 @@ export default function CitizenReview() {
   }, [position]);
 
   const commitDecision = useCallback(
-    (decision: ReviewDecision, toValue: { x: number; y: number }) => {
+    (decision: ClassifiedDecision, toValue: { x: number; y: number }) => {
+      if (isSubmittingDecision) {
+        return;
+      }
+
       const item = items[activeIndex];
       if (!item) {
         return;
       }
+      setIsSubmittingDecision(true);
       Animated.timing(position, {
         toValue,
         duration: 180,
         useNativeDriver: false,
       }).start(() => {
-        setItems((current) =>
-          current.map((entry) => (entry.id === item.id ? { ...entry, decision } : entry)),
-        );
-        setActiveIndex((current) => current + 1);
+        recordDecision(item.id, decision);
         position.setValue({ x: 0, y: 0 });
+        setIsSubmittingDecision(false);
       });
     },
-    [activeIndex, items, position],
+    [activeIndex, isSubmittingDecision, items, position, recordDecision],
   );
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8,
+          !isSubmittingDecision && (Math.abs(gesture.dx) > 8 || Math.abs(gesture.dy) > 8),
         onPanResponderMove: Animated.event([null, { dx: position.x, dy: position.y }], {
           useNativeDriver: false,
         }),
@@ -120,7 +169,7 @@ export default function CitizenReview() {
           }
         },
       }),
-    [commitDecision, position, resetCard],
+    [commitDecision, isSubmittingDecision, position, resetCard],
   );
 
   function markUncertain() {
@@ -131,7 +180,7 @@ export default function CitizenReview() {
     <SafeAreaView style={styles.safeArea}>
       <GlimoShieldBackground swipeX={position.x} variant="review" />
       <View style={[styles.page, isCompact && styles.pageCompact]}>
-        <View style={styles.header}>
+        <View onLayout={captureTutorialTarget('header', 34)} style={styles.header}>
           <View style={styles.brandLockup}>
             <Image
               source={require('@/assets/glimo_mascot.png')}
@@ -139,17 +188,23 @@ export default function CitizenReview() {
               contentFit="contain"
             />
             <View style={styles.headerText}>
-              <Text style={styles.eyebrow}>Glimo review</Text>
-              <Text style={[styles.title, isCompact && styles.titleCompact]}>Evidence deck</Text>
+              <Text style={styles.eyebrow}>
+                {isTutorialActive ? 'Glimo tutorial' : 'Glimo review'}
+              </Text>
+              <Text style={[styles.title, isCompact && styles.titleCompact]}>
+                {isTutorialActive ? 'Practice deck' : 'Evidence deck'}
+              </Text>
             </View>
           </View>
           <View style={[styles.counter, isCompact && styles.counterCompact]}>
             <Text style={styles.counterValue}>{remainingCount}</Text>
-            <Text style={styles.counterLabel}>left</Text>
+            <Text style={styles.counterLabel}>{isTutorialActive ? 'practice' : 'left'}</Text>
           </View>
         </View>
 
-        <View style={[styles.deck, { minHeight: cardHeight + 24, width: cardWidth }]}>
+        <View
+          onLayout={captureTutorialTarget('deck', 18)}
+          style={[styles.deck, { minHeight: cardHeight + 24, width: cardWidth }]}>
           {activeItem ? (
             <>
               {items[activeIndex + 1] && (
@@ -264,38 +319,51 @@ export default function CitizenReview() {
               />
               <Text style={styles.emptyTitle}>Queue complete</Text>
               <Text style={styles.emptyCopy}>
-                Citizen votes are ready for admin export and audit review.
+                {isTutorialActive
+                  ? 'Practice cards are complete. Finish the tutorial to load the real queue.'
+                  : 'Citizen votes are ready for admin export and audit review.'}
               </Text>
               <Pressable
                 onPress={() => {
-                  setActiveIndex(0);
-                  setItems(reviewSeedItems);
+                  if (isTutorialActive) {
+                    finishTutorial();
+                  } else {
+                    resetReviewQueue();
+                  }
                 }}
                 style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Restart demo queue</Text>
+                <Text style={styles.primaryButtonText}>
+                  {isTutorialActive ? 'Finish tutorial' : 'Restart demo queue'}
+                </Text>
               </Pressable>
             </View>
           )}
         </View>
 
-        <View style={[styles.actions, { width: cardWidth }]}>
+        <View
+          onLayout={captureTutorialTarget('actions', 40)}
+          style={[styles.actions, { width: cardWidth }]}>
           <Pressable
-            disabled={!activeItem}
+            disabled={!activeItem || isSubmittingDecision}
             onPress={() => commitDecision('not_hatred', { x: -SWIPE_EXIT_DISTANCE, y: 32 })}
             style={[styles.actionButton, styles.rejectButton]}>
             <Text style={styles.rejectText}>X</Text>
           </Pressable>
-          <Pressable disabled={!activeItem} onPress={markUncertain} style={styles.actionButton}>
+          <Pressable
+            disabled={!activeItem || isSubmittingDecision}
+            onPress={markUncertain}
+            style={styles.actionButton}>
             <Text style={styles.maybeText}>?</Text>
           </Pressable>
           <Pressable
-            disabled={!activeItem}
+            disabled={!activeItem || isSubmittingDecision}
             onPress={() => commitDecision('confirmed_hatred', { x: SWIPE_EXIT_DISTANCE, y: 32 })}
             style={[styles.actionButton, styles.confirmButton]}>
             <Text style={styles.confirmText}>YES</Text>
           </Pressable>
         </View>
       </View>
+      {isTutorialActive && <OnboardingTutorial targets={tutorialTargets} />}
     </SafeAreaView>
   );
 }
@@ -335,14 +403,7 @@ function ReviewCard({
         contentFit="contain"
       />
       <View style={styles.cardTop}>
-        <View style={styles.caseIdentity}>
-          <Image
-            source={require('@/assets/glimo_mascot.png')}
-            style={styles.cardMascot}
-            contentFit="contain"
-          />
-          <Text style={styles.caseText}>{caseId}</Text>
-        </View>
+        <Text style={styles.caseText}>{caseId}</Text>
       </View>
 
       <View style={styles.restatementBlock}>
@@ -594,16 +655,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-  },
-  caseIdentity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 10,
-  },
-  cardMascot: {
-    width: 42,
-    height: 48,
   },
   caseText: {
     color: AppColors.ink,

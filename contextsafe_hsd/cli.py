@@ -8,6 +8,13 @@ import sys
 import time
 from pathlib import Path
 
+from .backend_bundle import (
+    DEFAULT_RESTATEMENT_ENDPOINT,
+    DEFAULT_RESTATEMENT_MODEL,
+    DEFAULT_TOKEN_PROTECT_THRESHOLD,
+    BackendBundleError,
+    run_backend_bundle,
+)
 from .dataset_profile import DatasetProfileError, profile_dataset
 from .evidence_postprocess import (
     DEFAULT_EVIDENCE_ANCHOR_MIN_DELTA,
@@ -575,6 +582,141 @@ def build_parser() -> argparse.ArgumentParser:
         help="Defaults to the evidence output path with .source_token_trace.json.",
     )
 
+    backend_bundle = subparsers.add_parser(
+        "backend-bundle",
+        help=(
+            "Build backend/admin CSV artifacts: token importance, scrubbed CSV, "
+            "and LLM-restated CSV."
+        ),
+        description=(
+            "Run the backend/admin artifact pipeline. It reuses or generates "
+            "DeHateBERT token importances, runs the locked PII/style scrubbed "
+            "CSV path, then writes Qwen-style restated CSVs for backend review "
+            "serving."
+        ),
+    )
+    backend_bundle.add_argument("--input", type=Path, required=True)
+    backend_bundle.add_argument("--output-dir", type=Path, required=True)
+    backend_bundle.add_argument("--text-col", default="text")
+    backend_bundle.add_argument("--id-col")
+    backend_bundle.add_argument("--label-col", default="hs")
+    backend_bundle.add_argument(
+        "--importance-csv",
+        type=Path,
+        help="Existing/generated DeHateBERT token-importance CSV path.",
+    )
+    backend_bundle.add_argument(
+        "--scrubbed-csv",
+        type=Path,
+        help="PII/style scrubbed CSV output path. Defaults under --output-dir.",
+    )
+    backend_bundle.add_argument(
+        "--restated-csv",
+        type=Path,
+        help="Schema-preserving restated CSV output path. Defaults under --output-dir.",
+    )
+    backend_bundle.add_argument(
+        "--restatement-annotated-csv",
+        type=Path,
+        help=(
+            "Admin/debug CSV with source_text, scrubbed_text, and restatement "
+            "columns."
+        ),
+    )
+    backend_bundle.add_argument(
+        "--deviation-audit-csv",
+        type=Path,
+        help="Restatement deviation audit CSV path. Defaults under --output-dir.",
+    )
+    backend_bundle.add_argument(
+        "--deviation-audit-summary",
+        type=Path,
+        help="Restatement deviation audit summary JSON path.",
+    )
+    backend_bundle.add_argument(
+        "--manifest",
+        type=Path,
+        help="Backend bundle manifest path. Defaults under --output-dir.",
+    )
+    backend_bundle.add_argument(
+        "--force-token-importance",
+        action="store_true",
+        help="Recompute token importance even when --importance-csv exists.",
+    )
+    backend_bundle.add_argument(
+        "--force-restatement",
+        action="store_true",
+        help="Ignore cached restatement rows and regenerate them.",
+    )
+    backend_bundle.add_argument(
+        "--hf-hsd-model-path",
+        default=DEFAULT_HF_HSD_MODEL_PATH,
+        help="Local DeHateBERT fine-tuned checkpoint path.",
+    )
+    backend_bundle.add_argument(
+        "--hf-hsd-threshold",
+        type=float,
+        default=DEFAULT_HF_HSD_THRESHOLD,
+        help="Decision threshold for the local DeHateBERT sidecar.",
+    )
+    backend_bundle.add_argument(
+        "--hf-hsd-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+    )
+    backend_bundle.add_argument(
+        "--hf-hsd-batch-size",
+        type=int,
+        default=DEFAULT_HF_HSD_BATCH_SIZE,
+    )
+    backend_bundle.add_argument(
+        "--hf-hsd-max-length",
+        type=int,
+        default=DEFAULT_HF_HSD_MAX_LENGTH,
+    )
+    backend_bundle.add_argument(
+        "--token-protect-threshold",
+        type=float,
+        default=DEFAULT_TOKEN_PROTECT_THRESHOLD,
+        help="Minimum absolute classifier delta for marked protected HSD tokens.",
+    )
+    backend_bundle.add_argument(
+        "--restatement-endpoint",
+        default=DEFAULT_RESTATEMENT_ENDPOINT,
+        help="LM Studio/OpenAI-compatible base URL.",
+    )
+    backend_bundle.add_argument(
+        "--restatement-model",
+        default=DEFAULT_RESTATEMENT_MODEL,
+        help="LM Studio model id for descriptive restatements.",
+    )
+    backend_bundle.add_argument("--restatement-batch-size", type=int, default=5)
+    backend_bundle.add_argument("--restatement-temperature", type=float, default=0.2)
+    backend_bundle.add_argument("--restatement-top-p", type=float, default=0.9)
+    backend_bundle.add_argument("--restatement-max-tokens", type=int, default=2200)
+    backend_bundle.add_argument(
+        "--restatement-timeout-seconds",
+        type=float,
+        default=180.0,
+    )
+    backend_bundle.add_argument("--restatement-max-retries", type=int, default=2)
+    backend_bundle.add_argument(
+        "--final-scrub",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run final high-confidence direct-identifier cleanup on restatements.",
+    )
+    backend_bundle.add_argument(
+        "--allow-restatement-fallback",
+        action="store_true",
+        help="Use scrubbed text if an LLM row fails instead of failing the command.",
+    )
+    backend_bundle.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print coarse raw-text-free bundle progress to stderr.",
+    )
+
     validate = subparsers.add_parser(
         "validate-submission",
         help="Validate row/order/ID/metadata shape for an exact-format output CSV.",
@@ -832,6 +974,43 @@ def main(argv: list[str] | None = None) -> int:
                 negative_text=args.negative_text,
                 negative_strategy=args.negative_strategy,
             )
+        elif args.command == "backend-bundle":
+            result = run_backend_bundle(
+                args.input,
+                args.output_dir,
+                text_col=args.text_col,
+                id_col=args.id_col,
+                label_col=args.label_col,
+                importance_csv=args.importance_csv,
+                scrubbed_csv=args.scrubbed_csv,
+                restated_csv=args.restated_csv,
+                restatement_annotated_csv=args.restatement_annotated_csv,
+                deviation_audit_csv=args.deviation_audit_csv,
+                deviation_audit_summary=args.deviation_audit_summary,
+                manifest_path=args.manifest,
+                force_token_importance=args.force_token_importance,
+                force_restatement=args.force_restatement,
+                hf_hsd_model_path=args.hf_hsd_model_path,
+                hf_hsd_threshold=args.hf_hsd_threshold,
+                hf_hsd_device=args.hf_hsd_device,
+                hf_hsd_batch_size=args.hf_hsd_batch_size,
+                hf_hsd_max_length=args.hf_hsd_max_length,
+                token_protect_threshold=args.token_protect_threshold,
+                restatement_endpoint=args.restatement_endpoint,
+                restatement_model=args.restatement_model,
+                restatement_batch_size=args.restatement_batch_size,
+                restatement_temperature=args.restatement_temperature,
+                restatement_top_p=args.restatement_top_p,
+                restatement_max_tokens=args.restatement_max_tokens,
+                restatement_timeout_seconds=args.restatement_timeout_seconds,
+                restatement_max_retries=args.restatement_max_retries,
+                final_scrub=args.final_scrub,
+                allow_restatement_fallback=args.allow_restatement_fallback,
+                progress_callback=make_progress_printer()
+                if args.progress
+                else None,
+                command=["contextsafe-hsd", *raw_argv],
+            )
         elif args.command == "validate-submission":
             result = validate_submission(
                 args.source,
@@ -882,6 +1061,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except (
+        BackendBundleError,
         DatasetProfileError,
         MiniVerifierError,
         OSError,

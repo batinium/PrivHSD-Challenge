@@ -18,11 +18,14 @@ export default function AppTabs() {
     <Tabs>
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="console" href="/console" asChild>
-            <TabButton>Console</TabButton>
-          </TabTrigger>
           <TabTrigger name="review" href="/review" asChild>
             <TabButton>Review</TabButton>
+          </TabTrigger>
+          <TabTrigger name="leaderboard" href="/leaderboard" asChild>
+            <TabButton>Rank</TabButton>
+          </TabTrigger>
+          <TabTrigger name="console" href="/console" asChild>
+            <TabButton>Console</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>

@@ -16,3 +16,5 @@ data/train/
 node_modules/
 workbench/frontend/dist/
 workbench/.cache/
+dpmlm_artefacts/
+*:Zone.Identifier

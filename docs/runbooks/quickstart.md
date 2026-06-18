@@ -151,6 +151,90 @@ classifier-guided evidence extraction, not a semantic rewrite. To reproduce the
 older high-score collapsed-negative artifact, omit `--negative-strategy
 baseline` and use `--context-radius 2`.
 
+## Backend/Admin Restatement Bundle
+
+Use this when the backend needs staged CSV artifacts for admin review:
+
+```bash
+python -m contextsafe_hsd.cli backend-bundle \
+  --input INPUT.csv \
+  --output-dir data/outputs/backend_bundle_RUN_NAME \
+  --text-col text \
+  --id-col ID \
+  --label-col hs \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --restatement-endpoint http://100.120.207.64:1234 \
+  --restatement-model qwen3.5-4b \
+  --final-scrub \
+  --progress
+```
+
+The bundle writes:
+
+- `*.dehatebert_token_importance.csv`: loaded if already present unless
+  `--force-token-importance` is passed.
+- `*.scrubbed.csv`: locked PII/style scrubbed CSV.
+- `*.restated.csv`: schema-preserving CSV with `text` replaced by final
+  restatements.
+- `*.restated.annotated.csv`: admin/debug CSV containing `source_text`,
+  `scrubbed_text`, raw restatement, final-scrubbed restatement, and generation
+  status. Use this file for the admin portal, not for public reviewer export.
+- `*.restated.deviation_audit.csv`: source-to-restatement drift audit with
+  target/context/offensive cue retention checks.
+- `*.restated.deviation_audit.summary.json`: risk and reason counts for the
+  admin queue.
+- `*.backend_bundle.manifest.json`: paths, hashes, validation, and model
+  settings.
+
+For the local backend API, point `--protected-csv` at the annotated CSV and
+`--validation-json` at the bundle manifest:
+
+```bash
+python -m contextsafe_hsd.api_server \
+  --protected-csv data/outputs/backend_bundle_RUN_NAME/INPUT.restated.annotated.csv \
+  --validation-json data/outputs/backend_bundle_RUN_NAME/INPUT.backend_bundle.manifest.json
+```
+
+For admin-dashboard uploads, run the same API with a persistent upload/job
+directory. The dashboard posts CSV content to this service, starts a backend
+bundle job, polls status, and can reload completed jobs later:
+
+```bash
+python -m contextsafe_hsd.api_server \
+  --host 127.0.0.1 \
+  --port 8765 \
+  --admin-runs-dir data/admin_uploads \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --restatement-endpoint http://100.120.207.64:1234 \
+  --restatement-model qwen3.5-4b
+```
+
+Persistent upload/job API routes:
+
+- `POST /api/admin/uploads`: JSON `{ "filename": "...csv", "content": "..." }`.
+  The server deduplicates by file SHA and stores the upload under
+  `data/admin_uploads/<upload_id>/`.
+- `GET /api/admin/uploads`: list cached uploads.
+- `POST /api/admin/jobs`: JSON with `uploadId`, `textCol`, `idCol`,
+  `labelCol`, `restatementModel`, and `finalScrub`. The job output directory is
+  deterministic for the upload plus options, so repeated starts reuse cached
+  token importance, scrubbed CSV, restatement cache, and deviation audit where
+  present.
+- `GET /api/admin/jobs`: list persistent jobs.
+- `GET /api/admin/jobs/<job_id>`: job status/progress.
+- `GET /api/admin/jobs/<job_id>/bundle`: manifest and deviation summary.
+- `GET /api/admin/jobs/<job_id>/cases`: admin triage rows.
+
+Useful local routes:
+
+- `/api/review-seed`: citizen review feed; returns protected text and
+  restatements only.
+- `/api/admin-bundle`: bundle manifest, protected CSV summary, validation, and
+  deviation summary.
+- `/api/admin-cases`: admin triage rows with original source, scrubbed text,
+  restatement, classifier label, token highlights, and deviation fields.
+
 The 2026-06-18 recovered train run on `data/train/train_split.csv` (`1154`
 rows) completed in `1251.76s` wall time and wrote a valid CSV to
 `data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`.
@@ -197,7 +281,9 @@ npm run web
 
 The current Expo app contains:
 
-- Admin dashboard for the locked baseline batch and restatement model choice.
+- Admin dashboard for bundle status, source/scrubbed/restated comparison,
+  classifier outputs, deviation audit status, citizen vote summaries, and
+  lookup/training routing.
 - Citizen review deck with swipe decisions over guarded restated evidence.
 - Direct-identifier guard for restatements before they enter the review deck.
 

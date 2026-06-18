@@ -172,6 +172,7 @@ def test_protect_parser_is_small_and_defaults_to_deterministic_review():
         "protect",
         "template-after-baseline",
         "evidence-after-baseline",
+        "backend-bundle",
         "validate-submission",
         "profile-dataset",
         "mini-verifier-eval",

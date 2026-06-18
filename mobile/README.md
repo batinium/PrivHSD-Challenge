@@ -20,9 +20,19 @@ The app currently runs with seeded data from the locked baseline:
 
 `data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
 
+For live admin uploads, run the local backend API before opening the Console:
+
+```bash
+python -m contextsafe_hsd.api_server --port 8765 --admin-runs-dir data/admin_uploads
+```
+
+The Console uploads CSV text to `POST /api/admin/uploads`, starts processing
+with `POST /api/admin/jobs`, polls job status, and can reload completed jobs
+from the persistent `data/admin_uploads` cache.
+
 ## Current screens
 
-- Console: locked baseline status, restatement model selection, privacy guard summary.
+- Console: backend bundle status, artifact paths, admin triage, source/scrubbed/restated comparison, classifier/deviation signals, reviewer vote summary, and lookup/training routing.
 - Review: swipe-card citizen review over guarded restated evidence.
 
 ## Product rules

@@ -66,6 +66,18 @@ def test_public_commands_are_registered():
     assert protect_args.llm_verifier == "off"
     assert validate_args.command == "validate-submission"
 
+    backend_args = parser.parse_args(
+        [
+            "backend-bundle",
+            "--input",
+            "input.csv",
+            "--output-dir",
+            "bundle",
+        ]
+    )
+    assert backend_args.command == "backend-bundle"
+    assert backend_args.final_scrub is True
+
 
 def test_protect_help_is_short_public_surface():
     result = subprocess.run(
@@ -126,6 +138,49 @@ def test_protect_runtime_defaults_to_scored_no_simplify_baseline(
     assert captured_call["disabled_providers"] == []
     assert captured_call["candidate_selection"] is True
     assert captured_call["style_simplify_language"] is False
+
+
+def test_backend_bundle_command_dispatches_to_bundle_runner(monkeypatch, tmp_path):
+    source = tmp_path / "source.csv"
+    out_dir = tmp_path / "bundle"
+    write_source(source)
+    captured_call = {}
+
+    def fake_run_backend_bundle(input_path, output_dir, **kwargs):
+        captured_call.update(kwargs)
+        captured_call["input_path"] = input_path
+        captured_call["output_dir"] = output_dir
+        return {"ok": True}
+
+    monkeypatch.setattr(cli_module, "run_backend_bundle", fake_run_backend_bundle)
+
+    exit_code = main(
+        [
+            "backend-bundle",
+            "--input",
+            str(source),
+            "--output-dir",
+            str(out_dir),
+            "--text-col",
+            "text",
+            "--id-col",
+            "id",
+            "--label-col",
+            "label",
+            "--restatement-model",
+            "qwen3.5-4b",
+            "--no-final-scrub",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured_call["input_path"] == source
+    assert captured_call["output_dir"] == out_dir
+    assert captured_call["text_col"] == "text"
+    assert captured_call["id_col"] == "id"
+    assert captured_call["label_col"] == "label"
+    assert captured_call["restatement_model"] == "qwen3.5-4b"
+    assert captured_call["final_scrub"] is False
 
 
 def test_protect_exact_preserves_schema_and_manifest_stages(tmp_path, capsys):
