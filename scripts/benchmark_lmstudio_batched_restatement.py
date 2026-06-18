@@ -29,7 +29,7 @@ from urllib import error, request
 from contextsafe_hsd.metrics import high_confidence_residual_spans, row_metric_fast
 
 
-DEFAULT_ENDPOINT = "http://100.120.207.64:1234"
+DEFAULT_ENDPOINT = "http://localhost:1234"
 DEFAULT_INPUT = Path(
     "data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/"
     "train_split.no_simplify_hf.recovered.protected.csv"

@@ -20,7 +20,7 @@ import pandas as pd
 import requests
 
 
-DEFAULT_ENDPOINT = "http://100.120.207.64:1234"
+DEFAULT_ENDPOINT = "http://localhost:1234"
 DEFAULT_MODEL = "openai/gpt-oss-20b"
 TOOL_NAME = "record_contextual_rewrites"
 

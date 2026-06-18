@@ -34,7 +34,7 @@ from .simple_pipeline import run_final_csv_pipeline
 from .submission import sha256_file, validate_submission
 
 
-DEFAULT_RESTATEMENT_ENDPOINT = "http://100.120.207.64:1234"
+DEFAULT_RESTATEMENT_ENDPOINT = "http://localhost:1234"
 DEFAULT_RESTATEMENT_MODEL = "qwen3.5-4b"
 DEFAULT_TOKEN_PROTECT_THRESHOLD = 0.03
 RESTATEMENT_TOOL_NAME = "record_backend_restatement_batch"

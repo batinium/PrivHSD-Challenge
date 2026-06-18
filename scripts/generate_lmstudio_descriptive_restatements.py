@@ -13,7 +13,7 @@ from typing import Any
 from urllib import error, request
 
 
-DEFAULT_ENDPOINT = "http://100.120.207.64:1234"
+DEFAULT_ENDPOINT = "http://localhost:1234"
 DEFAULT_MODEL = "qwen3.5-4b"
 TOOL_NAME = "record_descriptive_restatement_batch"
 

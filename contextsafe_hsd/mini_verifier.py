@@ -22,7 +22,7 @@ from contextsafe_hsd.models.local_llm_hsd_review_runtime import (
 )
 
 
-DEFAULT_ENDPOINT = "http://100.120.207.64:1234/v1/chat/completions"
+DEFAULT_ENDPOINT = "http://localhost:1234/v1/chat/completions"
 DEFAULT_MAIN_MODEL = "openai/gpt-oss-20b"
 DEFAULT_RUN_DIR = Path("data/outputs/train_split_full_pipeline_fixed_20260615_233312")
 DEFAULT_SOURCE_CSV = Path("data/train/train_split.csv")

@@ -30,7 +30,7 @@ from contextsafe_hsd.metrics import (
 )
 
 
-DEFAULT_ENDPOINT = "http://100.120.207.64:1234"
+DEFAULT_ENDPOINT = "http://localhost:1234"
 DEFAULT_INPUT = Path("data/train/train_split.csv")
 DEFAULT_OUTPUT_DIR = Path("data/outputs/lmstudio_restatement_benchmark_20260618")
 EXCLUDED_MODEL_MARKERS = (

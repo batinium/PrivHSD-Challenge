@@ -194,7 +194,7 @@ model-comparison workflow remains isolated as an evaluation command:
 
 ```bash
 python -m contextsafe_hsd.cli mini-verifier-eval \
-  --endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --endpoint http://localhost:1234/v1/chat/completions \
   --timeout-seconds 180 \
   --batch-size 10 \
   --progress

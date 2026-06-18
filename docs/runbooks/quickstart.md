@@ -163,7 +163,7 @@ python -m contextsafe_hsd.cli backend-bundle \
   --id-col ID \
   --label-col hs \
   --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
-  --restatement-endpoint http://100.120.207.64:1234 \
+  --restatement-endpoint http://localhost:1234 \
   --restatement-model qwen3.5-4b \
   --final-scrub \
   --progress
@@ -211,7 +211,7 @@ python -m contextsafe_hsd.api_server \
   --admin-runs-dir data/admin_uploads \
   --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
   --hf-hsd-threshold 0.850469 \
-  --restatement-endpoint http://100.120.207.64:1234 \
+  --restatement-endpoint http://localhost:1234 \
   --restatement-model qwen3.5-4b
 ```
 
@@ -324,7 +324,7 @@ official exact CSV output path.
 
 ```bash
 python -m contextsafe_hsd.cli mini-verifier-eval \
-  --endpoint http://100.120.207.64:1234/v1/chat/completions \
+  --endpoint http://localhost:1234/v1/chat/completions \
   --timeout-seconds 180 \
   --batch-size 10 \
   --progress
