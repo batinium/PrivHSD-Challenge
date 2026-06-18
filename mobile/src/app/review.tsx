@@ -17,6 +17,7 @@ import { ReviewDecision, ReviewItem, reviewSeedItems } from '@/data/review-data'
 import { guardRestatement } from '@/utils/privacy';
 
 const SWIPE_THRESHOLD = 110;
+const SWIPE_EXIT_DISTANCE = 420;
 const HASH_OFFSET = 0x811c9dc5;
 const HASH_PRIME = 0x01000193;
 
@@ -36,6 +37,36 @@ export default function CitizenReview() {
     outputRange: ['-10deg', '0deg', '10deg'],
     extrapolate: 'clamp',
   });
+  const rejectFeedback = position.x.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, -24, 0],
+    outputRange: [1, 0.16, 0],
+    extrapolate: 'clamp',
+  });
+  const confirmFeedback = position.x.interpolate({
+    inputRange: [0, 24, SWIPE_THRESHOLD],
+    outputRange: [0, 0.16, 1],
+    extrapolate: 'clamp',
+  });
+  const uncertainFeedback = position.y.interpolate({
+    inputRange: [-SWIPE_THRESHOLD, -24, 0],
+    outputRange: [1, 0.18, 0],
+    extrapolate: 'clamp',
+  });
+  const rejectScale = position.x.interpolate({
+    inputRange: [-220, 0],
+    outputRange: [1.08, 0.86],
+    extrapolate: 'clamp',
+  });
+  const confirmScale = position.x.interpolate({
+    inputRange: [0, 220],
+    outputRange: [0.86, 1.08],
+    extrapolate: 'clamp',
+  });
+  const uncertainScale = position.y.interpolate({
+    inputRange: [-220, 0],
+    outputRange: [1.08, 0.86],
+    extrapolate: 'clamp',
+  });
 
   const resetCard = useCallback(() => {
     Animated.spring(position, {
@@ -45,23 +76,26 @@ export default function CitizenReview() {
     }).start();
   }, [position]);
 
-  const commitDecision = useCallback((decision: ReviewDecision, toX: number) => {
-    const item = items[activeIndex];
-    if (!item) {
-      return;
-    }
-    Animated.timing(position, {
-      toValue: { x: toX, y: 32 },
-      duration: 180,
-      useNativeDriver: false,
-    }).start(() => {
-      setItems((current) =>
-        current.map((entry) => (entry.id === item.id ? { ...entry, decision } : entry)),
-      );
-      setActiveIndex((current) => current + 1);
-      position.setValue({ x: 0, y: 0 });
-    });
-  }, [activeIndex, items, position]);
+  const commitDecision = useCallback(
+    (decision: ReviewDecision, toValue: { x: number; y: number }) => {
+      const item = items[activeIndex];
+      if (!item) {
+        return;
+      }
+      Animated.timing(position, {
+        toValue,
+        duration: 180,
+        useNativeDriver: false,
+      }).start(() => {
+        setItems((current) =>
+          current.map((entry) => (entry.id === item.id ? { ...entry, decision } : entry)),
+        );
+        setActiveIndex((current) => current + 1);
+        position.setValue({ x: 0, y: 0 });
+      });
+    },
+    [activeIndex, items, position],
+  );
 
   const panResponder = useMemo(
     () =>
@@ -72,10 +106,15 @@ export default function CitizenReview() {
           useNativeDriver: false,
         }),
         onPanResponderRelease: (_, gesture) => {
-          if (gesture.dx > SWIPE_THRESHOLD) {
-            commitDecision('confirmed_hatred', 420);
+          const absX = Math.abs(gesture.dx);
+          const absY = Math.abs(gesture.dy);
+
+          if (gesture.dy < -SWIPE_THRESHOLD && absY > absX) {
+            commitDecision('uncertain', { x: 0, y: -SWIPE_EXIT_DISTANCE });
+          } else if (gesture.dx > SWIPE_THRESHOLD) {
+            commitDecision('confirmed_hatred', { x: SWIPE_EXIT_DISTANCE, y: 32 });
           } else if (gesture.dx < -SWIPE_THRESHOLD) {
-            commitDecision('not_hatred', -420);
+            commitDecision('not_hatred', { x: -SWIPE_EXIT_DISTANCE, y: 32 });
           } else {
             resetCard();
           }
@@ -85,7 +124,7 @@ export default function CitizenReview() {
   );
 
   function markUncertain() {
-    commitDecision('uncertain', 0);
+    commitDecision('uncertain', { x: 0, y: -SWIPE_EXIT_DISTANCE });
   }
 
   return (
@@ -127,6 +166,7 @@ export default function CitizenReview() {
                 {...panResponder.panHandlers}
                 style={[
                   styles.animatedCard,
+                  { height: cardHeight, width: cardWidth },
                   {
                     transform: [
                       { translateX: position.x },
@@ -135,12 +175,84 @@ export default function CitizenReview() {
                     ],
                   },
                 ]}>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.decisionGlow, styles.rejectGlow, { opacity: rejectFeedback }]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.decisionGlow, styles.confirmGlow, { opacity: confirmFeedback }]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.decisionGlow,
+                    styles.uncertainGlow,
+                    { opacity: uncertainFeedback },
+                  ]}
+                />
                 <ReviewCard
                   item={activeItem}
                   cardHeight={cardHeight}
                   cardWidth={cardWidth}
                   compact={isCompact}
                 />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.decisionStroke, styles.rejectStroke, { opacity: rejectFeedback }]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.decisionStroke,
+                    styles.confirmStroke,
+                    { opacity: confirmFeedback },
+                  ]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.decisionStroke,
+                    styles.uncertainStroke,
+                    { opacity: uncertainFeedback },
+                  ]}
+                />
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.decisionBadge,
+                    styles.rejectBadge,
+                    {
+                      opacity: rejectFeedback,
+                      transform: [{ rotate: '-14deg' }, { scale: rejectScale }],
+                    },
+                  ]}>
+                  <Text style={[styles.decisionBadgeText, styles.rejectBadgeText]}>X</Text>
+                </Animated.View>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.decisionBadge,
+                    styles.confirmBadge,
+                    {
+                      opacity: confirmFeedback,
+                      transform: [{ rotate: '12deg' }, { scale: confirmScale }],
+                    },
+                  ]}>
+                  <Text style={[styles.decisionBadgeText, styles.confirmBadgeText]}>YES</Text>
+                </Animated.View>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[
+                    styles.decisionBadge,
+                    styles.uncertainBadge,
+                    {
+                      opacity: uncertainFeedback,
+                      transform: [{ rotate: '-3deg' }, { scale: uncertainScale }],
+                    },
+                  ]}>
+                  <Text style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>?</Text>
+                </Animated.View>
               </Animated.View>
             </>
           ) : (
@@ -169,7 +281,7 @@ export default function CitizenReview() {
         <View style={[styles.actions, { width: cardWidth }]}>
           <Pressable
             disabled={!activeItem}
-            onPress={() => commitDecision('not_hatred', -420)}
+            onPress={() => commitDecision('not_hatred', { x: -SWIPE_EXIT_DISTANCE, y: 32 })}
             style={[styles.actionButton, styles.rejectButton]}>
             <Text style={styles.rejectText}>X</Text>
           </Pressable>
@@ -178,7 +290,7 @@ export default function CitizenReview() {
           </Pressable>
           <Pressable
             disabled={!activeItem}
-            onPress={() => commitDecision('confirmed_hatred', 420)}
+            onPress={() => commitDecision('confirmed_hatred', { x: SWIPE_EXIT_DISTANCE, y: 32 })}
             style={[styles.actionButton, styles.confirmButton]}>
             <Text style={styles.confirmText}>YES</Text>
           </Pressable>
@@ -349,6 +461,94 @@ const styles = StyleSheet.create({
   },
   animatedCard: {
     position: 'absolute',
+  },
+  decisionGlow: {
+    position: 'absolute',
+    top: -14,
+    right: -14,
+    bottom: -14,
+    left: -14,
+    borderRadius: 18,
+    borderWidth: 2,
+    shadowOffset: { width: 0, height: 14 },
+    shadowRadius: 26,
+    shadowOpacity: 0.42,
+    elevation: 6,
+  },
+  rejectGlow: {
+    backgroundColor: 'rgba(232, 93, 117, 0.16)',
+    borderColor: 'rgba(232, 93, 117, 0.46)',
+    shadowColor: AppColors.coral,
+  },
+  confirmGlow: {
+    backgroundColor: 'rgba(42, 157, 143, 0.16)',
+    borderColor: 'rgba(42, 157, 143, 0.48)',
+    shadowColor: AppColors.mint,
+  },
+  uncertainGlow: {
+    backgroundColor: 'rgba(246, 200, 76, 0.18)',
+    borderColor: 'rgba(246, 200, 76, 0.56)',
+    shadowColor: AppColors.amber,
+  },
+  decisionStroke: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 8,
+    borderWidth: 4,
+    zIndex: 2,
+  },
+  rejectStroke: {
+    borderColor: AppColors.coral,
+  },
+  confirmStroke: {
+    borderColor: AppColors.mint,
+  },
+  uncertainStroke: {
+    borderColor: AppColors.amber,
+  },
+  decisionBadge: {
+    position: 'absolute',
+    minWidth: 72,
+    minHeight: 54,
+    borderRadius: 8,
+    borderWidth: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    zIndex: 3,
+  },
+  rejectBadge: {
+    top: 28,
+    right: 24,
+    borderColor: AppColors.coral,
+  },
+  confirmBadge: {
+    top: 28,
+    left: 24,
+    borderColor: AppColors.mint,
+  },
+  uncertainBadge: {
+    top: 18,
+    alignSelf: 'center',
+    borderColor: AppColors.amber,
+  },
+  decisionBadgeText: {
+    fontSize: 30,
+    lineHeight: 34,
+    fontWeight: '900',
+  },
+  rejectBadgeText: {
+    color: AppColors.coral,
+  },
+  confirmBadgeText: {
+    color: AppColors.mint,
+  },
+  uncertainBadgeText: {
+    color: AppColors.amber,
   },
   card: {
     backgroundColor: 'rgba(255, 255, 255, 0.96)',

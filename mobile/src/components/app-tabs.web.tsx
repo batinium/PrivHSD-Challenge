@@ -6,18 +6,16 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { Image } from 'expo-image';
 import { Pressable, View, StyleSheet } from 'react-native';
 
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { AppColors, MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function AppTabs() {
   return (
     <Tabs>
-      <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="home" href="/" asChild>
@@ -28,6 +26,7 @@ export default function AppTabs() {
           </TabTrigger>
         </CustomTabList>
       </TabList>
+      <TabSlot style={styles.tabSlot} />
     </Tabs>
   );
 }
@@ -38,7 +37,7 @@ export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps
       <ThemedView
         type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
         style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
+        <ThemedText type="smallBold" themeColor={isFocused ? 'text' : 'textSecondary'}>
           {children}
         </ThemedText>
       </ThemedView>
@@ -51,11 +50,6 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={styles.tabListContainer}>
       <ThemedView type="backgroundElement" style={styles.innerContainer}>
         <View style={styles.brandLockup}>
-          <Image
-            source={require('@/assets/glimo_mascot_text_below.png')}
-            style={styles.brandMark}
-            contentFit="contain"
-          />
           <ThemedText type="smallBold" style={styles.brandText}>
             Glimo
           </ThemedText>
@@ -68,33 +62,37 @@ export function CustomTabList(props: TabListProps) {
 }
 
 const styles = StyleSheet.create({
+  tabSlot: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: AppColors.paper,
+  },
   tabListContainer: {
-    position: 'absolute',
     width: '100%',
-    padding: Spacing.three,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.line,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    zIndex: 10,
   },
   innerContainer: {
-    paddingVertical: Spacing.two,
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    minHeight: 48,
+    paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.five,
     flexDirection: 'row',
     alignItems: 'center',
     flexGrow: 1,
     gap: Spacing.two,
-    maxWidth: MaxContentWidth,
   },
   brandLockup: {
     marginRight: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.two,
-  },
-  brandMark: {
-    width: 42,
-    height: 42,
   },
   brandText: {
     color: '#102044',
@@ -103,9 +101,13 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   tabButtonView: {
-    paddingVertical: Spacing.one,
+    minWidth: 82,
+    alignItems: 'center',
+    paddingVertical: 6,
     paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Spacing.two,
+    borderWidth: 1,
+    borderColor: AppColors.line,
   },
   externalPressable: {
     flexDirection: 'row',
