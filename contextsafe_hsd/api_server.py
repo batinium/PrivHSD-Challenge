@@ -15,7 +15,7 @@ from pathlib import Path
 import re
 import threading
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .backend_bundle import (
     DEFAULT_RESTATEMENT_ENDPOINT,
@@ -288,6 +288,13 @@ def list_jobs(config: ApiConfig) -> list[dict[str, Any]]:
     return sorted(jobs, key=lambda item: str(item.get("updatedAt", "")), reverse=True)
 
 
+def latest_completed_job(config: ApiConfig) -> dict[str, Any] | None:
+    for job in list_jobs(config):
+        if job.get("status") == "complete":
+            return job
+    return None
+
+
 def build_job(config: ApiConfig, payload: dict[str, Any]) -> dict[str, Any]:
     upload_id = str(payload.get("uploadId") or payload.get("upload_id") or "")
     if not upload_id:
@@ -475,6 +482,15 @@ def parse_float(value: str | None) -> float | None:
         return None
 
 
+def query_int(query: dict[str, list[str]], key: str, fallback: int) -> int:
+    value = query.get(key, [""])[0]
+    try:
+        parsed = int(value)
+    except ValueError:
+        return fallback
+    return max(parsed, 1)
+
+
 def split_pipe(value: str | None) -> list[str]:
     if not value:
         return []
@@ -593,7 +609,19 @@ def admin_cases(config: ApiConfig, limit: int = 100) -> list[dict[str, Any]]:
     return rows
 
 
+def should_seed_from_latest_job(config: ApiConfig) -> bool:
+    return (
+        config.protected_csv == DEFAULT_PROTECTED_CSV
+        or config.admin_runs_dir != DEFAULT_ADMIN_RUNS_DIR
+    )
+
+
 def review_seed(config: ApiConfig, limit: int = 20) -> list[dict[str, Any]]:
+    if should_seed_from_latest_job(config):
+        latest_job = latest_completed_job(config)
+        if latest_job:
+            return admin_cases(job_artifact_config(config, latest_job), limit=limit)
+
     if not config.protected_csv.exists():
         return []
     rows: list[dict[str, Any]] = []
@@ -658,7 +686,9 @@ class ContextSafeApiHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        query = parse_qs(parsed_url.query)
         parts = [part for part in path.strip("/").split("/") if part]
         if path == "/health":
             self.write_json({"status": "ok", "service": "contextsafe-review-api"})
@@ -713,7 +743,9 @@ class ContextSafeApiHandler(BaseHTTPRequestHandler):
                 )
                 return
         if path == "/api/review-seed":
-            self.write_json({"items": review_seed(self.server.config)})
+            self.write_json(
+                {"items": review_seed(self.server.config, limit=query_int(query, "limit", 20))}
+            )
             return
         self.write_json({"error": "not_found", "path": path}, status=HTTPStatus.NOT_FOUND)
 

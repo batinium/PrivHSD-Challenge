@@ -43,6 +43,61 @@ def test_review_seed_uses_backend_restatement_column(tmp_path):
     assert items[0]["classifierLabel"] == "hate"
 
 
+def test_review_seed_prefers_latest_completed_admin_job(tmp_path):
+    config = ApiConfig(admin_runs_dir=tmp_path)
+    upload = persist_upload(
+        config,
+        filename="incoming.csv",
+        content="ID,text,hs\nsource-row,Raw text,0\n",
+    )
+    job = build_job(
+        config,
+        {
+            "uploadId": upload["id"],
+            "textCol": "text",
+            "idCol": "ID",
+            "labelCol": "hs",
+        },
+    )
+    output_dir = tmp_path / upload["id"] / "runs" / job["id"]
+    annotated = output_dir / "source.restated.annotated.csv"
+    with annotated.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "ID",
+                "scrubbed_text",
+                "hs",
+                "backend_restatement_final",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "ID": "source-row",
+                "scrubbed_text": "Live scrubbed text.",
+                "hs": "1",
+                "backend_restatement_final": "The live comment attacks a group.",
+            }
+        )
+    manifest = {
+        "artifact_type": "backend_admin_csv_bundle",
+        "outputs": {"restatement_annotated_csv": str(annotated)},
+    }
+    (output_dir / "source.backend_bundle.manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    updated_job = {**job, "status": "complete", "updatedAt": "2099-01-01T00:00:00+00:00"}
+    (output_dir / "job.json").write_text(json.dumps(updated_job), encoding="utf-8")
+
+    items = review_seed(config, limit=5)
+
+    assert items[0]["protectedText"] == "Live scrubbed text."
+    assert items[0]["restatement"] == "The live comment attacks a group."
+    assert items[0]["classifierLabel"] == "hate"
+
+
 def test_admin_cases_join_source_restatement_deviation_and_tokens(tmp_path):
     annotated = tmp_path / "annotated.csv"
     with annotated.open("w", encoding="utf-8", newline="") as handle:

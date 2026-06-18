@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
@@ -16,6 +17,9 @@ import {
 import { useOnboarding } from '@/state/onboarding';
 
 export type ClassifiedDecision = Exclude<ReviewDecision, 'pending'>;
+const API_BASE_URL = 'http://127.0.0.1:8765';
+const REVIEW_BATCH_SIZE = 5;
+const REVIEW_POOL_LIMIT = 100;
 
 export type ReviewerStats = {
   id: string;
@@ -154,11 +158,14 @@ type ReviewProgressContextValue = {
   activeIndex: number;
   activeItem?: ReviewItem;
   currentReviewer: ReviewerStats;
+  isLoadingReviewBatch: boolean;
   items: ReviewItem[];
   leaderboard: ReviewerStanding[];
   remainingCount: number;
   recordDecision: (itemId: string, decision: ClassifiedDecision) => void;
+  redrawReviewBatch: () => Promise<void>;
   resetReviewQueue: () => void;
+  reviewQueueMessage: string;
   unlockedAchievements: Achievement[];
 };
 
@@ -172,10 +179,13 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
     isTutorialVisible,
     nextTutorialStep,
   } = useOnboarding();
-  const [items, setItems] = useState<ReviewItem[]>(reviewSeedItems);
+  const [reviewPool, setReviewPool] = useState<ReviewItem[]>(reviewSeedItems);
+  const [items, setItems] = useState<ReviewItem[]>(() => drawReviewBatch(reviewSeedItems));
   const [tutorialItems, setTutorialItems] = useState<ReviewItem[]>(tutorialReviewItems);
   const [activeIndex, setActiveIndex] = useState(0);
   const [activeTutorialIndex, setActiveTutorialIndex] = useState(0);
+  const [isLoadingReviewBatch, setIsLoadingReviewBatch] = useState(false);
+  const [reviewQueueMessage, setReviewQueueMessage] = useState('Demo batch');
   const [sessionStats, setSessionStats] = useState<ReviewerStats>({
     ...currentReviewerBase,
     totalClassified: 0,
@@ -206,6 +216,45 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
   const unlockedAchievements = useMemo(() => {
     return achievements.filter((achievement) => achievement.isUnlocked(currentReviewer));
   }, [currentReviewer]);
+
+  const redrawReviewBatch = useCallback(async () => {
+    if (isTutorialVisible) {
+      setTutorialItems(tutorialReviewItems);
+      setActiveTutorialIndex(0);
+      return;
+    }
+
+    setIsLoadingReviewBatch(true);
+    try {
+      const livePool = await fetchReviewPool();
+      const nextPool = livePool.length > 0 ? livePool : reviewSeedItems;
+      setReviewPool(nextPool);
+      setItems(drawReviewBatch(nextPool));
+      setActiveIndex(0);
+      setReviewQueueMessage(livePool.length > 0 ? 'Live batch' : 'Demo batch');
+    } catch {
+      const fallbackPool = reviewPool.length > 0 ? reviewPool : reviewSeedItems;
+      setItems(drawReviewBatch(fallbackPool));
+      setActiveIndex(0);
+      setReviewQueueMessage('Demo batch');
+    } finally {
+      setIsLoadingReviewBatch(false);
+    }
+  }, [isTutorialVisible, reviewPool]);
+
+  useEffect(() => {
+    if (isTutorialVisible) {
+      return;
+    }
+
+    // Load the live queue when the user leaves tutorial mode.
+    const timeout = setTimeout(() => {
+      void redrawReviewBatch();
+    }, 0);
+
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTutorialVisible]);
 
   const recordDecision = useCallback(
     (itemId: string, decision: ClassifiedDecision) => {
@@ -245,7 +294,7 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setItems(reviewSeedItems);
+    setItems((current) => current.map((item) => ({ ...item, decision: 'pending' })));
     setActiveIndex(0);
   }, [isTutorialActive]);
 
@@ -254,18 +303,25 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
       activeIndex: visibleActiveIndex,
       activeItem: visibleItems[visibleActiveIndex],
       currentReviewer,
+      isLoadingReviewBatch,
       items: visibleItems,
       leaderboard,
       remainingCount: Math.max(visibleItems.length - visibleActiveIndex, 0),
       recordDecision,
+      redrawReviewBatch,
       resetReviewQueue,
+      reviewQueueMessage: isTutorialVisible ? 'Practice batch' : reviewQueueMessage,
       unlockedAchievements,
     }),
     [
       currentReviewer,
+      isLoadingReviewBatch,
+      isTutorialVisible,
       leaderboard,
       recordDecision,
+      redrawReviewBatch,
       resetReviewQueue,
+      reviewQueueMessage,
       unlockedAchievements,
       visibleActiveIndex,
       visibleItems,
@@ -334,4 +390,58 @@ function toStanding(stats: ReviewerStats): ReviewerStanding {
     title: getReviewerTitle(stats),
     badges: unlocked.map((achievement) => achievement.badge),
   };
+}
+
+async function fetchReviewPool(): Promise<ReviewItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/review-seed?limit=${REVIEW_POOL_LIMIT}`);
+  if (!response.ok) {
+    throw new Error(`Review queue request failed with ${response.status}`);
+  }
+  const payload = await response.json();
+  const rows = Array.isArray(payload?.items) ? payload.items : [];
+  return rows.map(normalizeReviewItem);
+}
+
+function normalizeReviewItem(row: any, index: number): ReviewItem {
+  return {
+    id: String(row.id ?? `case-${index + 1}`),
+    source: String(row.source ?? row.id ?? `case-${index + 1}`),
+    protectedText: String(row.protectedText ?? row.scrubbedText ?? row.text ?? ''),
+    restatement: String(row.restatement ?? row.protectedText ?? row.text ?? ''),
+    classifierLabel: row.classifierLabel === 'hate' ? 'hate' : 'not_hate',
+    classifierScore: typeof row.classifierScore === 'number' ? row.classifierScore : 0,
+    riskLevel: normalizeRiskLevel(row.riskLevel),
+    guardFindings: Array.isArray(row.guardFindings) ? row.guardFindings : [],
+    decision: 'pending',
+  };
+}
+
+function normalizeRiskLevel(value: unknown): ReviewItem['riskLevel'] {
+  return value === 'low' || value === 'medium' || value === 'high' ? value : 'medium';
+}
+
+function drawReviewBatch(pool: ReviewItem[]) {
+  const hateItems = shuffle(pool.filter((item) => item.classifierLabel === 'hate'));
+  const notHateItems = shuffle(pool.filter((item) => item.classifierLabel === 'not_hate'));
+  const selected: ReviewItem[] =
+    hateItems.length > 0 && notHateItems.length > 0
+      ? [hateItems[0], notHateItems[0]]
+      : [];
+  const selectedIds = new Set(selected.map((item) => item.id));
+  const remaining = shuffle(pool.filter((item) => !selectedIds.has(item.id)));
+  const batch = selected.length > 0 ? [...selected, ...remaining] : remaining;
+
+  return batch.slice(0, REVIEW_BATCH_SIZE).map((item) => ({
+    ...item,
+    decision: 'pending' as const,
+  }));
+}
+
+function shuffle<T>(items: T[]) {
+  const shuffled = [...items];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
 }

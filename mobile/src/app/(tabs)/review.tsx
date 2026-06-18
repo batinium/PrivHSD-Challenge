@@ -20,12 +20,11 @@ import { AppColors } from '@/constants/theme';
 import { ReviewItem, tutorialDecisionGuides } from '@/data/review-data';
 import { TutorialTarget, useOnboarding } from '@/state/onboarding';
 import { ClassifiedDecision, useReviewProgress } from '@/state/review-progress';
+import { makePublicCaseId } from '@/utils/case-id';
 import { guardRestatement } from '@/utils/privacy';
 
 const SWIPE_THRESHOLD = 110;
 const SWIPE_EXIT_DISTANCE = 420;
-const HASH_OFFSET = 0x811c9dc5;
-const HASH_PRIME = 0x01000193;
 
 export default function CitizenReview() {
   const rootRef = useRef<View>(null);
@@ -46,10 +45,12 @@ export default function CitizenReview() {
   const {
     activeIndex,
     activeItem,
+    isLoadingReviewBatch,
     items,
     recordDecision,
+    redrawReviewBatch,
     remainingCount,
-    resetReviewQueue,
+    reviewQueueMessage,
   } = useReviewProgress();
   const { width, height } = useWindowDimensions();
   const isCompact = height < 720 || width < 380;
@@ -278,11 +279,29 @@ export default function CitizenReview() {
                 <Text style={[styles.title, isCompact && styles.titleCompact]}>
                   {isTutorialVisible ? 'Practice deck' : 'Evidence deck'}
                 </Text>
+                {!isTutorialVisible ? (
+                  <Text style={styles.queueStatus}>{reviewQueueMessage}</Text>
+                ) : null}
               </View>
             </View>
-            <View style={[styles.counter, isCompact && styles.counterCompact]}>
-              <Text style={styles.counterValue}>{remainingCount}</Text>
-              <Text style={styles.counterLabel}>{isTutorialVisible ? 'practice' : 'left'}</Text>
+            <View style={styles.headerActions}>
+              {!isTutorialVisible ? (
+                <Pressable
+                  disabled={isLoadingReviewBatch || isSubmittingDecision}
+                  onPress={redrawReviewBatch}
+                  style={[
+                    styles.redrawButton,
+                    (isLoadingReviewBatch || isSubmittingDecision) && styles.buttonDisabled,
+                  ]}>
+                  <Text style={styles.redrawText}>
+                    {isLoadingReviewBatch ? 'Loading' : 'Redraw'}
+                  </Text>
+                </Pressable>
+              ) : null}
+              <View style={[styles.counter, isCompact && styles.counterCompact]}>
+                <Text style={styles.counterValue}>{remainingCount}</Text>
+                <Text style={styles.counterLabel}>{isTutorialVisible ? 'practice' : 'left'}</Text>
+              </View>
             </View>
           </View>
 
@@ -419,12 +438,12 @@ export default function CitizenReview() {
                     if (isTutorialVisible) {
                       finishTutorial();
                     } else {
-                      resetReviewQueue();
+                      void redrawReviewBatch();
                     }
                   }}
                   style={styles.primaryButton}>
                   <Text style={styles.primaryButtonText}>
-                    {isTutorialVisible ? 'Finish tutorial' : 'Restart demo queue'}
+                    {isTutorialVisible ? 'Finish tutorial' : 'Redraw cards'}
                   </Text>
                 </Pressable>
               </View>
@@ -479,7 +498,7 @@ function ReviewCard({
   animatedStyle,
 }: ReviewCardProps) {
   const guarded = guardRestatement(item.restatement);
-  const caseId = makeReviewCaseId(item);
+  const caseId = makePublicCaseId(item.source, item.protectedText);
 
   return (
     <View
@@ -507,18 +526,6 @@ function ReviewCard({
       </View>
     </View>
   );
-}
-
-function makeReviewCaseId(item: ReviewItem): string {
-  let hash = HASH_OFFSET;
-  const input = `${item.source}\n${item.protectedText}`;
-
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, HASH_PRIME);
-  }
-
-  return `case-${(hash >>> 0).toString(16).padStart(8, '0')}`;
 }
 
 const styles = StyleSheet.create({
@@ -584,6 +591,35 @@ const styles = StyleSheet.create({
   titleCompact: {
     fontSize: 24,
     lineHeight: 30,
+  },
+  queueStatus: {
+    color: AppColors.muted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  headerActions: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  redrawButton: {
+    borderWidth: 1,
+    borderColor: AppColors.line,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: AppColors.panel,
+  },
+  redrawText: {
+    color: AppColors.slate,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  buttonDisabled: {
+    opacity: 0.42,
   },
   counter: {
     width: 68,

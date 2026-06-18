@@ -19,48 +19,50 @@ import {
   AdminCaseItem,
   adminCaseItems,
   frozenBatch,
-  restatementModels,
 } from '@/data/review-data';
-import { guardRestatement, summarizeGuard } from '@/utils/privacy';
+import { makePublicCaseId } from '@/utils/case-id';
+import { guardRestatement } from '@/utils/privacy';
 
 const API_BASE_URL = 'http://127.0.0.1:8765';
 
 const pipelineSteps = [
   {
     label: 'CSV intake',
-    detail: 'Admin upload or API batch accepted',
+    detail: 'Uploaded CSV is cached and parsed with the selected text, ID, and label columns.',
   },
   {
     label: 'DeHateBERT tokens',
-    detail: 'Token importance CSV loaded or generated',
+    detail: 'Token-importance and sidecar prediction CSVs are loaded or generated.',
   },
   {
     label: 'PII scrub',
-    detail: 'Original text preserved for admin-only lookup',
+    detail: 'Privacy and style spans are scrubbed while source text stays admin-only.',
   },
   {
     label: 'HS classification',
-    detail: 'Sidecar label and confidence attached',
+    detail: 'Predicted hate-speech labels and confidence scores are attached when needed.',
   },
   {
     label: 'LLM restatement',
-    detail: 'Qwen descriptive restatements written',
+    detail: 'The configured backend restatement model writes descriptive review text.',
+  },
+  {
+    label: 'Final scrub',
+    detail: 'High-confidence direct identifiers are removed from generated restatements.',
   },
   {
     label: 'Deviation audit',
-    detail: 'Source-to-restatement drift scored',
-  },
-  {
-    label: 'Citizen review',
-    detail: 'Only guarded restatements enter the deck',
+    detail: 'Source-to-restatement drift is scored for admin triage.',
   },
   {
     label: 'Admin triage',
-    detail: 'Approve, lookup, hold, or route to training',
+    detail: 'Annotated rows, audit scores, and reviewer-facing restatements feed this console.',
   },
 ];
 
 const dispositionOptions: AdminDisposition[] = ['approved', 'lookup', 'train', 'hold'];
+const triageFilterOptions = ['all', 'hate', 'not_hate', 'flagged'] as const;
+type TriageFilter = (typeof triageFilterOptions)[number];
 
 type UploadedCsv = {
   id: string;
@@ -93,9 +95,9 @@ type AdminJob = {
 };
 
 export default function AdminDashboard() {
-  const [selectedModel, setSelectedModel] =
-    useState<(typeof restatementModels)[number]>(restatementModels[0]);
-  const [guardStrict, setGuardStrict] = useState(true);
+  const [bundleStepsOpen, setBundleStepsOpen] = useState(false);
+  const [triageFilter, setTriageFilter] = useState<TriageFilter>('all');
+  const [triageSearch, setTriageSearch] = useState('');
   const [selectedCaseId, setSelectedCaseId] = useState(adminCaseItems[0]?.id ?? '');
   const [caseItems, setCaseItems] = useState<AdminCaseItem[]>(adminCaseItems);
   const [dispositions, setDispositions] = useState<Record<string, AdminDisposition>>(() =>
@@ -116,21 +118,17 @@ export default function AdminDashboard() {
   const { width } = useWindowDimensions();
   const isWide = width >= 900;
 
+  const filteredCaseItems = useMemo(
+    () =>
+      caseItems.filter(
+        (item) =>
+          matchesTriageFilter(item, triageFilter) &&
+          matchesTriageSearch(caseItems, item, triageSearch),
+      ),
+    [caseItems, triageFilter, triageSearch],
+  );
   const selectedCase =
-    caseItems.find((item) => item.id === selectedCaseId) ?? caseItems[0];
-
-  const guardSummary = useMemo(() => {
-    return caseItems.reduce(
-      (summary, item) => {
-        const result = guardRestatement(item.restatement);
-        return {
-          clean: summary.clean + (result.findings.length === 0 ? 1 : 0),
-          flagged: summary.flagged + (result.findings.length > 0 ? 1 : 0),
-        };
-      },
-      { clean: 0, flagged: 0 },
-    );
-  }, [caseItems]);
+    filteredCaseItems.find((item) => item.id === selectedCaseId) ?? filteredCaseItems[0];
 
   const riskSummary = useMemo(() => {
     return caseItems.reduce(
@@ -145,12 +143,13 @@ export default function AdminDashboard() {
     );
   }, [caseItems]);
 
-  const hateRows = caseItems.filter((item) => item.classifierLabel === 'hate').length;
   const selectedGuard = selectedCase ? guardRestatement(selectedCase.restatement) : undefined;
   const currentDisposition = selectedCase
     ? dispositions[selectedCase.id] ?? selectedCase.adminDisposition
     : 'review';
   const activeOutputs = activeBundle?.bundle?.outputs ?? {};
+  const activeInputPath =
+    activeBundle?.bundle?.input?.path ?? activeUpload?.filename ?? frozenBatch.sourceCsv;
   const rowCount = activeUpload?.rowCount ?? activeBundle?.protectedCsv?.row_count ?? frozenBatch.rows;
   const liveDataLoaded = caseItems !== adminCaseItems;
 
@@ -259,8 +258,8 @@ export default function AdminDashboard() {
           textCol,
           idCol,
           labelCol,
-          restatementModel: backendRestatementModel(selectedModel),
-          finalScrub: guardStrict,
+          restatementModel: '',
+          finalScrub: true,
         }),
       });
       setActiveJob(payload.job);
@@ -448,33 +447,46 @@ export default function AdminDashboard() {
           </View>
         </View>
 
-        <View style={[styles.contentGrid, isWide && styles.contentGridWide]}>
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Backend bundle</Text>
-            <Text style={styles.panelCopy}>{frozenBatch.currentStage}</Text>
-            <View style={styles.pathGrid}>
-              <PathBox label="Input" value={activeUpload?.filename ?? frozenBatch.sourceCsv} />
-              <PathBox
-                label="Token importances"
-                value={activeOutputs.importance_csv ?? frozenBatch.tokenImportanceCsv}
-              />
-              <PathBox
-                label="Scrubbed CSV"
-                value={activeOutputs.scrubbed_csv ?? frozenBatch.protectedCsv}
-              />
-              <PathBox
-                label="Restated CSV"
-                value={activeOutputs.restated_csv ?? frozenBatch.restatedCsv}
-              />
-              <PathBox
-                label="Admin annotated"
-                value={activeOutputs.restatement_annotated_csv ?? frozenBatch.annotatedCsv}
-              />
-              <PathBox
-                label="Deviation audit"
-                value={activeOutputs.deviation_audit_csv ?? frozenBatch.deviationAuditCsv}
-              />
-            </View>
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Backend bundle</Text>
+          <Text style={styles.panelCopy}>
+            {activeBundle
+              ? 'Artifact paths from the loaded run. The annotated CSV keeps admin/debug context; the restated CSV and deviation audit support review and triage.'
+              : `${frozenBatch.currentStage}. Load a completed run to replace these frozen demo paths with uploaded CSV outputs.`}
+          </Text>
+          <View style={styles.pathGrid}>
+            <PathBox label="Input" value={activeInputPath} />
+            <PathBox
+              label="Token importances"
+              value={activeOutputs.importance_csv ?? frozenBatch.tokenImportanceCsv}
+            />
+            {activeOutputs.prediction_csv ? (
+              <PathBox label="HS predictions" value={activeOutputs.prediction_csv} />
+            ) : null}
+            <PathBox
+              label="Scrubbed CSV"
+              value={activeOutputs.scrubbed_csv ?? frozenBatch.protectedCsv}
+            />
+            <PathBox
+              label="Restated CSV"
+              value={activeOutputs.restated_csv ?? frozenBatch.restatedCsv}
+            />
+            <PathBox
+              label="Admin annotated"
+              value={activeOutputs.restatement_annotated_csv ?? frozenBatch.annotatedCsv}
+            />
+            <PathBox
+              label="Deviation audit"
+              value={activeOutputs.deviation_audit_csv ?? frozenBatch.deviationAuditCsv}
+            />
+          </View>
+          <Pressable
+            onPress={() => setBundleStepsOpen((open) => !open)}
+            style={styles.accordionToggle}>
+            <Text style={styles.accordionTitle}>Bundle steps</Text>
+            <Text style={styles.accordionState}>{bundleStepsOpen ? '-' : '+'}</Text>
+          </Pressable>
+          {bundleStepsOpen ? (
             <View style={styles.stepList}>
               {pipelineSteps.map((step, index) => (
                 <View key={step.label} style={styles.stepRow}>
@@ -486,39 +498,7 @@ export default function AdminDashboard() {
                 </View>
               ))}
             </View>
-          </View>
-
-          <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Restatement gate</Text>
-            <View style={styles.modelList}>
-              {restatementModels.map((model) => {
-                const selected = model === selectedModel;
-                return (
-                  <Pressable
-                    key={model}
-                    onPress={() => setSelectedModel(model)}
-                    style={[styles.modelButton, selected && styles.modelButtonSelected]}>
-                    <Text style={[styles.modelText, selected && styles.modelTextSelected]}>
-                      {model}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable
-              onPress={() => setGuardStrict((value) => !value)}
-              style={[styles.toggleRow, guardStrict && styles.toggleRowActive]}>
-              <View style={[styles.toggleKnob, guardStrict && styles.toggleKnobActive]} />
-              <Text style={styles.toggleText}>
-                Final restatement scrub {guardStrict ? 'on' : 'off'}
-              </Text>
-            </Pressable>
-            <View style={styles.guardStats}>
-              <SignalPill label="Clean" value={String(guardSummary.clean)} tone="mint" />
-              <SignalPill label="Guarded" value={String(guardSummary.flagged)} tone="amber" />
-              <SignalPill label="HS positive" value={String(hateRows)} tone="coral" />
-            </View>
-          </View>
+          ) : null}
         </View>
 
         <View style={styles.panel}>
@@ -526,7 +506,7 @@ export default function AdminDashboard() {
             <View>
               <Text style={styles.panelTitle}>Admin triage</Text>
               <Text style={styles.panelCopy}>
-                Source, scrubbed text, restatement, classifier, deviation, and citizen signals.
+                Scrubbed text, restatement, classifier signal, token highlights, and citizen votes.
               </Text>
             </View>
             <Image
@@ -535,10 +515,36 @@ export default function AdminDashboard() {
               contentFit="contain"
             />
           </View>
+          <View style={styles.filterRow}>
+            <TextInput
+              value={triageSearch}
+              onChangeText={setTriageSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="Search case ID"
+              placeholderTextColor={AppColors.muted}
+              style={styles.caseSearchInput}
+            />
+            {triageFilterOptions.map((option) => {
+              const selected = option === triageFilter;
+              return (
+                <Pressable
+                  key={option}
+                  onPress={() => setTriageFilter(option)}
+                  style={[styles.filterButton, selected && styles.filterButtonSelected]}>
+                  <Text style={[styles.filterText, selected && styles.filterTextSelected]}>
+                    {filterLabel(option)}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           <View style={[styles.triageGrid, isWide && styles.triageGridWide]}>
-            <View style={styles.caseList}>
-              {caseItems.map((item) => {
+            <ScrollView
+              style={[styles.caseListScroll, isWide && styles.caseListScrollWide]}
+              contentContainerStyle={styles.caseList}>
+              {filteredCaseItems.map((item) => {
                 const selected = item.id === selectedCase?.id;
                 const disposition = dispositions[item.id] ?? item.adminDisposition;
                 return (
@@ -547,9 +553,9 @@ export default function AdminDashboard() {
                     onPress={() => setSelectedCaseId(item.id)}
                     style={[styles.caseRow, selected && styles.caseRowSelected]}>
                     <View style={styles.caseRowMain}>
-                      <Text style={styles.caseTitle}>{item.source}</Text>
+                      <Text style={styles.caseTitle}>{caseLabel(caseItems, item)}</Text>
                       <Text style={styles.caseMeta}>
-                        {item.classifierLabel} / score {formatScore(item.classifierScore)}
+                        {publicCaseId(item)} / {labelText(item.classifierLabel)}
                       </Text>
                     </View>
                     <View style={styles.caseTags}>
@@ -561,15 +567,20 @@ export default function AdminDashboard() {
                   </Pressable>
                 );
               })}
-            </View>
+              {filteredCaseItems.length === 0 ? (
+                <View style={styles.emptyCaseList}>
+                  <Text style={styles.caseMeta}>No cases match this filter.</Text>
+                </View>
+              ) : null}
+            </ScrollView>
 
             {selectedCase && (
               <View style={styles.caseDetail}>
                 <View style={styles.caseDetailHeader}>
                   <View>
-                    <Text style={styles.caseDetailTitle}>{selectedCase.source}</Text>
+                    <Text style={styles.caseDetailTitle}>{caseLabel(caseItems, selectedCase)}</Text>
                     <Text style={styles.caseDetailMeta}>
-                      {selectedCase.classifierLabel} / {formatScore(selectedCase.classifierScore)}
+                      {publicCaseId(selectedCase)} / {labelText(selectedCase.classifierLabel)}
                     </Text>
                   </View>
                   <Text style={[styles.riskBadgeLarge, riskStyle(selectedCase.deviationRisk)]}>
@@ -578,7 +589,6 @@ export default function AdminDashboard() {
                 </View>
 
                 <View style={styles.compareGrid}>
-                  <TextBlock label="Original" value={selectedCase.originalText} tone="source" />
                   <TextBlock label="Scrubbed" value={selectedCase.scrubbedText} tone="scrubbed" />
                   <TextBlock
                     label="Restatement"
@@ -589,15 +599,6 @@ export default function AdminDashboard() {
 
                 <View style={styles.signalGrid}>
                   <SignalPanel
-                    label="Deviation"
-                    value={`score ${selectedCase.deviationScore}`}
-                    details={
-                      selectedCase.deviationReasons.length
-                        ? selectedCase.deviationReasons
-                        : ['no heuristic drift']
-                    }
-                  />
-                  <SignalPanel
                     label="Token importances"
                     value={`${selectedCase.tokenHighlights.length} tokens`}
                     details={selectedCase.tokenHighlights}
@@ -605,34 +606,9 @@ export default function AdminDashboard() {
                   <SignalPanel
                     label="Citizen votes"
                     value={`${voteTotal(selectedCase.reviewerVotes)} reviews`}
-                    details={[
-                      `hate ${selectedCase.reviewerVotes.confirmedHatred}`,
-                      `not hate ${selectedCase.reviewerVotes.notHatred}`,
-                      `uncertain ${selectedCase.reviewerVotes.uncertain}`,
-                    ]}
-                  />
-                  <SignalPanel
-                    label="PII guard"
-                    value={summarizeGuard(selectedGuard?.findings ?? [])}
-                    details={selectedGuard?.findings ?? []}
+                    details={voteDetails(selectedCase.reviewerVotes)}
                   />
                 </View>
-
-                {(selectedCase.missingTargetTerms.length > 0 ||
-                  selectedCase.missingContextTerms.length > 0) && (
-                  <View style={styles.missingPanel}>
-                    <Text style={styles.missingTitle}>Deviation details</Text>
-                    <View style={styles.chipWrap}>
-                      {[...selectedCase.missingTargetTerms, ...selectedCase.missingContextTerms].map(
-                        (term) => (
-                          <Text key={term} style={styles.warningChip}>
-                            {term}
-                          </Text>
-                        ),
-                      )}
-                    </View>
-                  </View>
-                )}
 
                 <View style={styles.actionRow}>
                   {dispositionOptions.map((option) => {
@@ -716,29 +692,12 @@ function TextBlock({
 }: {
   label: string;
   value: string;
-  tone: 'source' | 'scrubbed' | 'restated';
+  tone: 'scrubbed' | 'restated';
 }) {
   return (
     <View style={[styles.textBlock, textBlockTone[tone]]}>
       <Text style={styles.textBlockLabel}>{label}</Text>
       <Text style={styles.textBlockValue}>{value}</Text>
-    </View>
-  );
-}
-
-function SignalPill({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: 'mint' | 'amber' | 'coral';
-}) {
-  return (
-    <View style={[styles.signalPill, signalTone[tone]]}>
-      <Text style={styles.signalPillValue}>{value}</Text>
-      <Text style={styles.signalPillLabel}>{label}</Text>
     </View>
   );
 }
@@ -775,6 +734,76 @@ function voteTotal(votes: { confirmedHatred: number; notHatred: number; uncertai
   return votes.confirmedHatred + votes.notHatred + votes.uncertain;
 }
 
+function voteDetails(votes: {
+  confirmedHatred: number;
+  notHatred: number;
+  uncertain: number;
+}) {
+  const total = voteTotal(votes);
+  return [
+    `hate ${votes.confirmedHatred} (${votePercent(votes.confirmedHatred, total)})`,
+    `not hate ${votes.notHatred} (${votePercent(votes.notHatred, total)})`,
+    `uncertain ${votes.uncertain} (${votePercent(votes.uncertain, total)})`,
+  ];
+}
+
+function votePercent(value: number, total: number) {
+  if (total <= 0) {
+    return '0%';
+  }
+  return `${Math.round((value / total) * 100)}%`;
+}
+
+function caseLabel(items: AdminCaseItem[], item: AdminCaseItem) {
+  const index = items.findIndex((candidate) => candidate.id === item.id);
+  return `Case ${index >= 0 ? index + 1 : 1}`;
+}
+
+function publicCaseId(item: AdminCaseItem) {
+  return makePublicCaseId(item.source, item.protectedText);
+}
+
+function matchesTriageSearch(items: AdminCaseItem[], item: AdminCaseItem, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return true;
+  }
+  return [
+    caseLabel(items, item),
+    publicCaseId(item),
+    labelText(item.classifierLabel),
+    item.scrubbedText,
+    item.restatement,
+  ].some((value) => value.toLowerCase().includes(normalizedQuery));
+}
+
+function filterLabel(filter: TriageFilter) {
+  if (filter === 'not_hate') {
+    return 'Not hate';
+  }
+  if (filter === 'flagged') {
+    return 'Flagged';
+  }
+  if (filter === 'hate') {
+    return 'Hate';
+  }
+  return 'All';
+}
+
+function labelText(label: AdminCaseItem['classifierLabel']) {
+  return label === 'hate' ? 'Hate' : 'Not hate';
+}
+
+function matchesTriageFilter(item: AdminCaseItem, filter: TriageFilter) {
+  if (filter === 'all') {
+    return true;
+  }
+  if (filter === 'flagged') {
+    return item.deviationRisk === 'high' || item.deviationRisk === 'medium';
+  }
+  return item.classifierLabel === filter;
+}
+
 function riskStyle(risk: string) {
   if (risk === 'high') {
     return styles.riskHigh;
@@ -799,20 +828,6 @@ function jobStatusStyle(status: string) {
     return styles.riskOk;
   }
   return styles.riskLow;
-}
-
-function formatScore(value: number | null | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : 'n/a';
-}
-
-function backendRestatementModel(model: (typeof restatementModels)[number]) {
-  if (model === 'local-llm-selected-by-admin') {
-    return '';
-  }
-  if (model === 'qwen/qwen3-4b') {
-    return 'qwen3.5-4b';
-  }
-  return model;
 }
 
 function preferredColumn(columns: string[], candidates: string[], fallback: string) {
@@ -913,14 +928,7 @@ const metricTone = StyleSheet.create({
   coral: { backgroundColor: AppColors.coralSoft },
 });
 
-const signalTone = StyleSheet.create({
-  mint: { backgroundColor: AppColors.mintSoft },
-  amber: { backgroundColor: AppColors.amberSoft },
-  coral: { backgroundColor: AppColors.coralSoft },
-});
-
 const textBlockTone = StyleSheet.create({
-  source: { backgroundColor: '#FFF7D7' },
   scrubbed: { backgroundColor: '#F9FAFB' },
   restated: { backgroundColor: '#DFF4EF' },
 });
@@ -1020,15 +1028,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 12,
   },
-  contentGrid: {
-    gap: 16,
-  },
-  contentGridWide: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
   panel: {
-    flex: 1,
     backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 8,
     padding: 18,
@@ -1186,6 +1186,34 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: '700',
   },
+  accordionToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: AppColors.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    backgroundColor: '#F9FAFB',
+  },
+  accordionTitle: {
+    color: AppColors.slate,
+    fontSize: 13,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  accordionState: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    textAlign: 'center',
+    lineHeight: 22,
+    color: AppColors.panel,
+    backgroundColor: AppColors.ink,
+    fontSize: 16,
+    fontWeight: '900',
+  },
   stepList: {
     gap: 10,
   },
@@ -1220,82 +1248,53 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '600',
   },
-  modelList: {
-    gap: 8,
-  },
-  modelButton: {
-    borderWidth: 1,
-    borderColor: AppColors.line,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: '#F9FAFB',
-  },
-  modelButtonSelected: {
-    borderColor: AppColors.mint,
-    backgroundColor: AppColors.mintSoft,
-  },
-  modelText: {
-    color: AppColors.slate,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  modelTextSelected: {
-    color: AppColors.ink,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: AppColors.line,
-    padding: 12,
-  },
-  toggleRowActive: {
-    borderColor: AppColors.mint,
-  },
-  toggleKnob: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: AppColors.line,
-  },
-  toggleKnobActive: {
-    backgroundColor: AppColors.mint,
-  },
-  toggleText: {
-    color: AppColors.slate,
-    fontWeight: '800',
-    fontSize: 14,
-    flex: 1,
-  },
-  guardStats: {
-    gap: 10,
-  },
-  signalPill: {
-    borderRadius: 8,
-    padding: 14,
-  },
-  signalPillValue: {
-    color: AppColors.ink,
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '900',
-  },
-  signalPillLabel: {
-    color: AppColors.slate,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    marginTop: 2,
-  },
   triageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 14,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  caseSearchInput: {
+    minWidth: 180,
+    flexGrow: 1,
+    flexBasis: 220,
+    borderWidth: 1,
+    borderColor: AppColors.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+    color: AppColors.ink,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  filterButton: {
+    borderWidth: 1,
+    borderColor: AppColors.line,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+  },
+  filterButtonSelected: {
+    backgroundColor: AppColors.ink,
+    borderColor: AppColors.ink,
+  },
+  filterText: {
+    color: AppColors.slate,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  filterTextSelected: {
+    color: AppColors.panel,
   },
   guardMascot: {
     width: 62,
@@ -1308,9 +1307,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
+  caseListScroll: {
+    maxHeight: 280,
+  },
+  caseListScrollWide: {
+    flex: 0.86,
+    maxHeight: 520,
+  },
   caseList: {
     gap: 8,
-    flex: 0.86,
+    paddingBottom: 2,
+  },
+  emptyCaseList: {
+    borderWidth: 1,
+    borderColor: AppColors.line,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
   },
   caseRow: {
     flexDirection: 'row',
@@ -1480,31 +1493,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '800',
-  },
-  missingPanel: {
-    borderWidth: 1,
-    borderColor: AppColors.amber,
-    backgroundColor: AppColors.amberSoft,
-    borderRadius: 8,
-    padding: 12,
-    gap: 8,
-  },
-  missingTitle: {
-    color: AppColors.ink,
-    fontSize: 13,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-  },
-  warningChip: {
-    color: AppColors.ink,
-    backgroundColor: AppColors.panel,
-    borderRadius: 999,
-    overflow: 'hidden',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: '900',
   },
   actionRow: {
     flexDirection: 'row',
