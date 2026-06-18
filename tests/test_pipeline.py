@@ -27,7 +27,7 @@ def test_privacy_mode_can_generalize_target_groups():
     text = "Muslims should be excluded, said Alex Vale."
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))
 
-    assert "[TARGET_GROUP:religion]" in result.text
+    assert "[TARGET_GROUP:religion:muslims]" in result.text
     assert "Muslims" not in result.text
     assert "[PERSON]" in result.text
 
@@ -541,7 +541,7 @@ def test_street_suffix_is_masked_as_location():
     assert "[LOCATION]" in result.text
 
 
-def test_external_profanity_lexicon_marks_abusive_target_cue():
+def test_external_profanity_lexicon_marks_abusive_language_cue():
     term = sensitive_word_from_codes(110, 105, 103, 103, 101, 114, 115)
     text = f"{term.capitalize()} should leave."
     spans = target_group_spans(text)
@@ -549,12 +549,21 @@ def test_external_profanity_lexicon_marks_abusive_target_cue():
     balanced_result = privatize_text(text, PrivatizerConfig(mode="balanced"))
 
     assert any(
-        span.category == "slur_or_profanity"
+        span.entity_type == "ABUSIVE_LANGUAGE"
         and span.source == "external_profanity_lexicon"
         for span in spans
     )
-    assert "[TARGET_GROUP:slur_or_profanity]" in privacy_result.text
+    assert "[ABUSIVE_LANGUAGE]" in privacy_result.text
     assert f"{term.capitalize()} should leave" in balanced_result.text
+
+
+def test_external_profanity_near_target_group_masks_as_abusive_language():
+    text = "Women are being attacked. Those cunts should leave."
+    privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
+
+    assert "[TARGET_GROUP:gender:women]" in privacy_result.text
+    assert "[ABUSIVE_LANGUAGE]" in privacy_result.text
+    assert "cunts" not in privacy_result.text
 
 
 def test_african_target_and_hashtag_target_are_detected():
@@ -568,7 +577,7 @@ def test_african_target_and_hashtag_target_are_detected():
 
     assert ("Africans", "race_or_ethnicity", "target_dictionary") in span_values
     assert ("#StarvingAfricans", "race_or_ethnicity", "target_hashtag") in span_values
-    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
+    assert "[TARGET_GROUP:race_or_ethnicity:african]" in privacy_result.text
     assert "[LOCATION]" in privacy_result.text
 
 
@@ -580,13 +589,14 @@ def test_target_typos_and_obfuscations_are_detected_near_hostile_context():
     privacy_result = privatize_text(text, PrivatizerConfig(mode="privacy"))
 
     assert ("Africanz", "race_or_ethnicity", "target_variant") in span_values
-    assert (
-        obfuscated_abuse,
-        "slur_or_profanity",
-        "external_profanity_lexicon",
-    ) in span_values
-    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
-    assert "[TARGET_GROUP:slur_or_profanity]" in privacy_result.text
+    assert any(
+        span.text == obfuscated_abuse
+        and span.entity_type == "ABUSIVE_LANGUAGE"
+        and span.source == "external_profanity_lexicon"
+        for span in spans
+    )
+    assert "[TARGET_GROUP:race_or_ethnicity:african]" in privacy_result.text
+    assert "[ABUSIVE_LANGUAGE]" in privacy_result.text
 
 
 def test_spaced_target_obfuscation_is_detected_near_spaced_hostile_context():
@@ -597,7 +607,7 @@ def test_spaced_target_obfuscation_is_detected_near_spaced_hostile_context():
     balanced_result = privatize_text(text, PrivatizerConfig(mode="balanced"))
 
     assert ("bla cks", "race_or_ethnicity", "target_spaced_variant") in span_values
-    assert "[TARGET_GROUP:race_or_ethnicity]" in privacy_result.text
+    assert "[TARGET_GROUP:race_or_ethnicity:black]" in privacy_result.text
     assert "bla cks are sh i t and should leave" in balanced_result.text
 
 
@@ -623,7 +633,7 @@ def test_target_split_and_transposed_variants_are_detected(text, expected_text, 
         and span_source in {"target_spaced_variant", "target_variant"}
         for span_text, span_category, span_source in span_values
     )
-    assert f"[TARGET_GROUP:{category}]" in privacy_result.text
+    assert f"[TARGET_GROUP:{category}:" in privacy_result.text
 
 
 def test_privacy_mode_preserves_broad_gender_terms_without_hostile_context():
@@ -640,7 +650,7 @@ def test_privacy_mode_generalizes_broad_gender_terms_in_hostile_context():
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))
 
     assert "Women" not in result.text
-    assert "[TARGET_GROUP:gender]" in result.text
+    assert "[TARGET_GROUP:gender:women]" in result.text
 
 
 def test_privacy_mode_generalizes_contextual_gender_terms_for_violence():
@@ -648,4 +658,4 @@ def test_privacy_mode_generalizes_contextual_gender_terms_for_violence():
     result = privatize_text(text, PrivatizerConfig(mode="privacy"))
 
     assert "Women" not in result.text
-    assert "[TARGET_GROUP:gender]" in result.text
+    assert "[TARGET_GROUP:gender:women]" in result.text

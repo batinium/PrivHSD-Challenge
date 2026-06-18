@@ -30,7 +30,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_307",
     "source": "REDDIT_307",
-    "protectedText": "People are going after [PERSON] for being a globalist asshole who orchestrates [TARGET_GROUP:nationality_or_origin] invasions and funds radical subversive orgs, and a bunch of leftist dummies are actually retarded enough to defend him by accusing his critics of anti-semitism It's like a slow-motion car wreck headed straight for another genocide.",
+    "protectedText": "People are going after [PERSON] for being a globalist [ABUSIVE_LANGUAGE] who orchestrates [TARGET_GROUP:nationality_or_origin:migrant] invasions and funds radical subversive orgs, and a bunch of leftist dummies are actually [ABUSIVE_LANGUAGE] enough to defend him by accusing his critics of anti-semitism It's like a slow-motion car wreck headed straight for another genocide.",
     "restatement": "The comment accuses George Soros of orchestrating migrant invasions and funding radical organizations, and criticizes leftist defenders for accusing his critics of anti-semitism, framing the situation as a precursor to genocide.",
     "classifierLabel": "hate",
     "classifierScore": 0.970241,
@@ -44,7 +44,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_532",
     "source": "REDDIT_532",
-    "protectedText": "This is how far gone [TARGET_GROUP:gender] are at this point  These cunts literally consent to all of this shit, then they still want to play the victim at the end of the day  [TARGET_GROUP:slur_or_profanity] YOU GOT PAID TO GET [TARGET_GROUP:slur_or_profanity]!  SHUT THE [TARGET_GROUP:slur_or_profanity]!  [TARGET_GROUP:slur_or_profanity] worthless [TARGET_GROUP:slur_or_profanity]....",
+    "protectedText": "This is how far gone [TARGET_GROUP:gender:women] are at this point  These [ABUSIVE_LANGUAGE] literally consent to all of this [ABUSIVE_LANGUAGE], then they still want to play the victim at the end of the day  [ABUSIVE_LANGUAGE] YOU GOT PAID TO GET [ABUSIVE_LANGUAGE]!  SHUT THE [ABUSIVE_LANGUAGE]!  [ABUSIVE_LANGUAGE] worthless [ABUSIVE_LANGUAGE]....",
     "restatement": "The comment uses abusive language and derogatory terms against women, describing them as worthless whores and accusing them of consenting to exploitation.",
     "classifierLabel": "hate",
     "classifierScore": 0.974927,
@@ -58,7 +58,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_567",
     "source": "REDDIT_567",
-    "protectedText": "Of course, if a man refuses to be [PERSON] then he is of no use to a modern trash female He is worse than shit in their eyes.",
+    "protectedText": "Of course, if a man refuses to be [PERSON] then he is of no use to a modern trash female He is worse than [ABUSIVE_LANGUAGE] in their eyes.",
     "restatement": "The comment uses a derogatory term to describe women who do not conform to traditional gender roles and expresses hostility toward them.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.037927,
@@ -82,7 +82,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_713",
     "source": "REDDIT_713",
-    "protectedText": "dude, he would have arrested a man just for pulling over like she did, if not shot him  This cunt get like 12 [STYLE] to leave, and she still doesn't  Not to mention she's probably driving a free car like most women do...",
+    "protectedText": "dude, he would have arrested a man just for pulling over like she did, if not shot him  This [ABUSIVE_LANGUAGE] get like 12 chances to leave, and she still doesn't  Not to mention she's probably driving a free car like most women do...",
     "restatement": "The comment accuses a woman of being a racist and sexist individual who would arrest or shoot a man for pulling over, and claims she is driving a free car like most women.",
     "classifierLabel": "hate",
     "classifierScore": 0.968063,
@@ -95,7 +95,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_748",
     "source": "REDDIT_748",
-    "protectedText": "A man in a woman costume who has sex with women is I guess at least slightly [TARGET_GROUP:sexual_orientation] since he is dressed like a woman which is pretty faggoty.",
+    "protectedText": "A man in a woman costume who has sex with women is I guess at least slightly [TARGET_GROUP:sexual_orientation:gay] since he is dressed like a woman which is pretty faggoty.",
     "restatement": "The comment uses homophobic language to describe a person in a woman's costume engaging in sexual activity with women.",
     "classifierLabel": "hate",
     "classifierScore": 0.977518,
@@ -111,7 +111,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_875",
     "source": "REDDIT_875",
-    "protectedText": "It's really sad These white kids that did the same thing while screeching 'nigger' and all kinds of other epithets at [TARGET_GROUP:disability] kid didn't get any time at all, let alone slapped with a hate crime:  [URL]  Isn't it sad?",
+    "protectedText": "It's really sad These white kids that did the same thing while screeching '[ABUSIVE_LANGUAGE]' and all kinds of other epithets at [TARGET_GROUP:disability:disabled] kid didn't get any time at all, let alone slapped with a hate crime:  [URL]  Isn't it sad?",
     "restatement": "The comment expresses sadness that white children who used racial slurs and other epithets against a disabled child were not charged with a hate crime.",
     "classifierLabel": "hate",
     "classifierScore": 0.972958,
@@ -137,7 +137,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_1",
     "source": "REDDIT_1",
-    "protectedText": "Why the hell would you dislike Christianity and Islam equally? As an atheist, you can live an openly anti-[TARGET_GROUP:religion] life *right here in a still-largely [TARGET_GROUP:religion] nation* thanks entirely to the tolerance and peacefulness of [TARGET_GROUP:religion] You would be widely and aggressively oppressed in virtually any [TARGET_GROUP:religion] majority country.",
+    "protectedText": "Why the hell would you dislike Christianity and Islam equally? As an atheist, you can live an openly anti-[TARGET_GROUP:religion:christian] life *right here in a still-largely [TARGET_GROUP:religion:christian] nation* thanks entirely to the tolerance and peacefulness of [TARGET_GROUP:religion:christians] You would be widely and aggressively oppressed in virtually any [TARGET_GROUP:religion:muslim] majority country.",
     "restatement": "The comment questions why someone would dislike Christianity and Islam equally, noting that as an atheist, one can live openly anti-Christian in a Christian nation due to Christian tolerance, while being oppressed in Muslim majority countries.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.064464,
@@ -151,7 +151,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_83",
     "source": "REDDIT_83",
-    "protectedText": "You can't make flagrantly hateful statements and then wait [STYLE] someone gets offended to drop the \"/s\" or \"was just a joke bro.\" And even if you really were just joking expect to lose some support Which is what she did.",
+    "protectedText": "You can't make flagrantly hateful statements and then wait until someone gets offended to drop the \"/s\" or \"was just a joke bro.\" And even if you really were just [STYLE] expect to lose some support Which is what she did.",
     "restatement": "The comment criticizes the use of the /s or \"was just a joke\" disclaimer after making flagrantly hateful statements.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.024247,
@@ -162,7 +162,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_174",
     "source": "REDDIT_174",
-    "protectedText": "No one hurt me Lmao I have just seen how many white women are responsible for everything that is wrong in [LOCATION] and I\u2019m sick of it.",
+    "protectedText": "No one hurt me [ABUSIVE_LANGUAGE] I have just seen how many white women are responsible for everything that is wrong in [LOCATION] and I\u2019m sick of it.",
     "restatement": "The comment claims that white women are responsible for problems in [LOCATION] and expresses frustration about this.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.025829,
@@ -293,7 +293,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_401",
     "source": "REDDIT_401",
-    "protectedText": "nah if you watch it [STYLE] she is turned away and walking off moving her hand in a dismissive motion which made accidental contact, his punch is not justifiable  if she had struck him when she was squaring up he would be absolutely justified",
+    "protectedText": "nah if you watch it again she is turned away and walking off moving her hand in a dismissive [STYLE] which made accidental contact, his punch is not justifiable  if she had struck him when she was squaring up he would be absolutely justified",
     "restatement": "The comment argues that a character's actions were unjustifiable and that the opposing party was justified in responding if they had struck first.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.016476,
@@ -326,7 +326,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_557",
     "source": "REDDIT_557",
-    "protectedText": "What's funny is that there may be a grain of truth to that as there's a bit of evidence to suggest that the earliest versions of the Koran may have been written before [PERSON].. which would basically undermine all of [TARGET_GROUP:religion] scripture.",
+    "protectedText": "What's funny is that there may be a grain of truth to that as there's a bit of evidence to suggest that the earliest versions of the Koran may have been written before [PERSON].. which would basically undermine all of [TARGET_GROUP:religion:islamic] scripture.",
     "restatement": "The comment suggests that the earliest versions of the Quran may have been written before Muhammad, which would undermine Islamic scripture.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.017829,
@@ -407,7 +407,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_791",
     "source": "REDDIT_791",
-    "protectedText": "Yeah .. and there are some [TARGET_GROUP:disability] who wouldn't permit their children to gain the ability to hear because it would lead to the death of \"[TARGET_GROUP:disability] culture\"  In other words some [TARGET_GROUP:slur_or_profanity] are incredibly selfish and don't care who it [TARGET_GROUP:slur_or_profanity] up  edit typo",
+    "protectedText": "Yeah .. and there are some [TARGET_GROUP:disability:deaf_people] who wouldn't permit their children to gain the ability to hear because it would lead to the death of \"[TARGET_GROUP:disability:deaf] culture\"  In other words some [ABUSIVE_LANGUAGE] are incredibly selfish and don't care who it [ABUSIVE_LANGUAGE] up  edit typo",
     "restatement": "The comment criticizes deaf people for preventing their children from gaining hearing ability to protect deaf culture.",
     "classifierLabel": "hate",
     "classifierScore": 0.959692,
@@ -527,7 +527,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_986",
     "source": "REDDIT_986",
-    "protectedText": "guy is a pussy for blurring her face  she should be seen and shamed  \"im not going to show her face for her benefit........so she learns she can keep [STYLE] this consequence free because people are too much of a pussy to do anything about it\"",
+    "protectedText": "guy is a pussy for blurring her face  she should be seen and [STYLE]  \"im not going to show her face for her benefit........so she learns she can keep doing this consequence free because people are too much of a pussy to do anything about it\"",
     "restatement": "The comment criticizes a person for blurring a woman's face and argues that the woman should be shamed for not showing her face.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.252218,
@@ -553,7 +553,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_1013",
     "source": "REDDIT_1013",
-    "protectedText": "[PERSON]'s law in [LOCATION] are a parody You say \"all of you\" when referring to MRAs You mock God Emperor [PERSON] with your use of the word \"bigly\" Or maybe you honor him I don't even know how you 4chan/T_D shitposters think I can't tell if you are mocking T_D, because they are really that [TARGET_GROUP:slur_or_profanity] Whatever Your post is [TARGET_GROUP:slur_or_profanity] It's a shitpost, whether or not you are sincere.",
+    "protectedText": "[PERSON]'s law in [LOCATION] are a parody You say \"all of you\" when referring to MRAs You mock God Emperor [PERSON] with your use of the word \"bigly\" Or maybe you honor him I don't even know how you 4chan/T_D shitposters think I can't tell if you are mocking T_D, because they are really that [ABUSIVE_LANGUAGE] Whatever Your post is [ABUSIVE_LANGUAGE] It's a shitpost, whether or not you are sincere.",
     "restatement": "The comment discusses Poe's Law in a location, mocks the use of the word 'bigly' in reference to Trump, and questions whether 4chan/t_d users are mocking Trump.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.048359,
@@ -580,7 +580,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_1074",
     "source": "REDDIT_1074",
-    "protectedText": "Oh they are so pushing to lump in these people with MRAs, MTGOW and Incels across the board, I can see it [TARGET_GROUP:slur_or_profanity] coming, they'll be pushing for laws next and to define MRAs as a hate group, they want this badly.",
+    "protectedText": "Oh they are so pushing to lump in these people with MRAs, MTGOW and Incels across the board, I can see it [ABUSIVE_LANGUAGE] coming, they'll be pushing for laws next and to define MRAs as a hate group, they want this badly.",
     "restatement": "The comment criticizes the tendency to lump together MRAs, MTGOW, and Incels, predicting that this conflation will lead to laws defining MRAs as a hate group.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.067336,
@@ -608,7 +608,7 @@ export const staticReviewSeedItems: ReviewItem[] = [
   {
     "id": "REDDIT_1112",
     "source": "REDDIT_1112",
-    "protectedText": "> There was actual nazi shit, porn, child porn, libel, slander, etc  You make it sound like this [STYLE] the case on any other social media.",
+    "protectedText": "> There was actual nazi shit, porn, [STYLE] porn, libel, slander, etc  You make it sound like this isn't the case on any other social media.",
     "restatement": "The comment alleges the presence of Nazi imagery, pornography, child pornography, and libel, contrasting it with other social media platforms.",
     "classifierLabel": "not_hate",
     "classifierScore": 0.019783,

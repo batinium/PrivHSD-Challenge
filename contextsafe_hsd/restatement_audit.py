@@ -113,7 +113,7 @@ def target_terms(text: str) -> list[str]:
     terms = {
         normalize_term(span.text)
         for span in target_group_spans(text)
-        if span.category != "slur_or_profanity"
+        if span.entity_type == "TARGET_GROUP"
     }
     return sorted(term for term in terms if term)
 

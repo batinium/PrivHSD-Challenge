@@ -69,9 +69,10 @@ For each input item:
 6. Preserve public/protected group words needed for classification, including
    religions, nationalities, ethnicities, gender, sexuality, disability, age,
    immigration status, political identity when relevant, and similar groups.
-7. If the source has typed target placeholders like [TARGET_GROUP:religion],
-   expand them into a generic readable category such as "a religious group"
-   rather than dropping the category. Do not invent a concrete group name.
+7. If the source has typed target placeholders like [TARGET_GROUP:religion] or
+   [TARGET_GROUP:religion:muslims], expand them into a readable group reference
+   without dropping the category or included group label. Do not invent a
+   concrete group name that is not present in the placeholder.
 8. Keep direct privacy placeholders such as [PERSON], [USER], [URL], [LOCATION],
    [ORG], and [STYLE] exactly as placeholders; do not replace them with real
    names, handles, places, links, emails, or IDs.

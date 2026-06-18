@@ -37,6 +37,7 @@ DEFAULT_THRESHOLDS = {
     "DATE": 0.55,
     "AGE": 0.5,
     "TARGET_GROUP": 0.0,
+    "ABUSIVE_LANGUAGE": 0.0,
 }
 
 
@@ -89,7 +90,7 @@ def hits_protected_cue(
     candidate: SpanCandidate,
     protected_ranges: list[tuple[int, int, str]],
 ) -> bool:
-    if candidate.entity_type == "TARGET_GROUP":
+    if candidate.entity_type in {"TARGET_GROUP", "ABUSIVE_LANGUAGE"}:
         return False
     if (
         candidate.privacy_class == PRIVACY_CLASS_DIRECT

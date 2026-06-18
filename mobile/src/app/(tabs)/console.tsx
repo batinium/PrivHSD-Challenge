@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   View,
+  type DimensionValue,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -433,8 +434,8 @@ function AdminDashboardLive() {
     <SafeAreaView style={styles.safeArea}>
       <GlimoShieldBackground />
       <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.brandLockup}>
+        <View style={[styles.header, !isWide && styles.headerCompact]}>
+          <View style={[styles.brandLockup, !isWide && styles.brandLockupCompact]}>
             <Image
               source={require('@/assets/glimo_mascot_text_below.png')}
               style={styles.brandMark}
@@ -445,7 +446,7 @@ function AdminDashboardLive() {
               <Text style={styles.title}>Admin review console</Text>
             </View>
           </View>
-          <View style={styles.statusPill}>
+          <View style={[styles.statusPill, !isWide && styles.statusPillCompact]}>
             <View style={styles.statusDot} />
             <Text style={styles.statusText}>{frozenBatch.validationStatus}</Text>
           </View>
@@ -467,7 +468,7 @@ function AdminDashboardLive() {
         </View>
 
         <View style={styles.panel}>
-          <View style={styles.uploadHeader}>
+          <View style={[styles.uploadHeader, !isWide && styles.uploadHeaderCompact]}>
             <View style={styles.uploadHeaderText}>
               <Text style={styles.panelTitle}>CSV intake</Text>
               <Text style={styles.panelCopy}>
@@ -475,17 +476,25 @@ function AdminDashboardLive() {
                 disk. If the label column is missing, DeHateBERT predictions feed restatement.
               </Text>
             </View>
-            <Text style={styles.apiStatus}>{apiMessage}</Text>
+            <Text style={[styles.apiStatus, !isWide && styles.apiStatusCompact]}>
+              {apiMessage}
+            </Text>
           </View>
 
-          <View style={styles.uploadControls}>
-            <Pressable onPress={chooseCsvFile} style={styles.primaryButton}>
+          <View style={[styles.uploadControls, !isWide && styles.uploadControlsCompact]}>
+            <Pressable
+              onPress={chooseCsvFile}
+              style={[styles.primaryButton, !isWide && styles.uploadControlButton]}>
               <Text style={styles.primaryButtonText}>Choose CSV</Text>
             </Pressable>
             <Pressable
               onPress={uploadSelectedCsv}
               disabled={!selectedFile || isUploading}
-              style={[styles.secondaryButton, (!selectedFile || isUploading) && styles.buttonDisabled]}>
+              style={[
+                styles.secondaryButton,
+                !isWide && styles.uploadControlButton,
+                (!selectedFile || isUploading) && styles.buttonDisabled,
+              ]}>
               <Text style={styles.secondaryButtonText}>
                 {isUploading ? 'Uploading' : 'Upload'}
               </Text>
@@ -495,13 +504,16 @@ function AdminDashboardLive() {
               disabled={(!selectedFile && !activeUpload) || isStarting}
               style={[
                 styles.primaryButton,
+                !isWide && styles.uploadControlButton,
                 ((!selectedFile && !activeUpload) || isStarting) && styles.buttonDisabled,
               ]}>
               <Text style={styles.primaryButtonText}>
                 {isStarting ? 'Starting' : 'Start processing'}
               </Text>
             </Pressable>
-            <Pressable onPress={refreshPersistentState} style={styles.secondaryButton}>
+            <Pressable
+              onPress={refreshPersistentState}
+              style={[styles.secondaryButton, !isWide && styles.uploadControlButton]}>
               <Text style={styles.secondaryButtonText}>Refresh runs</Text>
             </Pressable>
           </View>
@@ -1112,20 +1124,30 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingBottom: 96,
     alignSelf: 'center',
-    width: '100%',
-    maxWidth: 1180,
+    width: 'calc(100% - 120px)' as DimensionValue,
+    maxWidth: 1060,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+    minWidth: 0,
+  },
+  headerCompact: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
   },
   brandLockup: {
     flex: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+    minWidth: 0,
+  },
+  brandLockupCompact: {
+    justifyContent: 'center',
   },
   brandMark: {
     width: 82,
@@ -1133,6 +1155,8 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
   },
   eyebrow: {
     color: AppColors.coral,
@@ -1159,6 +1183,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: AppColors.line,
   },
+  statusPillCompact: {
+    alignSelf: 'center',
+    maxWidth: '100%',
+  },
   statusDot: {
     width: 8,
     height: 8,
@@ -1179,6 +1207,7 @@ const styles = StyleSheet.create({
   },
   metric: {
     flex: 1,
+    minWidth: 0,
     borderRadius: 8,
     padding: 16,
     minHeight: 88,
@@ -1203,6 +1232,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: AppColors.line,
     gap: 14,
+    minWidth: 0,
   },
   panelTitle: {
     color: AppColors.ink,
@@ -1214,6 +1244,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '500',
+    flexShrink: 1,
+    minWidth: 0,
   },
   uploadHeader: {
     flexDirection: 'row',
@@ -1221,8 +1253,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 14,
   },
+  uploadHeaderCompact: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 10,
+  },
   uploadHeaderText: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     gap: 4,
   },
   apiStatus: {
@@ -1237,10 +1276,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     maxWidth: 340,
   },
+  apiStatusCompact: {
+    alignSelf: 'stretch',
+    maxWidth: '100%',
+    textAlign: 'center',
+  },
   uploadControls: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+  },
+  uploadControlsCompact: {
+    flexDirection: 'column',
+    flexWrap: 'nowrap',
+    gap: 8,
+  },
+  uploadControlButton: {
+    width: '100%',
+    alignItems: 'center',
   },
   primaryButton: {
     backgroundColor: AppColors.ink,
@@ -1281,6 +1334,8 @@ const styles = StyleSheet.create({
   uploadMetaBox: {
     flexGrow: 1,
     flexBasis: 220,
+    flexShrink: 1,
+    minWidth: 0,
     backgroundColor: '#F9FAFB',
     borderRadius: 8,
     padding: 12,
@@ -1296,6 +1351,8 @@ const styles = StyleSheet.create({
   columnInputBox: {
     flexGrow: 1,
     flexBasis: 160,
+    flexShrink: 1,
+    minWidth: 0,
     backgroundColor: AppColors.panel,
     borderRadius: 8,
     padding: 10,

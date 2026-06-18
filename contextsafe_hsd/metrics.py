@@ -61,7 +61,7 @@ KNOWN_PLACEHOLDER_TYPES = frozenset(
 )
 
 PLACEHOLDER_PATTERN = re.compile(
-    r"\[(?P<kind>[A-Z][A-Z_]*(?::[A-Za-z0-9_/-]+)?)\]"
+    r"\[(?P<kind>[A-Z][A-Z_]*(?::[A-Za-z0-9_/-]+){0,2})\]"
 )
 TOKEN_PATTERN = re.compile(r"\[[^\]]+\]|[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*")
 
@@ -191,6 +191,7 @@ def quasi_spans(spans: Iterable[Span]) -> list[Span]:
 
 def target_term_spans(text: str) -> list[Span]:
     targets = target_group_spans(text)
+    placeholder_spans = placeholder_ranges(text)
     org_spans = [
         span
         for span in detect_spans(text, include_context=False, include_targets=False)
@@ -198,6 +199,8 @@ def target_term_spans(text: str) -> list[Span]:
     ]
     filtered: list[Span] = []
     for target in targets:
+        if span_inside_ranges(target, placeholder_spans):
+            continue
         containing_orgs = [
             span
             for span in org_spans
@@ -220,18 +223,39 @@ def placeholder_counts(text: str) -> tuple[Counter[str], int]:
     placeholder_characters = 0
     for match in PLACEHOLDER_PATTERN.finditer(text):
         kind = match.group("kind")
-        if kind not in KNOWN_PLACEHOLDER_TYPES:
+        if not is_known_placeholder_type(kind):
             continue
         counts[kind] += 1
         placeholder_characters += match.end() - match.start()
     return counts, placeholder_characters
 
 
+def placeholder_ranges(text: str) -> list[tuple[int, int]]:
+    return [
+        (match.start(), match.end())
+        for match in PLACEHOLDER_PATTERN.finditer(text)
+        if is_known_placeholder_type(match.group("kind"))
+    ]
+
+
+def span_inside_ranges(span: Span, ranges: Iterable[tuple[int, int]]) -> bool:
+    return any(span.start >= start and span.end <= end for start, end in ranges)
+
+
+def is_known_placeholder_type(kind: str) -> bool:
+    if kind in KNOWN_PLACEHOLDER_TYPES:
+        return True
+    if not kind.startswith("TARGET_GROUP:"):
+        return False
+    parts = kind.split(":", 2)
+    return len(parts) >= 2 and parts[1] in TARGET_GROUP_CATEGORIES
+
+
 def target_placeholder_counts(placeholders: Counter[str]) -> Counter[str]:
     counts: Counter[str] = Counter()
     for placeholder_type, count in placeholders.items():
         if placeholder_type.startswith("TARGET_GROUP:"):
-            category = placeholder_type.split(":", 1)[1]
+            category = placeholder_type.split(":", 2)[1]
             counts[category] += count
     return counts
 
@@ -254,10 +278,12 @@ def target_cue_counts_fast(text: str) -> tuple[Counter[str], Counter[str]]:
     need to be visible here. This still avoids the org-context filtering used by
     the deeper target scan.
     """
+    placeholder_spans = placeholder_ranges(text)
     term_counts = Counter(
         span.category
         for span in target_group_spans(text)
         if span.category is not None
+        and not span_inside_ranges(span, placeholder_spans)
     )
     placeholders, _ = placeholder_counts(text)
     cue_counts = term_counts + target_placeholder_counts(placeholders)

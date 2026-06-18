@@ -44,8 +44,8 @@ def test_row_metric_reports_placeholder_density_residuals_and_quasi_flags():
 def test_row_metric_target_cue_retention_counts_category_placeholders():
     original = "Muslims and refugees should leave."
     privatized = (
-        "[TARGET_GROUP:religion] and "
-        "[TARGET_GROUP:nationality_or_origin] should leave."
+        "[TARGET_GROUP:religion:muslims] and "
+        "[TARGET_GROUP:nationality_or_origin:refugees] should leave."
     )
 
     metrics = row_metric(original, privatized)

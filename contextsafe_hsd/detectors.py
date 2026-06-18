@@ -59,6 +59,7 @@ TAGS = {
     "ORGANIZATION": "[ORG]",
     "IDENTIFIER": "[ID]",
     "AGE": "[AGE]",
+    "ABUSIVE_LANGUAGE": "[ABUSIVE_LANGUAGE]",
 }
 
 LETTER_PATTERN = r"[^\W\d_]"
@@ -527,8 +528,7 @@ VARIANT_TRANSLATION = str.maketrans(
 )
 VARIANT_TOKEN_PATTERN = re.compile(r"#?[A-Za-z0-9_@$]{4,}")
 SPACED_FRAGMENT_PATTERN = re.compile(r"#?[A-Za-z0-9_@$]{1,8}")
-EXTERNAL_TARGET_CATEGORIES = frozenset({"slur_or_profanity"})
-TARGET_GROUP_CATEGORIES = frozenset(TARGET_GROUP_TERMS) | EXTERNAL_TARGET_CATEGORIES
+TARGET_GROUP_CATEGORIES = frozenset(TARGET_GROUP_TERMS)
 _EXTERNAL_PROFANITY_LOADED = False
 IMPLICIT_TARGET_ORG_TERMS = {
     "mosque": "religion",
@@ -1336,6 +1336,19 @@ def has_predicative_external_abuse_context(text: str, start: int, end: int) -> b
     return False
 
 
+def has_nearby_target_group_context(text: str, start: int, end: int) -> bool:
+    window_start = max(0, start - 100)
+    window = text[window_start : min(len(text), end + 100)]
+    local_start = start - window_start
+    local_end = end - window_start
+    for _category, _term, pattern in target_group_term_patterns():
+        for match in pattern.finditer(window):
+            if match.start() < local_end and match.end() > local_start:
+                continue
+            return True
+    return False
+
+
 def has_target_generalization_context(text: str, start: int, end: int) -> bool:
     return has_explicit_target_generalization_context(
         text,
@@ -1355,6 +1368,16 @@ def compact_variant(value: str) -> str:
             continue
         collapsed.append(character)
     return "".join(collapsed)
+
+
+def target_group_label(term: str) -> str:
+    """Return a stable, human-readable placeholder label for a target term."""
+    label = re.sub(r"[^a-z0-9]+", "_", term.lower()).strip("_")
+    return label or "group"
+
+
+def target_group_replacement(category: str, term: str) -> str:
+    return f"[TARGET_GROUP:{category}:{target_group_label(term)}]"
 
 
 def spaced_fragment_windows(
@@ -1456,6 +1479,7 @@ def hashtag_target_group_spans(text: str) -> list[Span]:
                         score=0.62,
                         source="target_hashtag",
                         category=category,
+                        replacement=target_group_replacement(category, term),
                     )
                 )
     return spans
@@ -1495,6 +1519,7 @@ def variant_target_group_spans(text: str) -> list[Span]:
                         score=0.58,
                         source="target_variant",
                         category=category,
+                        replacement=target_group_replacement(category, term),
                     )
                 )
     return spans
@@ -1532,6 +1557,7 @@ def spaced_variant_target_group_spans(text: str) -> list[Span]:
                         score=0.57,
                         source="target_spaced_variant",
                         category=category,
+                        replacement=target_group_replacement(category, term),
                     )
                 )
     return spans
@@ -1545,17 +1571,17 @@ def external_profane_target_spans(text: str) -> list[Span]:
         if not (
             has_explicit_target_generalization_context(text, start, end)
             or has_predicative_external_abuse_context(text, start, end)
+            or has_nearby_target_group_context(text, start, end)
         ):
             continue
         spans.append(
             Span(
                 start=start,
                 end=end,
-                entity_type="TARGET_GROUP",
+                entity_type="ABUSIVE_LANGUAGE",
                 text=raw_value,
                 score=0.54,
                 source="external_profanity_lexicon",
-                category="slur_or_profanity",
             )
         )
     return spans
@@ -1603,6 +1629,7 @@ def target_group_spans(text: str) -> list[Span]:
                     score=0.7,
                     source="target_dictionary",
                     category=category,
+                    replacement=target_group_replacement(category, term),
                 )
             )
     spans.extend(hashtag_target_group_spans(text))

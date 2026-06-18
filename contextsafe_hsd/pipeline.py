@@ -84,7 +84,11 @@ def apply_replacements(
 
 
 def text_metrics(original: str, privatized: str, spans: list[Span]) -> dict[str, Any]:
-    direct_spans = [span for span in spans if span.entity_type != "TARGET_GROUP"]
+    direct_spans = [
+        span
+        for span in spans
+        if span.entity_type not in {"TARGET_GROUP", "ABUSIVE_LANGUAGE"}
+    ]
     counts = Counter(span.entity_type for span in spans)
     direct_counts = Counter(span.entity_type for span in direct_spans)
     similarity = SequenceMatcher(None, original, privatized).ratio()
