@@ -1,6 +1,6 @@
-# Glimo Mobile
+# ContextSafe-HSD Mobile
 
-Expo mobile/web shell for the Glimo citizen review workflow.
+Expo mobile/web shell for the harmful-speech dataset review workflow.
 
 ## Get started
 
@@ -39,9 +39,8 @@ cd mobile
 
 Then run `npm run export:static-review`.
 
-The app currently runs with seeded data from the locked baseline:
-
-`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
+The checked-in static demo data is prepared for public review flows. Local
+datasets and generated review pools should stay under ignored `data/` paths.
 
 For live admin uploads, run the local backend API before opening the Console:
 
@@ -57,9 +56,10 @@ from the persistent `data/admin_uploads` cache.
 
 - Console: backend bundle status, artifact paths, admin triage, source/scrubbed/restated comparison, classifier/deviation signals, reviewer vote summary, and lookup/training routing.
 - Review: swipe-card citizen review over guarded restated evidence.
+- Library: example learning material for hate-speech detection and review context.
 
 ## Product rules
 
-- Citizen reviewers only see Glimo-guarded restatements, not raw source text.
+- Citizen reviewers only see guarded restatements, not raw source text.
 - Restatements pass through a direct-identifier guard before entering the deck.
 - Admin model selection is explicit; GPT/DPMLM/semantic masking are not default.

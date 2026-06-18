@@ -1,8 +1,8 @@
 # ContextSafe-HSD
 
-ContextSafe-HSD is the working repository for Glimo's PrivHSD Challenge code.
-It contains the local CSV pipeline, review API, Expo review app, and the source
-tree used to publish the `glimo-hsd` Python package.
+ContextSafe-HSD is a reference implementation for privacy-aware harmful-speech
+dataset review workflows. It contains the local CSV pipeline, review API, Expo
+review app, and the source tree used to publish the `glimo-hsd` Python package.
 
 The project is for privacy review and research workflows around harmful-speech
 datasets. It is not a moderation product, and its classifier output should not
@@ -11,7 +11,7 @@ be used for automated enforcement.
 ## What Is In This Repo
 
 ```text
-contextsafe_hsd/   Working pipeline and local API used during the challenge
+contextsafe_hsd/   Working pipeline and local API
 tests/             Regression tests for CSV shape, masking, sidecars, and API behavior
 docs/              Runbooks, reference notes, and planning records
 mobile/            Expo mobile/web review app
@@ -23,14 +23,13 @@ data/              Local datasets, model weights, outputs, and job state; ignore
 `contextsafe_hsd` is the main working code in this repository. The published
 package lives under `glimo-hsd/` and is also available from PyPI.
 
-## Published Artifacts
+## Published Package
 
 - PyPI package: <https://pypi.org/project/glimo-hsd/0.1.1/>
-- Hugging Face model: <https://huggingface.co/batinium/glimo-dehatebert-hsd>
 
 The PyPI package is `glimo-hsd==0.1.1`. It supports Python `>=3.10` and does
-not include model weights. With the HF extra installed, it can load the
-published DeHateBERT checkpoint from Hugging Face.
+not include model weights. With the HF extra installed, it can load a compatible
+text-classification checkpoint from Hugging Face or a local model directory.
 
 ```bash
 python -m pip install "glimo-hsd[hf]==0.1.1"
@@ -43,7 +42,7 @@ glimo-hsd process input.csv \
   --text-col text \
   --label-col hs \
   --out outputs/run_001 \
-  --model-id batinium/glimo-dehatebert-hsd \
+  --model-id ORG_OR_USER/dehatebert-hsd \
   --classifier-backend hf \
   --restatement-backend none \
   --final-scrub
@@ -52,8 +51,8 @@ glimo-hsd process input.csv \
 ## Local Data
 
 The repository expects local data under `data/`, but the directory is ignored.
-That directory is where challenge datasets, downloaded model checkpoints,
-admin uploads, generated CSVs, manifests, audit files, and review bundles live.
+That directory is where local datasets, downloaded model checkpoints, admin
+uploads, generated CSVs, manifests, audit files, and review bundles live.
 
 Do not commit raw datasets, admin uploads, generated outputs containing source
 text, local model weights, or `.env` files.
@@ -88,7 +87,7 @@ npx tsc --noEmit
 
 ## Run The Working Pipeline
 
-The root package exposes the challenge pipeline as `contextsafe-hsd`:
+The root package exposes the CSV protection pipeline as `contextsafe-hsd`:
 
 ```bash
 python -m contextsafe_hsd.cli protect \
@@ -98,8 +97,8 @@ python -m contextsafe_hsd.cli protect \
   --id-col ID \
   --preset exact \
   --hsd-classifier hf \
-  --hf-hsd-model-path batinium/glimo-dehatebert-hsd \
-  --hf-hsd-threshold 0.850469 \
+  --hf-hsd-model-path ORG_OR_USER/dehatebert-hsd \
+  --hf-hsd-threshold 0.85 \
   --allow-model-download \
   --llm-verifier off \
   --pii-assist \
@@ -118,7 +117,7 @@ For local runs with an already-downloaded checkpoint, replace the model ID with
 the local path, for example:
 
 ```text
-data/outputs/dehatebert_official_kfold_20260617/final_model
+data/models/dehatebert-hsd/final_model
 ```
 
 ## Local API And Review App
@@ -130,8 +129,8 @@ python -m contextsafe_hsd.api_server \
   --host 127.0.0.1 \
   --port 8765 \
   --admin-runs-dir data/admin_uploads \
-  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
-  --hf-hsd-threshold 0.850469
+  --hf-hsd-model-path data/models/dehatebert-hsd/final_model \
+  --hf-hsd-threshold 0.85
 ```
 
 Run the Expo app:
@@ -153,10 +152,11 @@ review bundle, not a source-controlled artifact.
 
 ## Model Notes
 
-`batinium/glimo-dehatebert-hsd` is a text-classification checkpoint based on
-`Hate-speech-CNERG/dehatebert-mono-english`. The local pipeline uses threshold
-`0.850469` for the HF sidecar classifier. The classifier is a review and
-scoring helper; it does not make the protected CSV private by itself.
+The HF sidecar classifier expects a compatible text-classification checkpoint,
+for example one fine-tuned from `Hate-speech-CNERG/dehatebert-mono-english`.
+The classifier threshold should be calibrated for the chosen checkpoint and
+dataset. The classifier is a review and scoring helper; it does not make the
+protected CSV private by itself.
 
 The pipeline's privacy behavior comes from deterministic masking, optional
 Presidio/scrubadub assist, candidate selection, author-group masking, and
@@ -170,7 +170,7 @@ sidecar audits. Review outputs should still be checked before public release.
 - `docs/reference/data_contract.md`
 - `docs/reference/system_diagram.md`
 
-## Before Making The Repository Public
+## Public Release Hygiene
 
 - Confirm `git status --ignored data .env mobile/dist-review` shows `data/`,
   `.env`, and `mobile/dist-review/` as ignored, not tracked.
@@ -178,5 +178,6 @@ sidecar audits. Review outputs should still be checked before public release.
   `git ls-files data`.
 - Rotate any tokens that were ever committed or shared outside the local
   machine.
-- Keep generated review pools out of source control. The checked-in
-  `mobile/src/data/` files use synthetic placeholders only.
+- Keep generated review pools out of source control unless they are explicitly
+  prepared for public demonstration. Checked-in demo data should contain only
+  masked or synthetic text.
