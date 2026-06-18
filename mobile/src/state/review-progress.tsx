@@ -169,6 +169,7 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
     clearTutorialFeedback,
     completeTrainingCards,
     isTutorialActive,
+    isTutorialVisible,
     nextTutorialStep,
   } = useOnboarding();
   const [items, setItems] = useState<ReviewItem[]>(reviewSeedItems);
@@ -184,8 +185,8 @@ export function ReviewProgressProvider({ children }: { children: ReactNode }) {
     streak: 0,
   });
 
-  const visibleItems = isTutorialActive ? tutorialItems : items;
-  const visibleActiveIndex = isTutorialActive ? activeTutorialIndex : activeIndex;
+  const visibleItems = isTutorialVisible ? tutorialItems : items;
+  const visibleActiveIndex = isTutorialVisible ? activeTutorialIndex : activeIndex;
 
   const currentReviewer = useMemo(() => {
     return mergeReviewerStats(currentReviewerBase, sessionStats);

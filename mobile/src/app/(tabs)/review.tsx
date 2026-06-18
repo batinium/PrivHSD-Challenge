@@ -129,21 +129,21 @@ export default function CitizenReview() {
   }, [updateTutorialTargets]);
 
   const scheduleTutorialMeasurement = useCallback(() => {
-    if (!isTutorialActive) {
+    if (!isTutorialVisible) {
       return;
     }
 
     requestAnimationFrame(measureTutorialTargets);
-  }, [isTutorialActive, measureTutorialTargets]);
+  }, [isTutorialVisible, measureTutorialTargets]);
 
   useEffect(() => {
-    if (!isTutorialActive) {
+    if (!isTutorialVisible) {
       return;
     }
 
     const frame = requestAnimationFrame(measureTutorialTargets);
     return () => cancelAnimationFrame(frame);
-  }, [activeIndex, cardHeight, cardWidth, height, isTutorialActive, measureTutorialTargets, width]);
+  }, [activeIndex, cardHeight, cardWidth, height, isTutorialVisible, measureTutorialTargets, width]);
 
   const rotate = position.x.interpolate({
     inputRange: [-220, 0, 220],
@@ -273,16 +273,16 @@ export default function CitizenReview() {
               />
               <View style={styles.headerText}>
                 <Text style={styles.eyebrow}>
-                  {isTutorialActive ? 'Glimo tutorial' : 'Glimo review'}
+                  {isTutorialVisible ? 'Glimo tutorial' : 'Glimo review'}
                 </Text>
                 <Text style={[styles.title, isCompact && styles.titleCompact]}>
-                  {isTutorialActive ? 'Practice deck' : 'Evidence deck'}
+                  {isTutorialVisible ? 'Practice deck' : 'Evidence deck'}
                 </Text>
               </View>
             </View>
             <View style={[styles.counter, isCompact && styles.counterCompact]}>
               <Text style={styles.counterValue}>{remainingCount}</Text>
-              <Text style={styles.counterLabel}>{isTutorialActive ? 'practice' : 'left'}</Text>
+              <Text style={styles.counterLabel}>{isTutorialVisible ? 'practice' : 'left'}</Text>
             </View>
           </View>
 
@@ -410,13 +410,13 @@ export default function CitizenReview() {
                 />
                 <Text style={styles.emptyTitle}>Queue complete</Text>
                 <Text style={styles.emptyCopy}>
-                  {isTutorialActive
+                  {isTutorialVisible
                     ? 'Practice cards are complete. Finish the tutorial to load the real queue.'
                     : 'Citizen votes are ready for admin export and audit review.'}
                 </Text>
                 <Pressable
                   onPress={() => {
-                    if (isTutorialActive) {
+                    if (isTutorialVisible) {
                       finishTutorial();
                     } else {
                       resetReviewQueue();
@@ -424,7 +424,7 @@ export default function CitizenReview() {
                   }}
                   style={styles.primaryButton}>
                   <Text style={styles.primaryButtonText}>
-                    {isTutorialActive ? 'Finish tutorial' : 'Restart demo queue'}
+                    {isTutorialVisible ? 'Finish tutorial' : 'Restart demo queue'}
                   </Text>
                 </Pressable>
               </View>
