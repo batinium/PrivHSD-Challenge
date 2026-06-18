@@ -100,14 +100,17 @@ python scripts/hf_token_importance.py \
   --threshold 0.850469
 ```
 
-Then generate a separate evidence CSV from the completed baseline output:
+Then generate a separate context-preserving evidence CSV from the completed
+baseline output. This balanced setting keeps already-protected baseline text for
+rows predicted non-HSD, and uses a wider source-token window for rows predicted
+HSD:
 
 ```bash
 python -m contextsafe_hsd.cli evidence-after-baseline \
   --source INPUT.csv \
   --baseline OUTPUT.csv \
   --importance OUTPUT.token_importance.csv \
-  --output OUTPUT.evidence.relaxed.protected.csv \
+  --output OUTPUT.ctx.csv \
   --text-col text \
   --id-col ID \
   --label-col hs \
@@ -115,14 +118,18 @@ python -m contextsafe_hsd.cli evidence-after-baseline \
   --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
   --hf-hsd-threshold 0.850469 \
   --max-anchors 3 \
-  --context-radius 2 \
+  --context-radius 3 \
   --anchor-min-delta 0.03 \
-  --anchor-relative-min 0.25
+  --anchor-relative-min 0.25 \
+  --negative-strategy baseline
 ```
 
-This is an experimental attribution-based extraction path: non-HSD predicted
-rows are collapsed, and HSD predicted rows keep only DeHateBERT-important source
-tokens plus a small source-token window. The baseline CSV is never overwritten.
+This is an experimental attribution-based extraction path: HSD predicted rows
+keep only DeHateBERT-important source tokens plus a small source-token window,
+while non-HSD predicted rows keep the already-privatized baseline wording for
+review context. The baseline CSV is never overwritten. To reproduce the older
+high-score collapsed-negative artifact, omit `--negative-strategy baseline` and
+use `--context-radius 2`.
 
 The output CSV keeps the input row order, row count, and columns exactly. Only
 the selected text column is replaced. Labels, diagnostics, suggestions, and

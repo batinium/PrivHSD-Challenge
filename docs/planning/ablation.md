@@ -13,7 +13,8 @@ Current best direction:
 - Use a fine-tuned DeHateBERT HSD classifier to identify rows that still need
   HSD evidence.
 - Use token occlusion importance to find which tokens drive the HSD score.
-- Collapse non-HSD rows.
+- Preserve the already-protected baseline text for non-HSD rows in the balanced
+  candidate.
 - Keep only HSD-bearing evidence tokens or short windows around them.
 - Run PII cleanup after extraction.
 
@@ -68,7 +69,8 @@ Flow:
 2. Use DeHateBERT to predict HSD rows.
 3. Compute token occlusion importance on raw text.
 4. Keep important HSD evidence anchors plus a short context window.
-5. Collapse predicted non-HSD rows to neutral text.
+5. Preserve predicted non-HSD rows from the locked protected baseline for the
+   balanced candidate, or collapse them only for the high-score reference.
 6. Run deterministic PII cleanup on the extracted evidence phrase.
 7. Re-score the final candidate with DeHateBERT and, if possible, submit one
    candidate to the private scorer.
@@ -220,10 +222,19 @@ Purpose:
 Test whether collapsing all predicted-negative rows to `Context removed.` is
 helping too much or creating scorer artifacts.
 
+Status:
+
+Implemented through `evidence-after-baseline --negative-strategy baseline`.
+Use this as the tutor-facing balanced candidate because it demonstrates context
+preservation on non-HSD statements and should trade away some private score from
+the `~0.83` collapsed-negative artifact toward the requested `~0.70` balance.
+
 Settings:
 
 - predicted-HSD rows use relaxed evidence phrases
 - predicted-non-HSD rows keep locked baseline text
+- recommended first pass: `--context-radius 3`, `--max-anchors 3`,
+  `--anchor-min-delta 0.03`, `--anchor-relative-min 0.25`
 
 Decision rule:
 

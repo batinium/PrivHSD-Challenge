@@ -125,14 +125,14 @@ For the post-event evidence-abstraction showcase, compute token importances and
 then run `evidence-after-baseline`. This produces a separate CSV plus manifest,
 validation, local HF utility summary, and source-token trace sidecars.
 
-Relaxed phrase setting:
+Context-preserving balanced setting:
 
 ```bash
 python -m contextsafe_hsd.cli evidence-after-baseline \
   --source data/train/train_split.csv \
   --baseline data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv \
   --importance data/outputs/dpmlm_sweep_20260617/token_importance_train.csv \
-  --output data/outputs/evidence_tokens_classifier_relaxed_20260618/train_split.evidence_tokens_classifier_relaxed_on_baseline.protected.csv \
+  --output data/outputs/evidence_tokens_classifier_context_preserving_20260618/train_ctx.csv \
   --text-col text \
   --id-col ID \
   --label-col hs \
@@ -140,13 +140,16 @@ python -m contextsafe_hsd.cli evidence-after-baseline \
   --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
   --hf-hsd-threshold 0.850469 \
   --max-anchors 3 \
-  --context-radius 2 \
+  --context-radius 3 \
   --anchor-min-delta 0.03 \
-  --anchor-relative-min 0.25
+  --anchor-relative-min 0.25 \
+  --negative-strategy baseline
 ```
 
 The locked baseline is not overwritten. The output is experimental
-classifier-guided evidence extraction, not a semantic rewrite.
+classifier-guided evidence extraction, not a semantic rewrite. To reproduce the
+older high-score collapsed-negative artifact, omit `--negative-strategy
+baseline` and use `--context-radius 2`.
 
 The 2026-06-18 recovered train run on `data/train/train_split.csv` (`1154`
 rows) completed in `1251.76s` wall time and wrote a valid CSV to

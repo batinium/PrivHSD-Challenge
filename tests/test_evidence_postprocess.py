@@ -128,6 +128,36 @@ class FakeClassifier:
         )
 
 
+class FakeBaselineNegativeClassifier:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.calls = 0
+
+    def classify_texts(self, rows, *, batch_size):
+        self.calls += 1
+        if self.calls == 1:
+            assert [row["text"] for row in rows] == [
+                "baseline positive",
+                "baseline negative",
+            ]
+            return FakeClassifierResult(
+                [
+                    FakeClassifierRow(hate=True, score=0.95),
+                    FakeClassifierRow(hate=False, score=0.10),
+                ]
+            )
+        assert [row["text"] for row in rows] == [
+            "alpha slur beta.",
+            "baseline negative",
+        ]
+        return FakeClassifierResult(
+            [
+                FakeClassifierRow(hate=True, score=0.93),
+                FakeClassifierRow(hate=False, score=0.10),
+            ]
+        )
+
+
 def test_classifier_evidence_after_baseline_writes_phrase_and_sidecars(
     monkeypatch,
     tmp_path,
@@ -188,6 +218,56 @@ def test_classifier_evidence_after_baseline_writes_phrase_and_sidecars(
     assert json.loads(hf_summary.read_text(encoding="utf-8"))["final_vs_gold"][
         "accuracy"
     ] == 1.0
+
+
+def test_classifier_evidence_after_baseline_can_preserve_negative_baseline_context(
+    monkeypatch,
+    tmp_path,
+):
+    source = tmp_path / "source.csv"
+    baseline = tmp_path / "baseline.csv"
+    importance = tmp_path / "importance.csv"
+    output = tmp_path / "evidence.csv"
+    write_rows(
+        source,
+        [
+            {"ID": "A", "author": "u1", "text": "alpha slur beta", "hs": "1"},
+            {"ID": "B", "author": "u2", "text": "raw negative", "hs": "0"},
+        ],
+    )
+    write_rows(
+        baseline,
+        [
+            {"ID": "A", "author": "u1", "text": "baseline positive", "hs": "1"},
+            {"ID": "B", "author": "u2", "text": "baseline negative", "hs": "0"},
+        ],
+    )
+    write_importance(importance)
+    monkeypatch.setattr(
+        "contextsafe_hsd.evidence_postprocess.HfHsdClassifierRuntime",
+        FakeBaselineNegativeClassifier,
+    )
+
+    result = run_classifier_evidence_after_baseline(
+        source_path=source,
+        baseline_path=baseline,
+        importance_path=importance,
+        output_path=output,
+        id_col="ID",
+        label_col="hs",
+        max_anchors=1,
+        context_radius=1,
+        negative_strategy="baseline",
+    )
+
+    output_rows = read_rows(output)
+    assert output_rows[0]["text"] == "alpha slur beta."
+    assert output_rows[1]["text"] == "baseline negative"
+    assert result["changed_text_cells_vs_locked_baseline"] == 1
+    assert result["negative_strategy"] == "baseline"
+    assert result["trace"]["negative_strategy"] == "baseline"
+    assert result["trace"]["word_count_distribution"] == {"2": 1, "3": 1}
+    assert result["hf_summary"]["final_vs_gold"]["accuracy"] == 1.0
 
 
 def test_classifier_evidence_after_baseline_refuses_to_overwrite_baseline(tmp_path):

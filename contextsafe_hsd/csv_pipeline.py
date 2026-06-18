@@ -12,6 +12,15 @@ class CsvPipelineError(ValueError):
     pass
 
 
+def assert_utf8_file(path: Path) -> None:
+    try:
+        path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise CsvPipelineError(
+            f"{path}: output is not valid UTF-8 at byte {exc.start}: {exc.reason}"
+        ) from exc
+
+
 def read_csv(path: Path) -> tuple[list[dict[str, str]], list[str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -28,6 +37,7 @@ def write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> 
         writer.writeheader()
         for row in rows:
             writer.writerow(row)
+    assert_utf8_file(path)
 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:

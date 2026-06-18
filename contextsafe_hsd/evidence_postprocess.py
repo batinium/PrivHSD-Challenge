@@ -20,6 +20,7 @@ from .submission import sha256_file, validate_submission
 
 
 DEFAULT_EVIDENCE_NEGATIVE_TEXT = "Context removed."
+DEFAULT_EVIDENCE_NEGATIVE_STRATEGY = "placeholder"
 DEFAULT_EVIDENCE_MAX_ANCHORS = 3
 DEFAULT_EVIDENCE_CONTEXT_RADIUS = 2
 DEFAULT_EVIDENCE_ANCHOR_MIN_DELTA = 0.03
@@ -245,6 +246,7 @@ def run_classifier_evidence_after_baseline(
     anchor_min_delta: float = DEFAULT_EVIDENCE_ANCHOR_MIN_DELTA,
     anchor_relative_min: float = DEFAULT_EVIDENCE_ANCHOR_RELATIVE_MIN,
     negative_text: str = DEFAULT_EVIDENCE_NEGATIVE_TEXT,
+    negative_strategy: str = DEFAULT_EVIDENCE_NEGATIVE_STRATEGY,
     positive_labels: frozenset[str] = DEFAULT_POSITIVE_LABELS,
 ) -> dict[str, Any]:
     """Write a classifier-guided HSD evidence CSV from a baseline output."""
@@ -252,6 +254,10 @@ def run_classifier_evidence_after_baseline(
     if classifier_text_source not in {"baseline", "source"}:
         raise EvidencePostprocessError(
             "classifier_text_source must be 'baseline' or 'source'"
+        )
+    if negative_strategy not in {"placeholder", "baseline"}:
+        raise EvidencePostprocessError(
+            "negative_strategy must be 'placeholder' or 'baseline'"
         )
     if max_anchors < 1:
         raise EvidencePostprocessError("max_anchors must be at least 1")
@@ -358,7 +364,11 @@ def run_classifier_evidence_after_baseline(
                     }
                 )
         else:
-            text = negative_text
+            text = (
+                baseline_row[text_col]
+                if negative_strategy == "baseline"
+                else negative_text
+            )
 
         output_row[text_col] = text
         if output_row[text_col] != baseline_row[text_col]:
@@ -455,6 +465,7 @@ def run_classifier_evidence_after_baseline(
         "max_anchors": max_anchors,
         "anchor_min_delta": anchor_min_delta,
         "anchor_relative_min": anchor_relative_min,
+        "negative_strategy": negative_strategy,
         "anchor_count_distribution": _sorted_count_dict(anchor_counts),
         "selected_token_count_distribution": _sorted_count_dict(selected_counts),
         "word_count_distribution": _sorted_count_dict(word_counts),
@@ -493,6 +504,7 @@ def run_classifier_evidence_after_baseline(
         "max_anchors": max_anchors,
         "anchor_min_delta": anchor_min_delta,
         "anchor_relative_min": anchor_relative_min,
+        "negative_strategy": negative_strategy,
         "negative_text": negative_text,
         "source_sha256": sha256_file(source_path),
         "baseline_sha256": sha256_file(baseline_path),
@@ -513,6 +525,7 @@ __all__ = [
     "DEFAULT_EVIDENCE_ANCHOR_RELATIVE_MIN",
     "DEFAULT_EVIDENCE_CONTEXT_RADIUS",
     "DEFAULT_EVIDENCE_MAX_ANCHORS",
+    "DEFAULT_EVIDENCE_NEGATIVE_STRATEGY",
     "DEFAULT_EVIDENCE_NEGATIVE_TEXT",
     "EvidencePostprocessError",
     "run_classifier_evidence_after_baseline",

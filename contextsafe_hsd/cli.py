@@ -14,6 +14,7 @@ from .evidence_postprocess import (
     DEFAULT_EVIDENCE_ANCHOR_RELATIVE_MIN,
     DEFAULT_EVIDENCE_CONTEXT_RADIUS,
     DEFAULT_EVIDENCE_MAX_ANCHORS,
+    DEFAULT_EVIDENCE_NEGATIVE_STRATEGY,
     DEFAULT_EVIDENCE_NEGATIVE_TEXT,
     EvidencePostprocessError,
     run_classifier_evidence_after_baseline,
@@ -542,7 +543,16 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_after_baseline.add_argument(
         "--negative-text",
         default=DEFAULT_EVIDENCE_NEGATIVE_TEXT,
-        help="Replacement text for rows predicted non-HSD.",
+        help="Replacement text for rows predicted non-HSD in placeholder mode.",
+    )
+    evidence_after_baseline.add_argument(
+        "--negative-strategy",
+        choices=["placeholder", "baseline"],
+        default=DEFAULT_EVIDENCE_NEGATIVE_STRATEGY,
+        help=(
+            "How to handle rows predicted non-HSD: placeholder uses "
+            "--negative-text; baseline keeps the already-protected baseline text."
+        ),
     )
     evidence_after_baseline.add_argument(
         "--manifest",
@@ -820,6 +830,7 @@ def main(argv: list[str] | None = None) -> int:
                 anchor_min_delta=args.anchor_min_delta,
                 anchor_relative_min=args.anchor_relative_min,
                 negative_text=args.negative_text,
+                negative_strategy=args.negative_strategy,
             )
         elif args.command == "validate-submission":
             result = validate_submission(

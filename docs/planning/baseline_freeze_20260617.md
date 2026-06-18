@@ -83,12 +83,50 @@ For unlabeled data, run the same command with `--label-source hf-classifier`
 and `--classifier-text-source baseline`; this uses the local HF model prediction
 instead of `hs` and therefore inherits classifier errors.
 
+## Optional Tutor Context Example
+
+The frozen baseline remains the selected CSV above. For tutor review, the
+context-preserving evidence example is also saved under:
+
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/examples/train_ctx.csv`
+
+It is byte-identical to the upload-short copy in the tutor showcase:
+
+`data/outputs/tutor_showcase_20260618/03_train_ctx.csv`
+
+This example scored `0.55` privately. It preserves more context than the
+collapsed-negative evidence variants by keeping the already-protected locked
+baseline text for rows predicted non-HSD, while rows predicted HSD keep wider
+evidence phrases around classifier-important tokens.
+
+Parameters:
+
+```text
+classifier_text_source = baseline
+hf_hsd_model_path = data/outputs/dehatebert_official_kfold_20260617/final_model
+hf_hsd_threshold = 0.850469
+max_anchors = 3
+context_radius = 3
+anchor_min_delta = 0.03
+anchor_relative_min = 0.25
+negative_strategy = baseline
+```
+
+Checks:
+
+- rows: `1154`
+- changed text cells vs locked baseline: `378`
+- unchanged text cells vs locked baseline: `776`
+- local DeHateBERT F1 vs `hs`: `0.852503`
+- SHA256: `60c55a1a167581687c2fbf05764742bf8f289a63f285f074fd01ab29f9b7853d`
+
 ## Result Log
 
 | Run | Candidate | Private score | Notes |
 | --- | --- | ---: | --- |
 | #17 | `train_split.no_simplify.protected` | `0.3721` | selected baseline |
 | 2026-06-18 | `train_split.no_simplify_hf.recovered.protected` | `0.37` | locked profile; CSV-identical to #17 |
+| 2026-06-18 | `train_ctx.csv` | `0.55` | tutor context example; preserves baseline context for predicted non-HSD rows |
 | 2026-06-18 | `train_split.label_template_hsd_lexical.protected` | `1.5` | high-risk post-baseline template probe |
 | #18 | `train_split.full_style.protected` | `0.3702` | essentially tied, slightly worse |
 | #23 | `train_split.semantic_cluster_guarded.protected` | `0.3696` | no score gain for added complexity |
