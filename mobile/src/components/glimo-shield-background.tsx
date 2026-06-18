@@ -29,7 +29,8 @@ export function GlimoShieldBackground({
           toValue: 1,
           duration: layerConfigs[index].duration,
           easing: Easing.linear,
-          useNativeDriver: true,
+          isInteraction: false,
+          useNativeDriver: false,
         }),
       ),
     );
@@ -40,13 +41,15 @@ export function GlimoShieldBackground({
           toValue: 1,
           duration: 5200,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
+          isInteraction: false,
+          useNativeDriver: false,
         }),
         Animated.timing(idleDrift, {
           toValue: 0,
           duration: 5200,
           easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
+          isInteraction: false,
+          useNativeDriver: false,
         }),
       ]),
     );
@@ -86,16 +89,20 @@ export function GlimoShieldBackground({
     [height, variant, width],
   );
 
+  const idleDirection = idleDrift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-1, 1],
+  });
   const baseDirection = swipeX
-    ? swipeX.interpolate({
-        inputRange: [-220, 0, 220],
-        outputRange: [-1, 0, 1],
-        extrapolate: 'clamp',
-      })
-    : idleDrift.interpolate({
-        inputRange: [0, 1],
-        outputRange: [-1, 1],
-      });
+    ? Animated.add(
+        Animated.multiply(idleDirection, 0.35),
+        swipeX.interpolate({
+          inputRange: [-220, 0, 220],
+          outputRange: [-1, 0, 1],
+          extrapolate: 'clamp',
+        }),
+      )
+    : idleDirection;
 
   return (
     <View style={[StyleSheet.absoluteFill, styles.noPointerEvents]}>
