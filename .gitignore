@@ -8,14 +8,9 @@ build/
 dist/
 .vscode/
 *.egg-info/
-data/public_dev/
-data/admin_uploads/
-data/outputs/
-data/external_unseen/
-data/evaluation/
-data/temp/
-data/train/
+data/
 node_modules/
+mobile/dist-review/
 workbench/frontend/dist/
 workbench/.cache/
 dpmlm_artefacts/
