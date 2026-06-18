@@ -8,41 +8,45 @@ export type TutorialStep = {
   decisionLabel?: string;
   primaryLabel?: string;
   requiresDecision?: boolean;
+  swipePrompt?: string;
   target: TutorialTarget;
   title: string;
 };
 
 export const tutorialSteps: TutorialStep[] = [
   {
-    title: 'Hi, reviewer',
+    title: 'Hello, Citizen!',
     body:
-      'I am Glimo. I loaded three training cards for you first, so you can practice before the real review deck starts.',
+      'I am Glimo. I loaded three training cards for you first. Try swiping the card to decide; the buttons are there for accessibility.',
     primaryLabel: 'Start training',
     target: 'header',
   },
   {
-    title: 'Example 1: choose YES',
+    title: 'Example 1: swipe right for YES',
     body:
-      'This card describes an attack on a protected group. You should send YES when the protected restatement still describes hate speech.',
+      'This card describes an attack on a protected group. Swipe right for YES when the protected restatement still describes hate speech.',
     decisionLabel: 'YES',
     requiresDecision: true,
-    target: 'actions',
+    swipePrompt: 'Swipe right for YES, or use the YES button.',
+    target: 'deck',
   },
   {
-    title: 'Example 2: choose NO',
+    title: 'Example 2: swipe left for NO',
     body:
-      'This one criticizes an idea without targeting a protected class. You should choose NO when it is not hate speech.',
+      'This one criticizes an idea without targeting a protected class. Swipe left for NO when it is not hate speech.',
     decisionLabel: 'NO',
     requiresDecision: true,
-    target: 'actions',
+    swipePrompt: 'Swipe left for NO, or use the NO button.',
+    target: 'deck',
   },
   {
     title: 'Example 3: send for review',
     body:
-      'This card is too ambiguous to classify confidently. You should use REVIEW when a human second look is safer than guessing.',
+      'This card is too ambiguous to classify confidently. Swipe up for REVIEW when a human second look is safer than guessing.',
     decisionLabel: 'REVIEW',
     requiresDecision: true,
-    target: 'actions',
+    swipePrompt: 'Swipe up for REVIEW, or use the REVIEW button.',
+    target: 'deck',
   },
 ];
 

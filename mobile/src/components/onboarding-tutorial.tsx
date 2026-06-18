@@ -38,7 +38,11 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
     tutorialStepIndex,
   } = useOnboarding();
   const { height, width } = overlaySize;
-  const target = targets[tutorialStep.target] ?? fallbackTarget(width, height);
+  const decisionTarget = makeDecisionTarget(targets);
+  const hasDecisionTarget = Boolean(decisionTarget);
+  const target =
+    (tutorialStep.requiresDecision ? decisionTarget : targets[tutorialStep.target]) ??
+    fallbackTarget(width, height);
   const spotlight = paddedTarget(target, width, height);
   const bubbleWidth = Math.min(width - 32, 430);
   const bubbleLeft = clamp(
@@ -52,6 +56,8 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
     ? bubbleBelow
     : clamp(spotlight.y - BUBBLE_HEIGHT - 18, 16, height - BUBBLE_HEIGHT - 16);
   const canAdvanceWithButton = !tutorialStep.requiresDecision;
+  const scrimPointerEvents =
+    tutorialStep.requiresDecision && !hasDecisionTarget ? 'none' : 'auto';
 
   function handleOverlayLayout(event: LayoutChangeEvent) {
     const { height: nextHeight, width: nextWidth } = event.nativeEvent.layout;
@@ -75,11 +81,11 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
   return (
     <View pointerEvents="box-none" onLayout={handleOverlayLayout} style={styles.overlay}>
       <View
-        pointerEvents="auto"
+        pointerEvents={scrimPointerEvents}
         style={[styles.scrim, { height: spotlight.y, left: 0, right: 0, top: 0 }]}
       />
       <View
-        pointerEvents="auto"
+        pointerEvents={scrimPointerEvents}
         style={[
           styles.scrim,
           {
@@ -91,7 +97,7 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
         ]}
       />
       <View
-        pointerEvents="auto"
+        pointerEvents={scrimPointerEvents}
         style={[
           styles.scrim,
           {
@@ -103,7 +109,7 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
         ]}
       />
       <View
-        pointerEvents="auto"
+        pointerEvents={scrimPointerEvents}
         style={[
           styles.scrim,
           {
@@ -169,7 +175,8 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
           {tutorialStep.requiresDecision && (
             <View style={styles.choicePrompt}>
               <Text style={styles.choicePromptText}>
-                Choose {tutorialStep.decisionLabel} below to continue.
+                {tutorialStep.swipePrompt ??
+                  `Swipe the card or use ${tutorialStep.decisionLabel} below to continue.`}
               </Text>
             </View>
           )}
@@ -193,6 +200,30 @@ function fallbackTarget(width: number, height: number): TutorialSpotlightLayout 
     width: width - 44,
     x: 22,
     y: Math.max(96, height * 0.24),
+  };
+}
+
+function makeDecisionTarget(
+  targets: Partial<Record<TutorialTarget, TutorialSpotlightLayout>>,
+): TutorialSpotlightLayout | undefined {
+  const deck = targets.deck;
+  const actions = targets.actions;
+
+  if (!deck || !actions) {
+    return undefined;
+  }
+
+  const left = Math.min(deck.x, actions.x);
+  const top = Math.min(deck.y, actions.y);
+  const right = Math.max(deck.x + deck.width, actions.x + actions.width);
+  const bottom = Math.max(deck.y + deck.height, actions.y + actions.height);
+
+  return {
+    borderRadius: 24,
+    height: bottom - top,
+    width: right - left,
+    x: left,
+    y: top,
   };
 }
 
