@@ -1,40 +1,54 @@
-/* Auto-generated from data/static_demo/qwen50_jury_20260618. */
+/* Auto-generated from real backend Qwen CSV artifacts plus static protected masking for the 50-row jury sample. */
 import { type AdminCaseItem, type BatchSummary } from './review-data';
 
 export const staticFrozenBatch: BatchSummary = {
   "id": "qwen50-jury-20260618",
-  "sourceCsv": "data/static_demo/qwen50_jury_20260618/source.csv",
-  "protectedCsv": "data/static_demo/qwen50_jury_20260618/qwen35_text_replaced.csv",
-  "annotatedCsv": "data/static_demo/qwen50_jury_20260618/source.annotated.csv",
-  "restatedCsv": "data/static_demo/qwen50_jury_20260618/qwen35_descriptive_restatements.csv",
-  "deviationAuditCsv": "data/static_demo/qwen50_jury_20260618/deviation_audit.csv",
-  "tokenImportanceCsv": "Qwen 3.5 descriptive restatement sample; no token sidecar for this 50-row bundle",
+  "sourceCsv": "data/admin_uploads/3309ebfc2d0f0b49/source.csv",
+  "protectedCsv": "data/static_demo/qwen50_jury_20260618/backend_qwen50_static_masked.csv",
+  "annotatedCsv": "data/admin_uploads/3309ebfc2d0f0b49/runs/3309ebfc2d0f0b49-bbdf591c3bb2/source.restated.annotated.csv",
+  "restatedCsv": "data/admin_uploads/3309ebfc2d0f0b49/runs/3309ebfc2d0f0b49-bbdf591c3bb2/source.restated.csv",
+  "deviationAuditCsv": "data/admin_uploads/3309ebfc2d0f0b49/runs/3309ebfc2d0f0b49-bbdf591c3bb2/source.restated.deviation_audit.csv",
+  "tokenImportanceCsv": "data/admin_uploads/3309ebfc2d0f0b49/runs/3309ebfc2d0f0b49-bbdf591c3bb2/source.dehatebert_token_importance.csv",
   "rows": 50,
   "changedTextCells": 50,
   "validationStatus": "valid",
-  "baselineScore": "Qwen3.5 sample: 10 hate / 40 normal; audit ok=26, low=17, medium=7",
-  "currentStage": "Qwen 3.5 descriptive restatements and deviation audit loaded for static jury review"
+  "baselineScore": "Backend Qwen sample: 10 gold hate / 40 gold normal; classifier predicts 11 hate / 39 normal; static mask placeholders in 50/50 rows; audit ok=26, low=16, medium=5, high=3",
+  "currentStage": "Static protected mask generated from real Qwen sample rows with PII providers and low-impact style fallback"
 };
 
 export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_44",
     "source": "REDDIT_44",
-    "protectedText": "The comment uses the term \"incel\" to insult the user and calls them a \"fucking moron\" and a \"cunt\" for disagreeing with the speaker about monogamy.",
-    "restatement": "The comment uses the term \"incel\" to insult the user and calls them a \"fucking moron\" and a \"cunt\" for disagreeing with the speaker about monogamy.",
+    "protectedText": "\"you disagree with me!!  are you really defending monogamy??? fucking incel!!\"   thats...........not how it works you dont just get to yell incel at people just because they dont agree with you fucking moron  yeah, no that insult has lost its mojo because of cunts like you the [STYLE] is over saturated try to be a little more creative.",
+    "restatement": "The comment uses a derogatory term to describe a person who disagrees with the speaker and defends monogamy.",
     "classifierLabel": "hate",
-    "classifierScore": 0.917615,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "classifierScore": 0.958613,
+    "riskLevel": "medium",
+    "guardFindings": [
+      "context_term_loss",
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_44.",
-    "scrubbedText": "The comment uses the term \"incel\" to insult the user and calls them a \"fucking moron\" and a \"cunt\" for disagreeing with the speaker about monogamy.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "\"you disagree with me!!  are you really defending monogamy??? fucking incel!!\"   thats...........not how it works you dont just get to yell incel at people just because they dont agree with you fucking moron  yeah, no that insult has lost its mojo because of cunts like you the market is over saturated try to be a little more creative.",
+    "scrubbedText": "\"you disagree with me!!  are you really defending monogamy??? fucking incel!!\"   thats...........not how it works you dont just get to yell incel at people just because they dont agree with you fucking moron  yeah, no that insult has lost its mojo because of cunts like you the [STYLE] is over saturated try to be a little more creative.",
+    "deviationRisk": "medium",
+    "deviationScore": 3.0,
+    "deviationReasons": [
+      "context_term_loss",
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
-    "missingContextTerms": [],
-    "tokenHighlights": [],
+    "missingContextTerms": [
+      "incel"
+    ],
+    "tokenHighlights": [
+      "cunts",
+      "of",
+      "because",
+      "like",
+      "you"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 4,
       "notHatred": 0,
@@ -45,98 +59,138 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_236",
     "source": "REDDIT_236",
-    "protectedText": "The comment insults the user by predicting they are in the 40-50 IQ range and hopes they are in a group home.",
-    "restatement": "The comment insults the user by predicting they are in the 40-50 IQ range and hopes they are in a group home.",
-    "classifierLabel": "hate",
-    "classifierScore": 0.99,
+    "protectedText": "Can't even come up with your own insults  I revise my earlier prediction of a 60 IQ  You are clearly in the 40-50 range  I hope you are in a group home and have all of your [STYLE] met  See you at the special olympics!",
+    "restatement": "The comment uses ableist language and derogatory terms against a person with a disability.",
+    "classifierLabel": "not_hate",
+    "classifierScore": 0.052834,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_236.",
-    "scrubbedText": "The comment insults the user by predicting they are in the 40-50 IQ range and hopes they are in a group home.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "Can't even come up with your own insults  I revise my earlier prediction of a 60 IQ  You are clearly in the 40-50 range  I hope you are in a group home and have all of your needs met  See you at the special olympics!",
+    "scrubbedText": "Can't even come up with your own insults  I revise my earlier prediction of a 60 IQ  You are clearly in the 40-50 range  I hope you are in a group home and have all of your [STYLE] met  See you at the special olympics!",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "you",
+      "clearly",
+      "See",
+      "60",
+      "met"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 3,
       "notHatred": 0,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "review"
   },
   {
     "id": "REDDIT_307",
     "source": "REDDIT_307",
-    "protectedText": "The comment targets George Soros as a \"globalist asshole\" and claims he orchestrates migrant invasions and funds radical organizations.",
-    "restatement": "The comment targets George Soros as a \"globalist asshole\" and claims he orchestrates migrant invasions and funds radical organizations.",
+    "protectedText": "People are going after [PERSON] for being a globalist asshole who orchestrates [TARGET_GROUP:nationality_or_origin] invasions and funds radical subversive orgs, and a bunch of leftist dummies are actually retarded enough to defend him by accusing his critics of anti-semitism It's like a slow-motion car wreck headed straight for another genocide.",
+    "restatement": "The comment accuses George Soros of orchestrating migrant invasions and funding radical organizations, and criticizes leftist defenders for accusing his critics of anti-semitism, framing the situation as a precursor to genocide.",
     "classifierLabel": "hate",
-    "classifierScore": 0.916808,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "classifierScore": 0.970241,
+    "riskLevel": "high",
+    "guardFindings": [
+      "context_term_loss",
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_307.",
-    "scrubbedText": "The comment targets George Soros as a \"globalist asshole\" and claims he orchestrates migrant invasions and funds radical organizations.",
-    "deviationRisk": "unknown",
-    "deviationScore": 3,
-    "deviationReasons": [],
+    "originalText": "People are going after George Soros for being a globalist asshole who orchestrates migrant invasions and funds radical subversive orgs, and a bunch of leftist dummies are actually retarded enough to defend him by accusing his critics of anti-semitism It's like a slow-motion car wreck headed straight for another genocide.",
+    "scrubbedText": "People are going after [PERSON] for being a globalist asshole who orchestrates [TARGET_GROUP:nationality_or_origin] invasions and funds radical subversive orgs, and a bunch of leftist dummies are actually retarded enough to defend him by accusing his critics of anti-semitism It's like a slow-motion car wreck headed straight for another genocide.",
+    "deviationRisk": "high",
+    "deviationScore": 5.0,
+    "deviationReasons": [
+      "context_term_loss",
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [
-      "anti semitism|genocide|leftist"
+      "globalist"
     ],
-    "tokenHighlights": [],
-    "reviewerVotes": {
-      "confirmedHatred": 3,
-      "notHatred": 0,
-      "uncertain": 1
-    },
-    "adminDisposition": "review"
-  },
-  {
-    "id": "REDDIT_532",
-    "source": "REDDIT_532",
-    "protectedText": "The comment insults women by calling them \"cunts,\" \"worthless whores,\" and \"bitches\" for allegedly consenting to sexual situations.",
-    "restatement": "The comment insults women by calling them \"cunts,\" \"worthless whores,\" and \"bitches\" for allegedly consenting to sexual situations.",
-    "classifierLabel": "hate",
-    "classifierScore": 0.988692,
-    "riskLevel": "low",
-    "guardFindings": [],
-    "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_532.",
-    "scrubbedText": "The comment insults women by calling them \"cunts,\" \"worthless whores,\" and \"bitches\" for allegedly consenting to sexual situations.",
-    "deviationRisk": "unknown",
-    "deviationScore": 4,
-    "deviationReasons": [],
-    "missingTargetTerms": [],
-    "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "retarded",
+      "actually",
+      "migrant",
+      "are",
+      "enough"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 4,
       "notHatred": 0,
       "uncertain": 1
     },
-    "adminDisposition": "review"
+    "adminDisposition": "lookup"
+  },
+  {
+    "id": "REDDIT_532",
+    "source": "REDDIT_532",
+    "protectedText": "This is how far gone [TARGET_GROUP:gender] are at this point  These cunts literally consent to all of this shit, then they still want to play the victim at the end of the day  [TARGET_GROUP:slur_or_profanity] YOU GOT PAID TO GET [TARGET_GROUP:slur_or_profanity]!  SHUT THE [TARGET_GROUP:slur_or_profanity]!  [TARGET_GROUP:slur_or_profanity] worthless [TARGET_GROUP:slur_or_profanity]....",
+    "restatement": "The comment uses abusive language and derogatory terms against women, describing them as worthless whores and accusing them of consenting to exploitation.",
+    "classifierLabel": "hate",
+    "classifierScore": 0.974927,
+    "riskLevel": "medium",
+    "guardFindings": [
+      "target_cue_loss",
+      "offensive_cue_abstracted"
+    ],
+    "decision": "pending",
+    "originalText": "This is how far gone women are at this point  These cunts literally consent to all of this shit, then they still want to play the victim at the end of the day  BITCH YOU GOT PAID TO GET FUCKED!  SHUT THE FUCK UP!  Fucking worthless whore....",
+    "scrubbedText": "This is how far gone [TARGET_GROUP:gender] are at this point  These cunts literally consent to all of this shit, then they still want to play the victim at the end of the day  [TARGET_GROUP:slur_or_profanity] YOU GOT PAID TO GET [TARGET_GROUP:slur_or_profanity]!  SHUT THE [TARGET_GROUP:slur_or_profanity]!  [TARGET_GROUP:slur_or_profanity] worthless [TARGET_GROUP:slur_or_profanity]....",
+    "deviationRisk": "medium",
+    "deviationScore": 4.0,
+    "deviationReasons": [
+      "target_cue_loss",
+      "offensive_cue_abstracted"
+    ],
+    "missingTargetTerms": [],
+    "missingContextTerms": [],
+    "tokenHighlights": [
+      "whore",
+      "to",
+      "consent",
+      "cunts",
+      "day"
+    ],
+    "reviewerVotes": {
+      "confirmedHatred": 5,
+      "notHatred": 1,
+      "uncertain": 1
+    },
+    "adminDisposition": "lookup"
   },
   {
     "id": "REDDIT_567",
     "source": "REDDIT_567",
-    "protectedText": "The comment insults women by calling them \"modern trash\" and claims that men who refuse to be \"White Knights\" are of no use to them.",
-    "restatement": "The comment insults women by calling them \"modern trash\" and claims that men who refuse to be \"White Knights\" are of no use to them.",
-    "classifierLabel": "hate",
-    "classifierScore": 0.828115,
+    "protectedText": "Of course, if a man refuses to be [PERSON] then he is of no use to a modern trash female He is worse than shit in their eyes.",
+    "restatement": "The comment uses a derogatory term to describe women who do not conform to traditional gender roles and expresses hostility toward them.",
+    "classifierLabel": "not_hate",
+    "classifierScore": 0.037927,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_567.",
-    "scrubbedText": "The comment insults women by calling them \"modern trash\" and claims that men who refuse to be \"White Knights\" are of no use to them.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "Of course, if a man refuses to be a White Knight then he is of no use to a modern trash female He is worse than shit in their eyes.",
+    "scrubbedText": "Of course, if a man refuses to be [PERSON] then he is of no use to a modern trash female He is worse than shit in their eyes.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "eyes",
+      "female",
+      "trash",
+      "modern",
+      "is"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 3,
       "notHatred": 0,
@@ -147,46 +201,62 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_696",
     "source": "REDDIT_696",
-    "protectedText": "The comment questions whether group size alone explains population impact and includes a hostile insult targeting a protected group.",
-    "restatement": "The comment questions whether group size alone explains population impact and includes a hostile insult targeting a protected group.",
+    "protectedText": "So what you're saying is that looking at the size of a group compared to the population isn't enough to tell the whole story of how big the [STYLE] effect on the population is?   I don't buy it (Edit: /s for the retards in the crowd)",
+    "restatement": "The comment argues that comparing a group's size to the population is insufficient to determine its impact, while also using a derogatory term to describe the crowd.",
     "classifierLabel": "hate",
-    "classifierScore": 0.988692,
+    "classifierScore": 0.971891,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_696.",
-    "scrubbedText": "The comment questions whether group size alone explains population impact and includes a hostile insult targeting a protected group.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "So what you're saying is that looking at the size of a group compared to the population isn't enough to tell the whole story of how big the group's effect on the population is?   I don't buy it (Edit: /s for the retards in the crowd)",
+    "scrubbedText": "So what you're saying is that looking at the size of a group compared to the population isn't enough to tell the whole story of how big the [STYLE] effect on the population is?   I don't buy it (Edit: /s for the retards in the crowd)",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "retards",
+      "in",
+      "I",
+      "the",
+      "crowd"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 3,
       "notHatred": 0,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "review"
   },
   {
     "id": "REDDIT_713",
     "source": "REDDIT_713",
-    "protectedText": "The comment uses derogatory language to describe a protected group and suggests they are being treated unfairly.",
-    "restatement": "The comment uses derogatory language to describe a protected group and suggests they are being treated unfairly.",
+    "protectedText": "dude, he would have arrested a man just for pulling over like she did, if not shot him  This cunt get like 12 [STYLE] to leave, and she still doesn't  Not to mention she's probably driving a free car like most women do...",
+    "restatement": "The comment accuses a woman of being a racist and sexist individual who would arrest or shoot a man for pulling over, and claims she is driving a free car like most women.",
     "classifierLabel": "hate",
-    "classifierScore": 0.99,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "classifierScore": 0.968063,
+    "riskLevel": "medium",
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_713.",
-    "scrubbedText": "The comment uses derogatory language to describe a protected group and suggests they are being treated unfairly.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "dude, he would have arrested a man just for pulling over like she did, if not shot him  This cunt get like 12 chances to leave, and she still doesn't  Not to mention she's probably driving a free car like most women do...",
+    "scrubbedText": "dude, he would have arrested a man just for pulling over like she did, if not shot him  This cunt get like 12 [STYLE] to leave, and she still doesn't  Not to mention she's probably driving a free car like most women do...",
+    "deviationRisk": "medium",
+    "deviationScore": 3.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "cunt",
+      "dude",
+      "like",
+      "This",
+      "mention"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 4,
       "notHatred": 0,
@@ -197,21 +267,39 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_748",
     "source": "REDDIT_748",
-    "protectedText": "The comment uses homophobic slurs to describe a man's gender expression and sexuality in relation to women and gay identity.",
-    "restatement": "The comment uses homophobic slurs to describe a man's gender expression and sexuality in relation to women and gay identity.",
+    "protectedText": "A man in a woman costume who has sex with women is I guess at least slightly [TARGET_GROUP:sexual_orientation] since he is dressed like a woman which is pretty faggoty.",
+    "restatement": "The comment uses homophobic language to describe a person in a woman's costume engaging in sexual activity with women.",
     "classifierLabel": "hate",
-    "classifierScore": 0.827103,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "classifierScore": 0.977518,
+    "riskLevel": "high",
+    "guardFindings": [
+      "target_category_loss",
+      "target_cue_loss",
+      "target_term_loss",
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_748.",
-    "scrubbedText": "The comment uses homophobic slurs to describe a man's gender expression and sexuality in relation to women and gay identity.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
-    "missingTargetTerms": [],
+    "originalText": "A man in a woman costume who has sex with women is I guess at least slightly gay since he is dressed like a woman which is pretty faggoty.",
+    "scrubbedText": "A man in a woman costume who has sex with women is I guess at least slightly [TARGET_GROUP:sexual_orientation] since he is dressed like a woman which is pretty faggoty.",
+    "deviationRisk": "high",
+    "deviationScore": 13.0,
+    "deviationReasons": [
+      "target_category_loss",
+      "target_cue_loss",
+      "target_term_loss",
+      "offensive_cue_loss"
+    ],
+    "missingTargetTerms": [
+      "gay"
+    ],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "faggoty",
+      "pretty",
+      "is",
+      "least",
+      "guess"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 3,
       "notHatred": 0,
@@ -222,21 +310,31 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_875",
     "source": "REDDIT_875",
-    "protectedText": "The comment references a hate crime involving a protected group and a disabled person, questioning the lack of legal consequences.",
-    "restatement": "The comment references a hate crime involving a protected group and a disabled person, questioning the lack of legal consequences.",
+    "protectedText": "It's really sad These white kids that did the same thing while screeching 'nigger' and all kinds of other epithets at [TARGET_GROUP:disability] kid didn't get any time at all, let alone slapped with a hate crime:  [URL]  Isn't it sad?",
+    "restatement": "The comment expresses sadness that white children who used racial slurs and other epithets against a disabled child were not charged with a hate crime.",
     "classifierLabel": "hate",
-    "classifierScore": 0.976804,
+    "classifierScore": 0.972958,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_875.",
-    "scrubbedText": "The comment references a hate crime involving a protected group and a disabled person, questioning the lack of legal consequences.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "It's really sad These white kids that did the same thing while screeching 'nigger' and all kinds of other epithets at a disabled kid didn't get any time at all, let alone slapped with a hate crime:  https://www.youtube.com/watch?v=WiIqm5r4G6gb  Isn't it sad?",
+    "scrubbedText": "It's really sad These white kids that did the same thing while screeching 'nigger' and all kinds of other epithets at [TARGET_GROUP:disability] kid didn't get any time at all, let alone slapped with a hate crime:  [URL]  Isn't it sad?",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "nigger'",
+      "and",
+      "https://www.youtube.com/watch?v=WiIqm5r4G6gb",
+      "epithets",
+      "screeching"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 3,
       "notHatred": 0,
@@ -247,173 +345,233 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_1146",
     "source": "REDDIT_1146",
-    "protectedText": "The comment describes a situation involving a protected group and includes a self-identified joke about a protected group.",
-    "restatement": "The comment describes a situation involving a protected group and includes a self-identified joke about a protected group.",
+    "protectedText": "My mamma used to always chase them off with a broom  [URL]  e: unintentional house nigger joke realized  e2: I have some amazing pics of em",
+    "restatement": "The comment acknowledges an unintentional racist joke involving racial slurs and includes photos of the subjects.",
     "classifierLabel": "hate",
-    "classifierScore": 0.781749,
+    "classifierScore": 0.976745,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1146.",
-    "scrubbedText": "The comment describes a situation involving a protected group and includes a self-identified joke about a protected group.",
-    "deviationRisk": "unknown",
-    "deviationScore": 3,
-    "deviationReasons": [],
+    "originalText": "My mamma used to always chase them off with a broom  https://youtu.be/BMchvKOAkDo  e: unintentional house nigger joke realized  e2: I have some amazing pics of em",
+    "scrubbedText": "My mamma used to always chase them off with a broom  [URL]  e: unintentional house nigger joke realized  e2: I have some amazing pics of em",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "nigger",
+      "joke",
+      "realized",
+      "used",
+      "amazing"
+    ],
     "reviewerVotes": {
-      "confirmedHatred": 4,
-      "notHatred": 0,
+      "confirmedHatred": 5,
+      "notHatred": 1,
       "uncertain": 1
     },
-    "adminDisposition": "review"
+    "adminDisposition": "lookup"
   },
   {
     "id": "REDDIT_1",
     "source": "REDDIT_1",
-    "protectedText": "The comment questions why someone would dislike Christianity and Islam equally, arguing that an atheist can live openly in a Christian nation due to tolerance but would face oppression in Muslim-majority countries.",
-    "restatement": "The comment questions why someone would dislike Christianity and Islam equally, arguing that an atheist can live openly in a Christian nation due to tolerance but would face oppression in Muslim-majority countries.",
+    "protectedText": "Why the hell would you dislike Christianity and Islam equally? As an atheist, you can live an openly anti-[TARGET_GROUP:religion] life *right here in a still-largely [TARGET_GROUP:religion] nation* thanks entirely to the tolerance and peacefulness of [TARGET_GROUP:religion] You would be widely and aggressively oppressed in virtually any [TARGET_GROUP:religion] majority country.",
+    "restatement": "The comment questions why someone would dislike Christianity and Islam equally, noting that as an atheist, one can live openly anti-Christian in a Christian nation due to Christian tolerance, while being oppressed in Muslim majority countries.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.064464,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "target_term_loss",
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1.",
-    "scrubbedText": "The comment questions why someone would dislike Christianity and Islam equally, arguing that an atheist can live openly in a Christian nation due to tolerance but would face oppression in Muslim-majority countries.",
-    "deviationRisk": "unknown",
-    "deviationScore": 3,
-    "deviationReasons": [],
+    "originalText": "Why the hell would you dislike Christianity and Islam equally? As an atheist, you can live an openly anti-Christian life *right here in a still-largely Christian nation* thanks entirely to the tolerance and peacefulness of Christians You would be widely and aggressively oppressed in virtually any Muslim majority country.",
+    "scrubbedText": "Why the hell would you dislike Christianity and Islam equally? As an atheist, you can live an openly anti-[TARGET_GROUP:religion] life *right here in a still-largely [TARGET_GROUP:religion] nation* thanks entirely to the tolerance and peacefulness of [TARGET_GROUP:religion] You would be widely and aggressively oppressed in virtually any [TARGET_GROUP:religion] majority country.",
+    "deviationRisk": "low",
+    "deviationScore": 2.0,
+    "deviationReasons": [
+      "target_term_loss",
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [
       "christians"
     ],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "an",
+      "equally",
+      "Muslim",
+      "virtually",
+      "majority"
+    ],
     "reviewerVotes": {
-      "confirmedHatred": 0,
+      "confirmedHatred": 1,
       "notHatred": 4,
       "uncertain": 1
     },
-    "adminDisposition": "approved"
+    "adminDisposition": "lookup"
   },
   {
     "id": "REDDIT_83",
     "source": "REDDIT_83",
-    "protectedText": "The comment criticizes the practice of making flagrantly hateful statements and then claiming they were just jokes, noting that such behavior leads to a loss of support.",
-    "restatement": "The comment criticizes the practice of making flagrantly hateful statements and then claiming they were just jokes, noting that such behavior leads to a loss of support.",
+    "protectedText": "You can't make flagrantly hateful statements and then wait [STYLE] someone gets offended to drop the \"/s\" or \"was just a joke bro.\" And even if you really were just joking expect to lose some support Which is what she did.",
+    "restatement": "The comment criticizes the use of the /s or \"was just a joke\" disclaimer after making flagrantly hateful statements.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.024247,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_83.",
-    "scrubbedText": "The comment criticizes the practice of making flagrantly hateful statements and then claiming they were just jokes, noting that such behavior leads to a loss of support.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "You can't make flagrantly hateful statements and then wait until someone gets offended to drop the \"/s\" or \"was just a joke bro.\" And even if you really were just joking expect to lose some support Which is what she did.",
+    "scrubbedText": "You can't make flagrantly hateful statements and then wait [STYLE] someone gets offended to drop the \"/s\" or \"was just a joke bro.\" And even if you really were just joking expect to lose some support Which is what she did.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "did",
+      "And",
+      "she",
+      "Which",
+      "support"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_174",
     "source": "REDDIT_174",
-    "protectedText": "The comment states that no one was hurt by the style used, while expressing frustration that white women are held responsible for problems in a specific location.",
-    "restatement": "The comment states that no one was hurt by the style used, while expressing frustration that white women are held responsible for problems in a specific location.",
+    "protectedText": "No one hurt me Lmao I have just seen how many white women are responsible for everything that is wrong in [LOCATION] and I\u2019m sick of it.",
+    "restatement": "The comment claims that white women are responsible for problems in [LOCATION] and expresses frustration about this.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.025829,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_174.",
-    "scrubbedText": "The comment states that no one was hurt by the style used, while expressing frustration that white women are held responsible for problems in a specific location.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
-    "deviationReasons": [],
+    "originalText": "No one hurt me Lmao I have just seen how many white women are responsible for everything that is wrong in Western society and I\u2019m sick of it.",
+    "scrubbedText": "No one hurt me Lmao I have just seen how many white women are responsible for everything that is wrong in [LOCATION] and I\u2019m sick of it.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "m",
+      "and",
+      "sick",
+      "white",
+      "in"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_194",
     "source": "REDDIT_194",
-    "protectedText": "The comment argues that forensic evidence is required to address issues, asserting that this is the proper way the situation should be handled.",
-    "restatement": "The comment argues that forensic evidence is required to address issues, asserting that this is the proper way the situation should be handled.",
+    "protectedText": ">  She's gonna need forensic evidence next time or they're going to ignore her  LOL That's not how any of this [EMAIL].....",
+    "restatement": "The comment expresses frustration about a lack of evidence in a situation and uses a placeholder for a style of speech.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.052704,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_194.",
-    "scrubbedText": "The comment argues that forensic evidence is required to address issues, asserting that this is the proper way the situation should be handled.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": ">  She's gonna need forensic evidence next time or they're going to ignore her  LOL That's not how any of this works at all.....",
+    "scrubbedText": ">  She's gonna need forensic evidence next time or they're going to ignore her  LOL That's not how any of this [EMAIL].....",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "ignore",
+      "all",
+      "her",
+      "they're",
+      "evidence"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_214",
     "source": "REDDIT_214",
-    "protectedText": "The comment defines the terms 'OP' and 'Author' in the context of a discussion, clarifying their roles and noting potential confusion between them.",
-    "restatement": "The comment defines the terms 'OP' and 'Author' in the context of a discussion, clarifying their roles and noting potential confusion between them.",
+    "protectedText": "No mate:  The OP is /u/cabbagetwat   The Author is the person who wrote the thing that the OP posted for us to react to  It does get confusing though, [STYLE] that we effectively have two different 'posters' and need to differentiate between them  edit typo",
+    "restatement": "The comment clarifies the distinction between the original poster and the author of the post they are reacting to, noting potential confusion between the two roles.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.021858,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_214.",
-    "scrubbedText": "The comment defines the terms 'OP' and 'Author' in the context of a discussion, clarifying their roles and noting potential confusion between them.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "No mate:  The OP is /u/cabbagetwat   The Author is the person who wrote the thing that the OP posted for us to react to  It does get confusing though, given that we effectively have two different 'posters' and need to differentiate between them  edit typo",
+    "scrubbedText": "No mate:  The OP is /u/cabbagetwat   The Author is the person who wrote the thing that the OP posted for us to react to  It does get confusing though, [STYLE] that we effectively have two different 'posters' and need to differentiate between them  edit typo",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "typo",
+      "posted",
+      "differentiate",
+      "wrote",
+      "posters'"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_217",
     "source": "REDDIT_217",
-    "protectedText": "The comment expresses disappointment with a movie trailer and criticizes the film as a negative sequel, stating a lack of interest in the franchise.",
-    "restatement": "The comment expresses disappointment with a movie trailer and criticizes the film as a negative sequel, stating a lack of interest in the franchise.",
+    "protectedText": "I was put off with the first [STYLE], but all the anti-Princess stuff has made me absolutely fucking loathe the movie and made it so I never want to see it even on Netflix (if it even hits it with Disney's service coming)  It'll just be another Cars 2 for me I've still not bothered with that and never will, I just have no interest in that one",
+    "restatement": "The comment expresses strong dislike for a movie and compares it negatively to another film.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.035074,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_217.",
-    "scrubbedText": "The comment expresses disappointment with a movie trailer and criticizes the film as a negative sequel, stating a lack of interest in the franchise.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "I was put off with the first trailer, but all the anti-Princess stuff has made me absolutely fucking loathe the movie and made it so I never want to see it even on Netflix (if it even hits it with Disney's service coming)  It'll just be another Cars 2 for me I've still not bothered with that and never will, I just have no interest in that one",
+    "scrubbedText": "I was put off with the first [STYLE], but all the anti-Princess stuff has made me absolutely fucking loathe the movie and made it so I never want to see it even on Netflix (if it even hits it with Disney's service coming)  It'll just be another Cars 2 for me I've still not bothered with that and never will, I just have no interest in that one",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "that",
+      "stuff",
+      "interest",
+      "It'll",
+      "anti-Princess"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
@@ -424,21 +582,31 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_220",
     "source": "REDDIT_220",
-    "protectedText": "The comment discusses the evolution of a subreddit based on shared interests in gaming and pattern recognition, criticizing repetitive content from specific journalists and attributing the community's focus to leftism.",
-    "restatement": "The comment discusses the evolution of a subreddit based on shared interests in gaming and pattern recognition, criticizing repetitive content from specific journalists and attributing the community's focus to leftism.",
-    "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "protectedText": "This sub evolved because people here connected the dots Gamers do have some strengths, and pattern recognition happens to be one of them At some point, you grow tired of slapping down the same retarded articles from the same retarded journos and [STYLE] looking for a source to the madness Turns out the source is just leftism.",
+    "restatement": "The comment criticizes leftists for being more left than the general population, while also insulting relativists and leftists with ableist language.",
+    "classifierLabel": "hate",
+    "classifierScore": 0.966493,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_220.",
-    "scrubbedText": "The comment discusses the evolution of a subreddit based on shared interests in gaming and pattern recognition, criticizing repetitive content from specific journalists and attributing the community's focus to leftism.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "This sub evolved because people here connected the dots Gamers do have some strengths, and pattern recognition happens to be one of them At some point, you grow tired of slapping down the same retarded articles from the same retarded journos and start looking for a source to the madness Turns out the source is just leftism.",
+    "scrubbedText": "This sub evolved because people here connected the dots Gamers do have some strengths, and pattern recognition happens to be one of them At some point, you grow tired of slapping down the same retarded articles from the same retarded journos and [STYLE] looking for a source to the madness Turns out the source is just leftism.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
+    "deviationReasons": [
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "retarded",
+      "tired",
+      "slapping",
+      "articles",
+      "dots"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
@@ -449,21 +617,31 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_231",
     "source": "REDDIT_231",
-    "protectedText": "The comment criticizes Steven Oh of TYT as disturbing and expresses hope that Jimmy Dore will mobilize the left.",
-    "restatement": "The comment criticizes Steven Oh of TYT as disturbing and expresses hope that Jimmy Dore will mobilize the left.",
+    "protectedText": "You should watch [PERSON] latest video [PERSON] Oh of [PERSON] is disturbing as hell and makes me hope that [PERSON] wakes the left up.",
+    "restatement": "The comment recommends watching Louis Le Vau's video on Steven Oh of TYT, expressing hope that Jimmy Dore will wake up the left.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.020397,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_231.",
-    "scrubbedText": "The comment criticizes Steven Oh of TYT as disturbing and expresses hope that Jimmy Dore will mobilize the left.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "You should watch Louis Le Vau's latest video Steven Oh of TYT is disturbing as hell and makes me hope that Jimmy Dore wakes the left up.",
+    "scrubbedText": "You should watch [PERSON] latest video [PERSON] Oh of [PERSON] is disturbing as hell and makes me hope that [PERSON] wakes the left up.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "disturbing",
+      "wakes",
+      "up",
+      "Steven",
+      "Oh"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
@@ -474,96 +652,124 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_296",
     "source": "REDDIT_296",
-    "protectedText": "The comment makes a humorous comparison between a sandwich and a cat, arguing that the sandwich is not fully evolved and will cause grief if it drops on the floor.",
-    "restatement": "The comment makes a humorous comparison between a sandwich and a cat, arguing that the sandwich is not fully evolved and will cause grief if it drops on the floor.",
+    "protectedText": "Thats just an inferior being to the sandwich  It didnt fully went through the evolution to become a sandwich and will cause you [STYLE] grief if it drops on the floor And we all know on which side its going to land  It is as much a sandwich as a cat is a fox.",
+    "restatement": "The comment argues that a calzone is not a sandwich because it did not fully evolve to become one and would cause grief if it dropped on the floor.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.230071,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_296.",
-    "scrubbedText": "The comment makes a humorous comparison between a sandwich and a cat, arguing that the sandwich is not fully evolved and will cause grief if it drops on the floor.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "Thats just an inferior being to the sandwich  It didnt fully went through the evolution to become a sandwich and will cause you great grief if it drops on the floor And we all know on which side its going to land  It is as much a sandwich as a cat is a fox.",
+    "scrubbedText": "Thats just an inferior being to the sandwich  It didnt fully went through the evolution to become a sandwich and will cause you [STYLE] grief if it drops on the floor And we all know on which side its going to land  It is as much a sandwich as a cat is a fox.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "inferior",
+      "evolution",
+      "being",
+      "grief",
+      "to"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_319",
     "source": "REDDIT_319",
-    "protectedText": "The comment expresses criticism of the writing style of a user named Usher, stating it matches the expected style for a site called *one angry gamer*.",
-    "restatement": "The comment expresses criticism of the writing style of a user named Usher, stating it matches the expected style for a site called *one angry gamer*.",
+    "protectedText": "I mean, I do have some issues with the way [PERSON] writes, but it's the exact writing style I'd expect on a site called *One Angry Gamer*.",
+    "restatement": "The comment expresses disagreement with a specific person's writing style, stating it matches the expected style of a specific website.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.035433,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_319.",
-    "scrubbedText": "The comment expresses criticism of the writing style of a user named Usher, stating it matches the expected style for a site called *one angry gamer*.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "I mean, I do have some issues with the way Usher writes, but it's the exact writing style I'd expect on a site called *One Angry Gamer*.",
+    "scrubbedText": "I mean, I do have some issues with the way [PERSON] writes, but it's the exact writing style I'd expect on a site called *One Angry Gamer*.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "I'd",
+      "it's",
+      "One",
+      "Angry",
+      "writes"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_326",
     "source": "REDDIT_326",
-    "protectedText": "The comment discusses waiting for others to reconsider their actions and suggests using deniability after initial excitement.",
-    "restatement": "The comment discusses waiting for others to reconsider their actions and suggests using deniability after initial excitement.",
+    "protectedText": "And they waited until it was too late for anyone to back out or have second thoughts to be like \"woah guys, hold your [STYLE], don't get *too* excited (despite how hype we have been)\" to try and have some deniability after.",
+    "restatement": "The comment describes a scenario where people waited until it was too late to back out or have second thoughts.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.017036,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_326.",
-    "scrubbedText": "The comment discusses waiting for others to reconsider their actions and suggests using deniability after initial excitement.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "And they waited until it was too late for anyone to back out or have second thoughts to be like \"woah guys, hold your horses, don't get *too* excited (despite how hype we have been)\" to try and have some deniability after.",
+    "scrubbedText": "And they waited until it was too late for anyone to back out or have second thoughts to be like \"woah guys, hold your [STYLE], don't get *too* excited (despite how hype we have been)\" to try and have some deniability after.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "excited",
+      "to",
+      "and",
+      "thoughts",
+      "been"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_346",
     "source": "REDDIT_346",
-    "protectedText": "The comment references a quote used by gamergate supporters to describe online activists as harassers targeting specific individuals without regard for unintended consequences.",
-    "restatement": "The comment references a quote used by gamergate supporters to describe online activists as harassers targeting specific individuals without regard for unintended consequences.",
+    "protectedText": "> And then there\u2019s \u201cno bad tactics, only bad targets,\u201d which is a catch-all phrase used by Gamergate supporters to portray online activists as deranged harassers mobbing \u201ctargets\u201d with no concern for collateral damage  lol the one they don't sum up fairly accurately and it's the fucking [PERSON] quote how completely unexpected",
+    "restatement": "The comment criticizes the accuracy of a style reference and asserts that a specific phrase is a quote from Saul Alinsky.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.034897,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_346.",
-    "scrubbedText": "The comment references a quote used by gamergate supporters to describe online activists as harassers targeting specific individuals without regard for unintended consequences.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "> And then there\u2019s \u201cno bad tactics, only bad targets,\u201d which is a catch-all phrase used by Gamergate supporters to portray online activists as deranged harassers mobbing \u201ctargets\u201d with no concern for collateral damage  lol the one they don't sum up fairly accurately and it's the fucking Saul Alinsky quote how completely unexpected",
+    "scrubbedText": "> And then there\u2019s \u201cno bad tactics, only bad targets,\u201d which is a catch-all phrase used by Gamergate supporters to portray online activists as deranged harassers mobbing \u201ctargets\u201d with no concern for collateral damage  lol the one they don't sum up fairly accurately and it's the fucking [PERSON] quote how completely unexpected",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "it's",
+      "don't",
+      "deranged",
+      "catch-all",
+      "harassers"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
@@ -574,146 +780,186 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_364",
     "source": "REDDIT_364",
-    "protectedText": "The comment expresses concern that a woman's anger and lack of agency were factors in a violent incident, suggesting her life should not be ruined over a mistake.",
-    "restatement": "The comment expresses concern that a woman's anger and lack of agency were factors in a violent incident, suggesting her life should not be ruined over a mistake.",
+    "protectedText": "You don't understand She was really, really mad at [LOCATION] done something to make her stab him, because women have no agency She felt bad about it, too That should count for something She even took an anger management class, and I'm sure she promised never to stab anyone again We don't need to ruin this girl's life over a mistake.",
+    "restatement": "The comment defends a woman who stabbed someone, arguing that her anger was understandable due to a lack of agency and that she has taken anger management classes.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.025028,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_364.",
-    "scrubbedText": "The comment expresses concern that a woman's anger and lack of agency were factors in a violent incident, suggesting her life should not be ruined over a mistake.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "You don't understand She was really, really mad at him He must have done something to make her stab him, because women have no agency She felt bad about it, too That should count for something She even took an anger management class, and I'm sure she promised never to stab anyone again We don't need to ruin this girl's life over a mistake.",
+    "scrubbedText": "You don't understand She was really, really mad at [LOCATION] done something to make her stab him, because women have no agency She felt bad about it, too That should count for something She even took an anger management class, and I'm sure she promised never to stab anyone again We don't need to ruin this girl's life over a mistake.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "agency",
+      "mad",
+      "have",
+      "promised",
+      "felt"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_401",
     "source": "REDDIT_401",
-    "protectedText": "The comment analyzes a physical altercation, arguing that a punch was unjustifiable given the context of accidental contact and dismissive gestures.",
-    "restatement": "The comment analyzes a physical altercation, arguing that a punch was unjustifiable given the context of accidental contact and dismissive gestures.",
+    "protectedText": "nah if you watch it [STYLE] she is turned away and walking off moving her hand in a dismissive motion which made accidental contact, his punch is not justifiable  if she had struck him when she was squaring up he would be absolutely justified",
+    "restatement": "The comment argues that a character's actions were unjustifiable and that the opposing party was justified in responding if they had struck first.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.016476,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_401.",
-    "scrubbedText": "The comment analyzes a physical altercation, arguing that a punch was unjustifiable given the context of accidental contact and dismissive gestures.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "nah if you watch it again she is turned away and walking off moving her hand in a dismissive motion which made accidental contact, his punch is not justifiable  if she had struck him when she was squaring up he would be absolutely justified",
+    "scrubbedText": "nah if you watch it [STYLE] she is turned away and walking off moving her hand in a dismissive motion which made accidental contact, his punch is not justifiable  if she had struck him when she was squaring up he would be absolutely justified",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "absolutely",
+      "contact",
+      "had",
+      "turned",
+      "punch"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_450",
     "source": "REDDIT_450",
-    "protectedText": "The comment apologizes to an individual named Marcus, acknowledging that his parents' absence created an emotional void that only men could fill.",
-    "restatement": "The comment apologizes to an individual named Marcus, acknowledging that his parents' absence created an emotional void that only men could fill.",
+    "protectedText": "I'm sorry, [PERSON] I really am I didn't realize that your parents left a hole in your heart only dicks can fill  I'll be better.",
+    "restatement": "The comment expresses regret and offers a derogatory remark about the user's parents.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.027593,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_450.",
-    "scrubbedText": "The comment apologizes to an individual named Marcus, acknowledging that his parents' absence created an emotional void that only men could fill.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "I'm sorry, Marcus I really am I didn't realize that your parents left a hole in your heart only dicks can fill  I'll be better.",
+    "scrubbedText": "I'm sorry, [PERSON] I really am I didn't realize that your parents left a hole in your heart only dicks can fill  I'll be better.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "heart",
+      "dicks",
+      "can",
+      "am",
+      "better"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_534",
     "source": "REDDIT_534",
-    "protectedText": "The comment discusses a user's alleged actions as a notorious troll and mentions doxing, while questioning the validity of the claim.",
-    "restatement": "The comment discusses a user's alleged actions as a notorious troll and mentions doxing, while questioning the validity of the claim.",
+    "protectedText": "> Allegedly goose's parents got swatted after   The guy is a notorious troll This is definitely one of those 'proof, or it didn't happen' things  See also - he doxed bunch of people and let us carry the blame for it too  [URL]",
+    "restatement": "The comment alleges that a notorious troll's parents were swatted after he doxed people, and suggests that the troll let others carry the blame for his actions.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.079657,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_534.",
-    "scrubbedText": "The comment discusses a user's alleged actions as a notorious troll and mentions doxing, while questioning the validity of the claim.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "> Allegedly goose's parents got swatted after   The guy is a notorious troll This is definitely one of those 'proof, or it didn't happen' things  See also - he doxed bunch of people and let us carry the blame for it too  https://www.reddit.com/r/KotakuInAction/comments/5ha5v7/happenings_wildgoose_of_the_bwc_admits_to_being/",
+    "scrubbedText": "> Allegedly goose's parents got swatted after   The guy is a notorious troll This is definitely one of those 'proof, or it didn't happen' things  See also - he doxed bunch of people and let us carry the blame for it too  [URL]",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "a",
+      "he",
+      "notorious",
+      "https://www.reddit.com/r/KotakuInAction/comments/5ha5v7/happenings_wildgoose_of_the_bwc_admits_to_being/",
+      "definitely"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_557",
     "source": "REDDIT_557",
-    "protectedText": "The comment discusses historical evidence suggesting the earliest versions of the Koran may have been written before Mohamed, which would undermine Islamic scripture.",
-    "restatement": "The comment discusses historical evidence suggesting the earliest versions of the Koran may have been written before Mohamed, which would undermine Islamic scripture.",
+    "protectedText": "What's funny is that there may be a grain of truth to that as there's a bit of evidence to suggest that the earliest versions of the Koran may have been written before [PERSON].. which would basically undermine all of [TARGET_GROUP:religion] scripture.",
+    "restatement": "The comment suggests that the earliest versions of the Quran may have been written before Muhammad, which would undermine Islamic scripture.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.017829,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_557.",
-    "scrubbedText": "The comment discusses historical evidence suggesting the earliest versions of the Koran may have been written before Mohamed, which would undermine Islamic scripture.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "What's funny is that there may be a grain of truth to that as there's a bit of evidence to suggest that the earliest versions of the Koran may have been written before Mohamed.. which would basically undermine all of Islamic scripture.",
+    "scrubbedText": "What's funny is that there may be a grain of truth to that as there's a bit of evidence to suggest that the earliest versions of the Koran may have been written before [PERSON].. which would basically undermine all of [TARGET_GROUP:religion] scripture.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "scripture",
+      "basically",
+      "written",
+      "Islamic",
+      "may"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_604",
     "source": "REDDIT_604",
-    "protectedText": "The comment criticizes certain people for being ignorant and questions whether the issue is related to race.",
-    "restatement": "The comment criticizes certain people for being ignorant and questions whether the issue is related to race.",
+    "protectedText": "You know how some people are too dumb or ignorant to even [STYLE] properly? It's that It isn't even a race thing unless you are a racist.",
+    "restatement": "The comment dismisses a person's ignorance as not being a race thing unless the person is a racist.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.018487,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_604.",
-    "scrubbedText": "The comment criticizes certain people for being ignorant and questions whether the issue is related to race.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "You know how some people are too dumb or ignorant to even speak properly? It's that It isn't even a race thing unless you are a racist.",
+    "scrubbedText": "You know how some people are too dumb or ignorant to even [STYLE] properly? It's that It isn't even a race thing unless you are a racist.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "racist",
+      "isn't",
+      "ignorant",
+      "people",
+      "thing"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
@@ -724,71 +970,93 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_618",
     "source": "REDDIT_618",
-    "protectedText": "The comment expresses concern that the administration has been negatively affected by individuals who undermine it in ways beyond the typical.",
-    "restatement": "The comment expresses concern that the administration has been negatively affected by individuals who undermine it in ways beyond the typical.",
+    "protectedText": "I don't think it's the same I feel like his administration has been kind of [STYLE] (both by his fault and the fault of others) by people who are willing to backstab or abstruct him in a very different way than normal.",
+    "restatement": "The comment expresses criticism of an administration being plagued by people who are willing to backstab or obstruct it in ways different from normal.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.014574,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_618.",
-    "scrubbedText": "The comment expresses concern that the administration has been negatively affected by individuals who undermine it in ways beyond the typical.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "I don't think it's the same I feel like his administration has been kind of plagued (both by his fault and the fault of others) by people who are willing to backstab or abstruct him in a very different way than normal.",
+    "scrubbedText": "I don't think it's the same I feel like his administration has been kind of [STYLE] (both by his fault and the fault of others) by people who are willing to backstab or abstruct him in a very different way than normal.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "feel",
+      "administration",
+      "people",
+      "than",
+      "way"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_663",
     "source": "REDDIT_663",
-    "protectedText": "The comment discusses uncertainty about a study's utility and requests clarification on the volume of anti-sjw tweets Johnson received following his criticism of gg.",
-    "restatement": "The comment discusses uncertainty about a study's utility and requests clarification on the volume of anti-sjw tweets Johnson received following his criticism of gg.",
+    "protectedText": "> I have no idea what use it will be, since none of us read the study either  I did It's free to view online  [URL]  I'd like to ask him how many of the anti-SJW tweets [PERSON] received specifically after he called out GG This seems important.",
+    "restatement": "The comment questions the relevance of a study and suggests analyzing tweets before and after a specific event, while also criticizing journalists for focusing on a small number of negative accounts and expressing skepticism about the author's ability to make meaningful observations.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.020323,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_663.",
-    "scrubbedText": "The comment discusses uncertainty about a study's utility and requests clarification on the volume of anti-sjw tweets Johnson received following his criticism of gg.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "> I have no idea what use it will be, since none of us read the study either  I did It's free to view online  https://www.researchgate.net/publication/328006677_Weaponizing_the_haters_The_Last_Jedi_and_the_strategic_politicization_of_pop_culture_through_social_media_manipulation  I'd like to ask him how many of the anti-SJW tweets Johnson received specifically after he called out GG This seems important.",
+    "scrubbedText": "> I have no idea what use it will be, since none of us read the study either  I did It's free to view online  [URL]  I'd like to ask him how many of the anti-SJW tweets [PERSON] received specifically after he called out GG This seems important.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "tweets",
+      "https://www.researchgate.net/publication/328006677_Weaponizing_the_haters_The_Last_Jedi_and_the_strategic_politicization_of_pop_culture_through_social_media_manipulation",
+      "out",
+      "received",
+      "important"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_697",
     "source": "REDDIT_697",
-    "protectedText": "The comment discusses a debate about the influence of accounts with 5000 versus 300,000 checkmarks, with one side arguing that the smaller group's influence is dismissed despite other factors, and the other side agreeing that the larger group is not wrong.",
-    "restatement": "The comment discusses a debate about the influence of accounts with 5000 versus 300,000 checkmarks, with one side arguing that the smaller group's influence is dismissed despite other factors, and the other side agreeing that the larger group is not wrong.",
+    "protectedText": "Original complaint: 5000 accounts out of 330 Million  Drop in a lake Dismiss their influence  Counterpoint: [STYLE] are only 300,000 Also a drop in a lake? Dismiss their influence?  You: No, obviously they have a bunch of other factors that make them influential, despite their size  Me: No shit  You: I'm not wrong!  Me: Ok.",
+    "restatement": "The comment presents a debate where one side dismisses the influence of 5,000 accounts out of 330 million as negligible, while the counterpoint argues that blue checkmarks, though only 300,000 accounts, have other factors making them influential.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.042433,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_697.",
-    "scrubbedText": "The comment discusses a debate about the influence of accounts with 5000 versus 300,000 checkmarks, with one side arguing that the smaller group's influence is dismissed despite other factors, and the other side agreeing that the larger group is not wrong.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "Original complaint: 5000 accounts out of 330 Million  Drop in a lake Dismiss their influence  Counterpoint: Checkmarks are only 300,000 Also a drop in a lake? Dismiss their influence?  You: No, obviously they have a bunch of other factors that make them influential, despite their size  Me: No shit  You: I'm not wrong!  Me: Ok.",
+    "scrubbedText": "Original complaint: 5000 accounts out of 330 Million  Drop in a lake Dismiss their influence  Counterpoint: [STYLE] are only 300,000 Also a drop in a lake? Dismiss their influence?  You: No, obviously they have a bunch of other factors that make them influential, despite their size  Me: No shit  You: I'm not wrong!  Me: Ok.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "influence",
+      "wrong",
+      "despite",
+      "I'm",
+      "only"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
@@ -799,121 +1067,163 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_712",
     "source": "REDDIT_712",
-    "protectedText": "The comment discusses the relative ease of shutting down smaller social media platforms compared to larger companies like Facebook, Google, and Twitter, noting their ability to defend themselves and post counter-arguments.",
-    "restatement": "The comment discusses the relative ease of shutting down smaller social media platforms compared to larger companies like Facebook, Google, and Twitter, noting their ability to defend themselves and post counter-arguments.",
+    "protectedText": "Much easier to just shut down the smaller upstart and say \"look, I'm helping\" than try to go after facebook and the other giants  Facebook, Google, Twitter etc can afford to defend themselves [PERSON] can post a tweet about it, until Twitter bans them I guess.",
+    "restatement": "The comment argues that it is easier to shut down smaller social media platforms than larger ones, suggesting that major platforms can defend themselves and that smaller ones may be banned.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.036235,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_712.",
-    "scrubbedText": "The comment discusses the relative ease of shutting down smaller social media platforms compared to larger companies like Facebook, Google, and Twitter, noting their ability to defend themselves and post counter-arguments.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "Much easier to just shut down the smaller upstart and say \"look, I'm helping\" than try to go after facebook and the other giants  Facebook, Google, Twitter etc can afford to defend themselves Gab can post a tweet about it, until Twitter bans them I guess.",
+    "scrubbedText": "Much easier to just shut down the smaller upstart and say \"look, I'm helping\" than try to go after facebook and the other giants  Facebook, Google, Twitter etc can afford to defend themselves [PERSON] can post a tweet about it, until Twitter bans them I guess.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "guess",
+      "giants",
+      "down",
+      "smaller",
+      "shut"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_768",
     "source": "REDDIT_768",
-    "protectedText": "The comment describes a user's acceptance of research findings regarding a false positive rate of 15% for legitimate users being misidentified as bots.",
-    "restatement": "The comment describes a user's acceptance of research findings regarding a false positive rate of 15% for legitimate users being misidentified as bots.",
+    "protectedText": "/u/[LOCATION] has taken the time to look at the research, and says \"a false positive rate of 0.15 In other words, 15% of legitimate users in the database were falsely identified as bots.\" I am lazy enough to listen and believe.",
+    "restatement": "The comment expresses agreement with a user's analysis of research findings regarding false positive rates.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.01633,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_768.",
-    "scrubbedText": "The comment describes a user's acceptance of research findings regarding a false positive rate of 15% for legitimate users being misidentified as bots.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "/u/Singulaire has taken the time to look at the research, and says \"a false positive rate of 0.15 In other words, 15% of legitimate users in the database were falsely identified as bots.\" I am lazy enough to listen and believe.",
+    "scrubbedText": "/u/[LOCATION] has taken the time to look at the research, and says \"a false positive rate of 0.15 In other words, 15% of legitimate users in the database were falsely identified as bots.\" I am lazy enough to listen and believe.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "bots",
+      "am",
+      "legitimate",
+      "believe",
+      "0.15"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_791",
     "source": "REDDIT_791",
-    "protectedText": "The comment criticizes deaf people who would prevent their children from hearing to protect deaf culture as selfish and harmful.",
-    "restatement": "The comment criticizes deaf people who would prevent their children from hearing to protect deaf culture as selfish and harmful.",
-    "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "protectedText": "Yeah .. and there are some [TARGET_GROUP:disability] who wouldn't permit their children to gain the ability to hear because it would lead to the death of \"[TARGET_GROUP:disability] culture\"  In other words some [TARGET_GROUP:slur_or_profanity] are incredibly selfish and don't care who it [TARGET_GROUP:slur_or_profanity] up  edit typo",
+    "restatement": "The comment criticizes deaf people for preventing their children from gaining hearing ability to protect deaf culture.",
+    "classifierLabel": "hate",
+    "classifierScore": 0.959692,
+    "riskLevel": "medium",
+    "guardFindings": [
+      "target_category_loss",
+      "target_cue_loss",
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_791.",
-    "scrubbedText": "The comment criticizes deaf people who would prevent their children from hearing to protect deaf culture as selfish and harmful.",
-    "deviationRisk": "unknown",
-    "deviationScore": 4,
-    "deviationReasons": [],
+    "originalText": "Yeah .. and there are some deaf people who wouldn't permit their children to gain the ability to hear because it would lead to the death of \"deaf culture\"  In other words some cunts are incredibly selfish and don't care who it fucks up  edit typo",
+    "scrubbedText": "Yeah .. and there are some [TARGET_GROUP:disability] who wouldn't permit their children to gain the ability to hear because it would lead to the death of \"[TARGET_GROUP:disability] culture\"  In other words some [TARGET_GROUP:slur_or_profanity] are incredibly selfish and don't care who it [TARGET_GROUP:slur_or_profanity] up  edit typo",
+    "deviationRisk": "medium",
+    "deviationScore": 4.0,
+    "deviationReasons": [
+      "target_category_loss",
+      "target_cue_loss",
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "cunts",
+      "other",
+      "wouldn't",
+      "words",
+      "some"
+    ],
     "reviewerVotes": {
-      "confirmedHatred": 0,
+      "confirmedHatred": 1,
       "notHatred": 3,
       "uncertain": 1
     },
-    "adminDisposition": "approved"
+    "adminDisposition": "lookup"
   },
   {
     "id": "REDDIT_825",
     "source": "REDDIT_825",
-    "protectedText": "The comment provides instructions on how to access a subreddit using search engines and mobile devices.",
-    "restatement": "The comment provides instructions on how to access a subreddit using search engines and mobile devices.",
+    "protectedText": "well i wasn't clear, you can do it if you use google or any other search engine to find the sub, then you can get in, this can be done on your [STYLE] too, and you don't even need to use the application",
+    "restatement": "The comment provides instructions on how to access a subreddit using search engines or mobile devices without the application.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.018409,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_825.",
-    "scrubbedText": "The comment provides instructions on how to access a subreddit using search engines and mobile devices.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "well i wasn't clear, you can do it if you use google or any other search engine to find the sub, then you can get in, this can be done on your phone too, and you don't even need to use the application",
+    "scrubbedText": "well i wasn't clear, you can do it if you use google or any other search engine to find the sub, then you can get in, this can be done on your [STYLE] too, and you don't even need to use the application",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "application",
+      "the",
+      "clear",
+      "use",
+      "even"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_831",
     "source": "REDDIT_831",
-    "protectedText": "The comment expresses personal struggle with alcohol addiction and self-deprecating humor about financial constraints preventing regular drinking.",
-    "restatement": "The comment expresses personal struggle with alcohol addiction and self-deprecating humor about financial constraints preventing regular drinking.",
+    "protectedText": "You know I'm starting to think the only reason I haven't [STYLE] myself to death or addiction is because I'm too much of a cheap fuck to buy booze regularly  I mean seeing this shit makes me WANT to drink but I don't have any so I can't.",
+    "restatement": "The comment expresses personal distress about alcohol addiction and self-harm urges without targeting any protected group.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.036102,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_831.",
-    "scrubbedText": "The comment expresses personal struggle with alcohol addiction and self-deprecating humor about financial constraints preventing regular drinking.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "You know I'm starting to think the only reason I haven't drunken myself to death or addiction is because I'm too much of a cheap fuck to buy booze regularly  I mean seeing this shit makes me WANT to drink but I don't have any so I can't.",
+    "scrubbedText": "You know I'm starting to think the only reason I haven't [STYLE] myself to death or addiction is because I'm too much of a cheap fuck to buy booze regularly  I mean seeing this shit makes me WANT to drink but I don't have any so I can't.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "can't",
+      "but",
+      "seeing",
+      "I",
+      "I'm"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
@@ -924,23 +1234,33 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_855",
     "source": "REDDIT_855",
-    "protectedText": "The comment critiques feminism as vague and lacking clear definition or guidelines.",
-    "restatement": "The comment critiques feminism as vague and lacking clear definition or guidelines.",
+    "protectedText": "Exactly Feminism is vague, its just a term thrown around but it doesnt carry any meaning to it, these days There is not one exact book explaining what Feminism truly is, there is no actual guideline There is nothing what dictates what a true feminist is It had a meaning, but it was lost  The \"No true Scotsman\" [STYLE] works perfectly here",
+    "restatement": "The comment criticizes feminism for being vague and lacking a clear definition or guidelines.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.279033,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "context_term_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_855.",
-    "scrubbedText": "The comment critiques feminism as vague and lacking clear definition or guidelines.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "Exactly Feminism is vague, its just a term thrown around but it doesnt carry any meaning to it, these days There is not one exact book explaining what Feminism truly is, there is no actual guideline There is nothing what dictates what a true feminist is It had a meaning, but it was lost  The \"No true Scotsman\" fallacy works perfectly here",
+    "scrubbedText": "Exactly Feminism is vague, its just a term thrown around but it doesnt carry any meaning to it, these days There is not one exact book explaining what Feminism truly is, there is no actual guideline There is nothing what dictates what a true feminist is It had a meaning, but it was lost  The \"No true Scotsman\" [STYLE] works perfectly here",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "context_term_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [
       "feminist"
     ],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "feminist",
+      "a",
+      "here",
+      "true",
+      "doesnt"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
@@ -951,46 +1271,62 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_894",
     "source": "REDDIT_894",
-    "protectedText": "The comment criticizes the use of feminist shaming tactics and claims it invalidates the speaker's previous points.",
-    "restatement": "The comment criticizes the use of feminist shaming tactics and claims it invalidates the speaker's previous points.",
+    "protectedText": "Even if we could debate that, you calling even discussion of this type of thing 'misogyny' is pathetic and makes you look ridiculous Like so many, you claim to care about men's rights, want to talk about serious issues etc etc but what do I see? I see someone using feminist shaming tactics and that invalidates a lot of what [STYLE] been preaching about just now.",
+    "restatement": "The comment criticizes the user for using feminist shaming tactics to invalidate discussions about men's rights and claims the user is being ridiculous about men's rights issues.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.024915,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_894.",
-    "scrubbedText": "The comment criticizes the use of feminist shaming tactics and claims it invalidates the speaker's previous points.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "Even if we could debate that, you calling even discussion of this type of thing 'misogyny' is pathetic and makes you look ridiculous Like so many, you claim to care about men's rights, want to talk about serious issues etc etc but what do I see? I see someone using feminist shaming tactics and that invalidates a lot of what you've been preaching about just now.",
+    "scrubbedText": "Even if we could debate that, you calling even discussion of this type of thing 'misogyny' is pathetic and makes you look ridiculous Like so many, you claim to care about men's rights, want to talk about serious issues etc etc but what do I see? I see someone using feminist shaming tactics and that invalidates a lot of what [STYLE] been preaching about just now.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "using",
+      "feminist",
+      "men's",
+      "misogyny'",
+      "tactics"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_906",
     "source": "REDDIT_906",
-    "protectedText": "The comment expresses a hypothetical stance on company policies regarding copyright enforcement.",
-    "restatement": "The comment expresses a hypothetical stance on company policies regarding copyright enforcement.",
+    "protectedText": "Yup, no good guys here But you can be damn sure that if I ran a company under these rules, I'd be banning people left, right and center before I was held liable for their copyright breaches [STYLE] just common sense.",
+    "restatement": "The comment states that the commenter would ban users on both the left and right before being held liable for copyright breaches.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.022837,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_906.",
-    "scrubbedText": "The comment expresses a hypothetical stance on company policies regarding copyright enforcement.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "Yup, no good guys here But you can be damn sure that if I ran a company under these rules, I'd be banning people left, right and center before I was held liable for their copyright breaches That's just common sense.",
+    "scrubbedText": "Yup, no good guys here But you can be damn sure that if I ran a company under these rules, I'd be banning people left, right and center before I was held liable for their copyright breaches [STYLE] just common sense.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "was",
+      "center",
+      "rules",
+      "sense",
+      "held"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
@@ -1001,121 +1337,155 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_925",
     "source": "REDDIT_925",
-    "protectedText": "The comment makes a claim that rate and severity matter, arguing that a speck in one person's eye is unimportant compared to a log in another's.",
-    "restatement": "The comment makes a claim that rate and severity matter, arguing that a speck in one person's eye is unimportant compared to a log in another's.",
+    "protectedText": "I'm making the claim that rate and severity actually [STYLE] - and that the speck in my eye isn't very important next to the log in yours.",
+    "restatement": "The comment argues that the severity of an issue matters more than minor details.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.0133,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_925.",
-    "scrubbedText": "The comment makes a claim that rate and severity matter, arguing that a speck in one person's eye is unimportant compared to a log in another's.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "I'm making the claim that rate and severity actually matter - and that the speck in my eye isn't very important next to the log in yours.",
+    "scrubbedText": "I'm making the claim that rate and severity actually [STYLE] - and that the speck in my eye isn't very important next to the log in yours.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "and",
+      "important",
+      "log",
+      "yours",
+      "my"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_959",
     "source": "REDDIT_959",
-    "protectedText": "The comment discusses a gaming challenge involving creating a party for a specific game with a mod, noting concerns about character specialization and the versatility of one character.",
-    "restatement": "The comment discusses a gaming challenge involving creating a party for a specific game with a mod, noting concerns about character specialization and the versatility of one character.",
+    "protectedText": "I tried to make a konosuba party in divinity original sin even with the 4 player mod I'm not sure if I can manage it They are too overspecialized to be [STYLE] save kazuma who is too jack of all trade I'll try though.",
+    "restatement": "The comment describes an attempt to create a custom party in a game involving characters from Konosuba and Divinity: Original Sin.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.021208,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_959.",
-    "scrubbedText": "The comment discusses a gaming challenge involving creating a party for a specific game with a mod, noting concerns about character specialization and the versatility of one character.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "I tried to make a konosuba party in divinity original sin even with the 4 player mod I'm not sure if I can manage it They are too overspecialized to be useless save kazuma who is too jack of all trade I'll try though.",
+    "scrubbedText": "I tried to make a konosuba party in divinity original sin even with the 4 player mod I'm not sure if I can manage it They are too overspecialized to be [STYLE] save kazuma who is too jack of all trade I'll try though.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "overspecialized",
+      "though",
+      "original",
+      "too",
+      "I'll"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_965",
     "source": "REDDIT_965",
-    "protectedText": "The comment criticizes the user for not hearing information on television.",
-    "restatement": "The comment criticizes the user for not hearing information on television.",
+    "protectedText": "[URL]  Notice how you smugly have to say 'source' because you didn't hear all about it on TV when it was also a horrific event.",
+    "restatement": "The comment criticizes a URL for its smug tone regarding a horrific event.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.039323,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_965.",
-    "scrubbedText": "The comment criticizes the user for not hearing information on television.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "https://www.youtube.com/watch?v=WiIqm5r4G6gb  Notice how you smugly have to say 'source' because you didn't hear all about it on TV when it was also a horrific event.",
+    "scrubbedText": "[URL]  Notice how you smugly have to say 'source' because you didn't hear all about it on TV when it was also a horrific event.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "https://www.youtube.com/watch?v=WiIqm5r4G6gb",
+      "horrific",
+      "a",
+      "TV",
+      "source'"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_974",
     "source": "REDDIT_974",
-    "protectedText": "The comment criticizes the rifles for their current state and claims they are overpriced and poor quality.",
-    "restatement": "The comment criticizes the rifles for their current state and claims they are overpriced and poor quality.",
+    "protectedText": "He said after taking every part of my words out of context  I don't judge the rifles for **what it was and/or represented** but for what it is **nowadays** and the verdict is unilateral : [PERSON] are over priced p.o.s.",
+    "restatement": "The comment criticizes Mosin rifles for being overpriced and poor quality.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.026779,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_974.",
-    "scrubbedText": "The comment criticizes the rifles for their current state and claims they are overpriced and poor quality.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "He said after taking every part of my words out of context  I don't judge the rifles for **what it was and/or represented** but for what it is **nowadays** and the verdict is unilateral : Mosins are over priced p.o.s.",
+    "scrubbedText": "He said after taking every part of my words out of context  I don't judge the rifles for **what it was and/or represented** but for what it is **nowadays** and the verdict is unilateral : [PERSON] are over priced p.o.s.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "p",
+      "priced",
+      "context",
+      "over",
+      "are"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_986",
     "source": "REDDIT_986",
-    "protectedText": "The comment criticizes a person for blurring a woman's face and argues that she should be seen and shamed.",
-    "restatement": "The comment criticizes a person for blurring a woman's face and argues that she should be seen and shamed.",
+    "protectedText": "guy is a pussy for blurring her face  she should be seen and shamed  \"im not going to show her face for her benefit........so she learns she can keep [STYLE] this consequence free because people are too much of a pussy to do anything about it\"",
+    "restatement": "The comment criticizes a person for blurring a woman's face and argues that the woman should be shamed for not showing her face.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.252218,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_986.",
-    "scrubbedText": "The comment criticizes a person for blurring a woman's face and argues that she should be seen and shamed.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "guy is a pussy for blurring her face  she should be seen and shamed  \"im not going to show her face for her benefit........so she learns she can keep doing this consequence free because people are too much of a pussy to do anything about it\"",
+    "scrubbedText": "guy is a pussy for blurring her face  she should be seen and shamed  \"im not going to show her face for her benefit........so she learns she can keep [STYLE] this consequence free because people are too much of a pussy to do anything about it\"",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "to",
+      "a",
+      "for",
+      "pussy",
+      "blurring"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
@@ -1126,21 +1496,31 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_1000",
     "source": "REDDIT_1000",
-    "protectedText": "The comment questions the seriousness of [STYLE] in [LOCATION] and compares it to [STYLE] in Black Panther, suggesting the former is a joke.",
-    "restatement": "The comment questions the seriousness of [STYLE] in [LOCATION] and compares it to [STYLE] in Black Panther, suggesting the former is a joke.",
+    "protectedText": "lol what? It's still in the game   A game that I assume is trying to be somewhat serious in [LOCATION]'t fit that kind of game Whereas such things do fit something that's taking the piss more than not, like my example of Saints Row   You're probably one of the people that liked the \"what are those\" meme in [PERSON] \"It's just a little joke!\" A bad one",
+    "restatement": "The comment criticizes a game as a joke and compares it to a meme from Black Panther.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.068849,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1000.",
-    "scrubbedText": "The comment questions the seriousness of [STYLE] in [LOCATION] and compares it to [STYLE] in Black Panther, suggesting the former is a joke.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "lol what? It's still in the game   A game that I assume is trying to be somewhat serious in tone Thus it doesn't fit that kind of game Whereas such things do fit something that's taking the piss more than not, like my example of Saints Row   You're probably one of the people that liked the \"what are those\" meme in Black Panther \"It's just a little joke!\" A bad one",
+    "scrubbedText": "lol what? It's still in the game   A game that I assume is trying to be somewhat serious in [LOCATION]'t fit that kind of game Whereas such things do fit something that's taking the piss more than not, like my example of Saints Row   You're probably one of the people that liked the \"what are those\" meme in [PERSON] \"It's just a little joke!\" A bad one",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "liked",
+      "piss",
+      "one",
+      "lol",
+      "You're"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 5,
@@ -1151,121 +1531,179 @@ export const staticAdminCaseItems: AdminCaseItem[] = [
   {
     "id": "REDDIT_1013",
     "source": "REDDIT_1013",
-    "protectedText": "The comment discusses Poe's Law in [LOCATION], mentions MRAs, mocks trump with \"bigly,\" and criticizes 4chan/t_d posters as stupid shitposters.",
-    "restatement": "The comment discusses Poe's Law in [LOCATION], mentions MRAs, mocks trump with \"bigly,\" and criticizes 4chan/t_d posters as stupid shitposters.",
+    "protectedText": "[PERSON]'s law in [LOCATION] are a parody You say \"all of you\" when referring to MRAs You mock God Emperor [PERSON] with your use of the word \"bigly\" Or maybe you honor him I don't even know how you 4chan/T_D shitposters think I can't tell if you are mocking T_D, because they are really that [TARGET_GROUP:slur_or_profanity] Whatever Your post is [TARGET_GROUP:slur_or_profanity] It's a shitpost, whether or not you are sincere.",
+    "restatement": "The comment discusses Poe's Law in a location, mocks the use of the word 'bigly' in reference to Trump, and questions whether 4chan/t_d users are mocking Trump.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "classifierScore": 0.048359,
+    "riskLevel": "high",
+    "guardFindings": [
+      "target_category_loss",
+      "target_cue_loss",
+      "context_term_loss",
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1013.",
-    "scrubbedText": "The comment discusses Poe's Law in [LOCATION], mentions MRAs, mocks trump with \"bigly,\" and criticizes 4chan/t_d posters as stupid shitposters.",
-    "deviationRisk": "unknown",
-    "deviationScore": 4,
-    "deviationReasons": [],
+    "originalText": "Poe's law in action You are a parody You say \"all of you\" when referring to MRAs You mock God Emperor Trump with your use of the word \"bigly\" Or maybe you honor him I don't even know how you 4chan/T_D shitposters think I can't tell if you are mocking T_D, because they are really that stupid Whatever Your post is shit It's a shitpost, whether or not you are sincere.",
+    "scrubbedText": "[PERSON]'s law in [LOCATION] are a parody You say \"all of you\" when referring to MRAs You mock God Emperor [PERSON] with your use of the word \"bigly\" Or maybe you honor him I don't even know how you 4chan/T_D shitposters think I can't tell if you are mocking T_D, because they are really that [TARGET_GROUP:slur_or_profanity] Whatever Your post is [TARGET_GROUP:slur_or_profanity] It's a shitpost, whether or not you are sincere.",
+    "deviationRisk": "high",
+    "deviationScore": 5.0,
+    "deviationReasons": [
+      "target_category_loss",
+      "target_cue_loss",
+      "context_term_loss",
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
-    "missingContextTerms": [],
-    "tokenHighlights": [],
+    "missingContextTerms": [
+      "mras"
+    ],
+    "tokenHighlights": [
+      "a",
+      "mock",
+      "don't",
+      "bigly",
+      "referring"
+    ],
     "reviewerVotes": {
-      "confirmedHatred": 0,
+      "confirmedHatred": 1,
       "notHatred": 3,
       "uncertain": 1
     },
-    "adminDisposition": "approved"
+    "adminDisposition": "lookup"
   },
   {
     "id": "REDDIT_1024",
     "source": "REDDIT_1024",
-    "protectedText": "The comment affirms that Alex Jones did something specific, thanks the user for revealing the truth, and expresses relief about Alex Jones being banned from PayPal.",
-    "restatement": "The comment affirms that Alex Jones did something specific, thanks the user for revealing the truth, and expresses relief about Alex Jones being banned from PayPal.",
+    "protectedText": "Yes, that is clearly what [PERSON] did Thanks for letting us know the truth Now I feel way better about him getting banned from paypal.",
+    "restatement": "The comment discusses Alex Jones and expresses relief about his PayPal ban.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.020286,
     "riskLevel": "low",
     "guardFindings": [],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1024.",
-    "scrubbedText": "The comment affirms that Alex Jones did something specific, thanks the user for revealing the truth, and expresses relief about Alex Jones being banned from PayPal.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
+    "originalText": "Yes, that is clearly what Alex Jones did Thanks for letting us know the truth Now I feel way better about him getting banned from paypal.",
+    "scrubbedText": "Yes, that is clearly what [PERSON] did Thanks for letting us know the truth Now I feel way better about him getting banned from paypal.",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
     "deviationReasons": [],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "paypal",
+      "feel",
+      "getting",
+      "from",
+      "banned"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_1074",
     "source": "REDDIT_1074",
-    "protectedText": "The comment criticizes the tendency to lump people with MRAs, MTGOW, and Incels together, predicting that laws will be pushed to define MRAs as a hate group.",
-    "restatement": "The comment criticizes the tendency to lump people with MRAs, MTGOW, and Incels together, predicting that laws will be pushed to define MRAs as a hate group.",
+    "protectedText": "Oh they are so pushing to lump in these people with MRAs, MTGOW and Incels across the board, I can see it [TARGET_GROUP:slur_or_profanity] coming, they'll be pushing for laws next and to define MRAs as a hate group, they want this badly.",
+    "restatement": "The comment criticizes the tendency to lump together MRAs, MTGOW, and Incels, predicting that this conflation will lead to laws defining MRAs as a hate group.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
-    "riskLevel": "low",
-    "guardFindings": [],
+    "classifierScore": 0.067336,
+    "riskLevel": "medium",
+    "guardFindings": [
+      "target_category_loss",
+      "target_cue_loss",
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1074.",
-    "scrubbedText": "The comment criticizes the tendency to lump people with MRAs, MTGOW, and Incels together, predicting that laws will be pushed to define MRAs as a hate group.",
-    "deviationRisk": "unknown",
-    "deviationScore": 3,
-    "deviationReasons": [],
+    "originalText": "Oh they are so pushing to lump in these people with MRAs, MTGOW and Incels across the board, I can see it fucking coming, they'll be pushing for laws next and to define MRAs as a hate group, they want this badly.",
+    "scrubbedText": "Oh they are so pushing to lump in these people with MRAs, MTGOW and Incels across the board, I can see it [TARGET_GROUP:slur_or_profanity] coming, they'll be pushing for laws next and to define MRAs as a hate group, they want this badly.",
+    "deviationRisk": "medium",
+    "deviationScore": 3.0,
+    "deviationReasons": [
+      "target_category_loss",
+      "target_cue_loss",
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "group",
+      "board",
+      "badly",
+      "hate",
+      "MRAs"
+    ],
     "reviewerVotes": {
-      "confirmedHatred": 0,
+      "confirmedHatred": 1,
       "notHatred": 5,
       "uncertain": 1
     },
-    "adminDisposition": "approved"
+    "adminDisposition": "lookup"
   },
   {
     "id": "REDDIT_1110",
     "source": "REDDIT_1110",
-    "protectedText": "The comment warns that using the word \"faggot\" once during a drunk-stream three years ago will be remembered by the [LOCATION] who lost a sponsor because his father said something racist before he himself was born.",
-    "restatement": "The comment warns that using the word \"faggot\" once during a drunk-stream three years ago will be remembered by the [LOCATION] who lost a sponsor because his father said something racist before he himself was born.",
-    "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "protectedText": "> If you used the word \"faggot\" once during a drunk-stream [DATE]  Never forget the [LOCATION] who lost a sponsor because his father said something racist before he himself was even born  That's the level of sin they will assign to someone",
+    "restatement": "The comment mentions a past incident involving a slur and criticizes a location for a past racist remark that led to a sponsor loss.",
+    "classifierLabel": "hate",
+    "classifierScore": 0.952807,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_abstracted"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1110.",
-    "scrubbedText": "The comment warns that using the word \"faggot\" once during a drunk-stream three years ago will be remembered by the [LOCATION] who lost a sponsor because his father said something racist before he himself was born.",
-    "deviationRisk": "unknown",
-    "deviationScore": 0,
-    "deviationReasons": [],
+    "originalText": "> If you used the word \"faggot\" once during a drunk-stream 3 years ago  Never forget the NASCAR drive who lost a sponsor because his father said something racist before he himself was even born  That's the level of sin they will assign to someone",
+    "scrubbedText": "> If you used the word \"faggot\" once during a drunk-stream [DATE]  Never forget the [LOCATION] who lost a sponsor because his father said something racist before he himself was even born  That's the level of sin they will assign to someone",
+    "deviationRisk": "ok",
+    "deviationScore": 0.0,
+    "deviationReasons": [
+      "offensive_cue_abstracted"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "faggot",
+      "NASCAR",
+      "word",
+      "drunk-stream",
+      "assign"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 3,
-      "uncertain": 1
+      "uncertain": 0
     },
     "adminDisposition": "approved"
   },
   {
     "id": "REDDIT_1112",
     "source": "REDDIT_1112",
-    "protectedText": "The comment acknowledges the presence of actual nazi content, porn, child porn, libel, and slander on the platform, contrasting it with other social media sites.",
-    "restatement": "The comment acknowledges the presence of actual nazi content, porn, child porn, libel, and slander on the platform, contrasting it with other social media sites.",
+    "protectedText": "> There was actual nazi shit, porn, child porn, libel, slander, etc  You make it sound like this [STYLE] the case on any other social media.",
+    "restatement": "The comment alleges the presence of Nazi imagery, pornography, child pornography, and libel, contrasting it with other social media platforms.",
     "classifierLabel": "not_hate",
-    "classifierScore": 0.18,
+    "classifierScore": 0.019783,
     "riskLevel": "low",
-    "guardFindings": [],
+    "guardFindings": [
+      "offensive_cue_loss"
+    ],
     "decision": "pending",
-    "originalText": "Original source retained offline in data/static_demo/qwen50_jury_20260618/source.csv for REDDIT_1112.",
-    "scrubbedText": "The comment acknowledges the presence of actual nazi content, porn, child porn, libel, and slander on the platform, contrasting it with other social media sites.",
-    "deviationRisk": "unknown",
-    "deviationScore": 1,
-    "deviationReasons": [],
+    "originalText": "> There was actual nazi shit, porn, child porn, libel, slander, etc  You make it sound like this isn't the case on any other social media.",
+    "scrubbedText": "> There was actual nazi shit, porn, child porn, libel, slander, etc  You make it sound like this [STYLE] the case on any other social media.",
+    "deviationRisk": "low",
+    "deviationScore": 1.0,
+    "deviationReasons": [
+      "offensive_cue_loss"
+    ],
     "missingTargetTerms": [],
     "missingContextTerms": [],
-    "tokenHighlights": [],
+    "tokenHighlights": [
+      "media",
+      "was",
+      "shit",
+      "You",
+      "actual"
+    ],
     "reviewerVotes": {
       "confirmedHatred": 0,
       "notHatred": 4,

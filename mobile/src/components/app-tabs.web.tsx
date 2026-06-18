@@ -21,6 +21,9 @@ export default function AppTabs() {
           <TabTrigger name="review" href="/review" asChild>
             <TabButton>Review</TabButton>
           </TabTrigger>
+          <TabTrigger name="library" href="/library" asChild>
+            <TabButton>Library</TabButton>
+          </TabTrigger>
           <TabTrigger name="leaderboard" href="/leaderboard" asChild>
             <TabButton>Rank</TabButton>
           </TabTrigger>
@@ -104,10 +107,10 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   tabButtonView: {
-    minWidth: 82,
+    minWidth: 72,
     alignItems: 'center',
     paddingVertical: 6,
-    paddingHorizontal: Spacing.three,
+    paddingHorizontal: Spacing.two,
     borderRadius: Spacing.two,
     borderWidth: 1,
     borderColor: AppColors.line,

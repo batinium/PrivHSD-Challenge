@@ -773,14 +773,14 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   rejectGlow: {
-    backgroundColor: 'rgba(232, 93, 117, 0.16)',
-    borderColor: 'rgba(232, 93, 117, 0.46)',
-    shadowColor: AppColors.coral,
-  },
-  confirmGlow: {
     backgroundColor: 'rgba(42, 157, 143, 0.16)',
     borderColor: 'rgba(42, 157, 143, 0.48)',
     shadowColor: AppColors.mint,
+  },
+  confirmGlow: {
+    backgroundColor: 'rgba(232, 93, 117, 0.16)',
+    borderColor: 'rgba(232, 93, 117, 0.46)',
+    shadowColor: AppColors.coral,
   },
   uncertainGlow: {
     backgroundColor: 'rgba(246, 200, 76, 0.18)',
@@ -798,10 +798,10 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   rejectStroke: {
-    borderColor: AppColors.coral,
+    borderColor: AppColors.mint,
   },
   confirmStroke: {
-    borderColor: AppColors.mint,
+    borderColor: AppColors.coral,
   },
   uncertainStroke: {
     borderColor: AppColors.amber,
@@ -821,12 +821,12 @@ const styles = StyleSheet.create({
   rejectBadge: {
     top: 28,
     right: 24,
-    borderColor: AppColors.coral,
+    borderColor: AppColors.mint,
   },
   confirmBadge: {
     top: 28,
     left: 24,
-    borderColor: AppColors.mint,
+    borderColor: AppColors.coral,
   },
   uncertainBadge: {
     top: 18,
@@ -839,10 +839,10 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   rejectBadgeText: {
-    color: AppColors.coral,
+    color: AppColors.mint,
   },
   confirmBadgeText: {
-    color: AppColors.mint,
+    color: AppColors.coral,
   },
   uncertainBadgeText: {
     color: AppColors.amber,
@@ -982,15 +982,15 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   rejectButton: {
-    backgroundColor: AppColors.coralSoft,
-    borderColor: '#F3B6C2',
-  },
-  confirmButton: {
     backgroundColor: AppColors.mintSoft,
     borderColor: '#A7DED4',
   },
+  confirmButton: {
+    backgroundColor: AppColors.coralSoft,
+    borderColor: '#F3B6C2',
+  },
   rejectText: {
-    color: AppColors.coral,
+    color: AppColors.mint,
     fontSize: 20,
     fontWeight: '900',
   },
@@ -1000,7 +1000,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   confirmText: {
-    color: AppColors.mint,
+    color: AppColors.coral,
     fontSize: 17,
     fontWeight: '900',
   },
