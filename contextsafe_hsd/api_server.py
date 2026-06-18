@@ -57,6 +57,13 @@ DEFAULT_CLASSIFIER_SCORE_COLUMNS = (
     "hate_score",
     "baseline_hate_score",
 )
+DEFAULT_LABEL_COLUMNS = (
+    "hs",
+    "hs_predicted",
+    "label",
+    "predicted_hate",
+    "hf_hsd_label",
+)
 DEFAULT_ADMIN_RUNS_DIR = ROOT / "data" / "admin_uploads"
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -474,6 +481,14 @@ def split_pipe(value: str | None) -> list[str]:
     return [item for item in str(value).split("|") if item]
 
 
+def is_hate_label(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "hate", "hateful", "hs"}
+
+
+def classifier_label(row: dict[str, str]) -> str:
+    return "hate" if is_hate_label(first_nonempty(row, DEFAULT_LABEL_COLUMNS)) else "not_hate"
+
+
 def row_source_id(row: dict[str, str], index: int) -> str:
     return str(row.get("ID") or row.get("id") or row.get("row_id") or f"row-{index}")
 
@@ -554,9 +569,7 @@ def admin_cases(config: ApiConfig, limit: int = 100) -> list[dict[str, Any]]:
                         protected_text,
                         config.restatement_col,
                     ),
-                    "classifierLabel": "hate"
-                    if str(row.get("hs", "")).strip() == "1"
-                    else "not_hate",
+                    "classifierLabel": classifier_label(row),
                     "classifierScore": parse_float(
                         first_nonempty(row, DEFAULT_CLASSIFIER_SCORE_COLUMNS)
                     ),
@@ -596,7 +609,7 @@ def review_seed(config: ApiConfig, limit: int = 20) -> list[dict[str, Any]]:
                     "source": row.get("ID") or f"row-{index + 1}",
                     "protectedText": text,
                     "restatement": restatement,
-                    "classifierLabel": "hate" if row.get("hs") == "1" else "not_hate",
+                    "classifierLabel": classifier_label(row),
                     "classifierScore": None,
                     "riskLevel": "medium",
                     "decision": "pending",

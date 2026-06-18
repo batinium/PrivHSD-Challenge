@@ -126,6 +126,40 @@ def test_admin_cases_join_source_restatement_deviation_and_tokens(tmp_path):
     assert items[0]["tokenHighlights"] == ["target"]
 
 
+def test_admin_cases_use_predicted_label_when_hs_is_missing(tmp_path):
+    annotated = tmp_path / "annotated.csv"
+    with annotated.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "ID",
+                "text",
+                "source_text",
+                "scrubbed_text",
+                "hs_predicted",
+                "hf_hsd_score",
+                "backend_restatement_final",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "ID": "row-1",
+                "text": "Scrubbed text.",
+                "source_text": "Original text.",
+                "scrubbed_text": "Scrubbed text.",
+                "hs_predicted": "1",
+                "hf_hsd_score": "0.91",
+                "backend_restatement_final": "The comment attacks a group.",
+            }
+        )
+
+    items = admin_cases(ApiConfig(protected_csv=annotated))
+
+    assert items[0]["classifierLabel"] == "hate"
+    assert items[0]["classifierScore"] == 0.91
+
+
 def test_admin_bundle_summary_loads_manifest_deviation_summary(tmp_path):
     protected = tmp_path / "protected.csv"
     protected.write_text("ID,text,hs\n1,hello,0\n", encoding="utf-8")

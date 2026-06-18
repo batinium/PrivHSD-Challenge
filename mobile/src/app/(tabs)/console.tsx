@@ -362,8 +362,8 @@ export default function AdminDashboard() {
             <View style={styles.uploadHeaderText}>
               <Text style={styles.panelTitle}>CSV intake</Text>
               <Text style={styles.panelCopy}>
-                Upload a labeled CSV, confirm columns, start processing, then reload completed
-                runs from disk.
+                Upload a CSV, confirm columns, start processing, then reload completed runs from
+                disk. If the label column is missing, DeHateBERT predictions feed restatement.
               </Text>
             </View>
             <Text style={styles.apiStatus}>{apiMessage}</Text>

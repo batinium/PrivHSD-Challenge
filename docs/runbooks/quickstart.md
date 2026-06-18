@@ -174,6 +174,11 @@ The bundle writes:
 - `*.dehatebert_token_importance.csv`: loaded if already present unless
   `--force-token-importance` is passed.
 - `*.scrubbed.csv`: locked PII/style scrubbed CSV.
+- `*.dehatebert_predictions.csv`: DeHateBERT row-level labels written when the
+  uploaded CSV does not already contain `--label-col`.
+- `*.restatement_input.csv`: internal helper CSV with predicted labels attached
+  for restatement. The public `*.restated.csv` still preserves the uploaded
+  schema.
 - `*.restated.csv`: schema-preserving CSV with `text` replaced by final
   restatements.
 - `*.restated.annotated.csv`: admin/debug CSV containing `source_text`,
@@ -217,10 +222,12 @@ Persistent upload/job API routes:
   `data/admin_uploads/<upload_id>/`.
 - `GET /api/admin/uploads`: list cached uploads.
 - `POST /api/admin/jobs`: JSON with `uploadId`, `textCol`, `idCol`,
-  `labelCol`, `restatementModel`, and `finalScrub`. The job output directory is
-  deterministic for the upload plus options, so repeated starts reuse cached
-  token importance, scrubbed CSV, restatement cache, and deviation audit where
-  present.
+  `labelCol`, `restatementModel`, and `finalScrub`. If `labelCol` is missing
+  from the upload, the backend classifies scrubbed rows with DeHateBERT and
+  materializes predicted labels for restatement and audit. The job output
+  directory is deterministic for the upload plus options, so repeated starts
+  reuse cached token importance, classifier predictions, scrubbed CSV,
+  restatement cache, and deviation audit where present.
 - `GET /api/admin/jobs`: list persistent jobs.
 - `GET /api/admin/jobs/<job_id>`: job status/progress.
 - `GET /api/admin/jobs/<job_id>/bundle`: manifest and deviation summary.

@@ -644,6 +644,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Recompute token importance even when --importance-csv exists.",
     )
     backend_bundle.add_argument(
+        "--force-classification",
+        action="store_true",
+        help="Recompute predicted labels for unlabeled CSVs.",
+    )
+    backend_bundle.add_argument(
         "--force-restatement",
         action="store_true",
         help="Ignore cached restatement rows and regenerate them.",
@@ -989,6 +994,7 @@ def main(argv: list[str] | None = None) -> int:
                 deviation_audit_summary=args.deviation_audit_summary,
                 manifest_path=args.manifest,
                 force_token_importance=args.force_token_importance,
+                force_classification=args.force_classification,
                 force_restatement=args.force_restatement,
                 hf_hsd_model_path=args.hf_hsd_model_path,
                 hf_hsd_threshold=args.hf_hsd_threshold,

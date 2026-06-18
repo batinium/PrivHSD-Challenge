@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   PanResponder,
@@ -8,7 +8,6 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import type { LayoutChangeEvent } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -29,6 +28,10 @@ const HASH_OFFSET = 0x811c9dc5;
 const HASH_PRIME = 0x01000193;
 
 export default function CitizenReview() {
+  const rootRef = useRef<View>(null);
+  const headerRef = useRef<View>(null);
+  const deckRef = useRef<View>(null);
+  const actionsRef = useRef<View>(null);
   const [position] = useState(() => new Animated.ValueXY());
   const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
   const [tutorialTargets, setTutorialTargets] = useState<
@@ -48,35 +51,94 @@ export default function CitizenReview() {
   const cardWidth = Math.min(width - 36, 430);
   const cardHeight = Math.min(Math.max(height - (isCompact ? 292 : 320), 340), 472);
 
-  const captureTutorialTarget = useCallback(
-    (target: TutorialTarget, borderRadius = 16) =>
-      (event: LayoutChangeEvent) => {
-        const { height: targetHeight, width: targetWidth, x, y } = event.nativeEvent.layout;
-        const nextTarget = {
-          borderRadius,
-          height: targetHeight,
-          width: targetWidth,
-          x,
-          y,
-        };
-
-        setTutorialTargets((current) => {
+  const updateTutorialTargets = useCallback(
+    (nextTargets: Partial<Record<TutorialTarget, TutorialSpotlightLayout>>) => {
+      setTutorialTargets((current) => {
+        const hasChanged = (Object.keys(nextTargets) as TutorialTarget[]).some((target) => {
           const currentTarget = current[target];
-          if (
-            currentTarget &&
-            currentTarget.height === nextTarget.height &&
-            currentTarget.width === nextTarget.width &&
-            currentTarget.x === nextTarget.x &&
-            currentTarget.y === nextTarget.y
-          ) {
-            return current;
-          }
+          const nextTarget = nextTargets[target];
 
-          return { ...current, [target]: nextTarget };
+          return (
+            !currentTarget ||
+            !nextTarget ||
+            currentTarget.borderRadius !== nextTarget.borderRadius ||
+            currentTarget.height !== nextTarget.height ||
+            currentTarget.width !== nextTarget.width ||
+            currentTarget.x !== nextTarget.x ||
+            currentTarget.y !== nextTarget.y
+          );
         });
-      },
+
+        return hasChanged ? { ...current, ...nextTargets } : current;
+      });
+    },
     [],
   );
+
+  const measureTutorialTargets = useCallback(() => {
+    const root = rootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    root.measureInWindow((rootX, rootY) => {
+      const nextTargets: Partial<Record<TutorialTarget, TutorialSpotlightLayout>> = {};
+      let pendingMeasurements = 3;
+
+      function finishMeasurement() {
+        pendingMeasurements -= 1;
+        if (pendingMeasurements === 0) {
+          updateTutorialTargets(nextTargets);
+        }
+      }
+
+      function measureTarget(
+        target: TutorialTarget,
+        ref: RefObject<View | null>,
+        borderRadius: number,
+      ) {
+        const node = ref.current;
+
+        if (!node) {
+          finishMeasurement();
+          return;
+        }
+
+        node.measureInWindow((targetX, targetY, targetWidth, targetHeight) => {
+          nextTargets[target] = {
+            borderRadius,
+            height: targetHeight,
+            width: targetWidth,
+            x: targetX - rootX,
+            y: targetY - rootY,
+          };
+          finishMeasurement();
+        });
+      }
+
+      measureTarget('header', headerRef, 34);
+      measureTarget('deck', deckRef, 18);
+      measureTarget('actions', actionsRef, 40);
+    });
+  }, [updateTutorialTargets]);
+
+  const scheduleTutorialMeasurement = useCallback(() => {
+    if (!isTutorialActive) {
+      return;
+    }
+
+    requestAnimationFrame(measureTutorialTargets);
+  }, [isTutorialActive, measureTutorialTargets]);
+
+  useEffect(() => {
+    if (!isTutorialActive) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(measureTutorialTargets);
+    return () => cancelAnimationFrame(frame);
+  }, [activeIndex, cardHeight, cardWidth, height, isTutorialActive, measureTutorialTargets, width]);
 
   const rotate = position.x.interpolate({
     inputRange: [-220, 0, 220],
@@ -178,192 +240,200 @@ export default function CitizenReview() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <GlimoShieldBackground swipeX={position.x} variant="review" />
-      <View style={[styles.page, isCompact && styles.pageCompact]}>
-        <View onLayout={captureTutorialTarget('header', 34)} style={styles.header}>
-          <View style={styles.brandLockup}>
-            <Image
-              source={require('@/assets/glimo_mascot.png')}
-              style={[styles.headerMascot, isCompact && styles.headerMascotCompact]}
-              contentFit="contain"
-            />
-            <View style={styles.headerText}>
-              <Text style={styles.eyebrow}>
-                {isTutorialActive ? 'Glimo tutorial' : 'Glimo review'}
-              </Text>
-              <Text style={[styles.title, isCompact && styles.titleCompact]}>
-                {isTutorialActive ? 'Practice deck' : 'Evidence deck'}
-              </Text>
-            </View>
-          </View>
-          <View style={[styles.counter, isCompact && styles.counterCompact]}>
-            <Text style={styles.counterValue}>{remainingCount}</Text>
-            <Text style={styles.counterLabel}>{isTutorialActive ? 'practice' : 'left'}</Text>
-          </View>
-        </View>
-
-        <View
-          onLayout={captureTutorialTarget('deck', 18)}
-          style={[styles.deck, { minHeight: cardHeight + 24, width: cardWidth }]}>
-          {activeItem ? (
-            <>
-              {items[activeIndex + 1] && (
-                <ReviewCard
-                  item={items[activeIndex + 1]}
-                  cardHeight={cardHeight}
-                  cardWidth={cardWidth}
-                  compact={isCompact}
-                  stacked
-                  animatedStyle={styles.stackedCard}
-                />
-              )}
-              <Animated.View
-                {...panResponder.panHandlers}
-                style={[
-                  styles.animatedCard,
-                  { height: cardHeight, width: cardWidth },
-                  {
-                    transform: [
-                      { translateX: position.x },
-                      { translateY: position.y },
-                      { rotate },
-                    ],
-                  },
-                ]}>
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.decisionGlow, styles.rejectGlow, { opacity: rejectFeedback }]}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.decisionGlow, styles.confirmGlow, { opacity: confirmFeedback }]}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.decisionGlow,
-                    styles.uncertainGlow,
-                    { opacity: uncertainFeedback },
-                  ]}
-                />
-                <ReviewCard
-                  item={activeItem}
-                  cardHeight={cardHeight}
-                  cardWidth={cardWidth}
-                  compact={isCompact}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[styles.decisionStroke, styles.rejectStroke, { opacity: rejectFeedback }]}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.decisionStroke,
-                    styles.confirmStroke,
-                    { opacity: confirmFeedback },
-                  ]}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.decisionStroke,
-                    styles.uncertainStroke,
-                    { opacity: uncertainFeedback },
-                  ]}
-                />
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.decisionBadge,
-                    styles.rejectBadge,
-                    {
-                      opacity: rejectFeedback,
-                      transform: [{ rotate: '-14deg' }, { scale: rejectScale }],
-                    },
-                  ]}>
-                  <Text style={[styles.decisionBadgeText, styles.rejectBadgeText]}>X</Text>
-                </Animated.View>
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.decisionBadge,
-                    styles.confirmBadge,
-                    {
-                      opacity: confirmFeedback,
-                      transform: [{ rotate: '12deg' }, { scale: confirmScale }],
-                    },
-                  ]}>
-                  <Text style={[styles.decisionBadgeText, styles.confirmBadgeText]}>YES</Text>
-                </Animated.View>
-                <Animated.View
-                  pointerEvents="none"
-                  style={[
-                    styles.decisionBadge,
-                    styles.uncertainBadge,
-                    {
-                      opacity: uncertainFeedback,
-                      transform: [{ rotate: '-3deg' }, { scale: uncertainScale }],
-                    },
-                  ]}>
-                  <Text style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>?</Text>
-                </Animated.View>
-              </Animated.View>
-            </>
-          ) : (
-            <View style={[styles.emptyCard, { minHeight: cardHeight, width: cardWidth }]}>
+      <View ref={rootRef} onLayout={scheduleTutorialMeasurement} style={styles.root}>
+        <GlimoShieldBackground swipeX={position.x} variant="review" />
+        <View style={[styles.page, isCompact && styles.pageCompact]}>
+          <View ref={headerRef} onLayout={scheduleTutorialMeasurement} style={styles.header}>
+            <View style={styles.brandLockup}>
               <Image
                 source={require('@/assets/glimo_mascot.png')}
-                style={styles.emptyMascot}
+                style={[styles.headerMascot, isCompact && styles.headerMascotCompact]}
                 contentFit="contain"
               />
-              <Text style={styles.emptyTitle}>Queue complete</Text>
-              <Text style={styles.emptyCopy}>
-                {isTutorialActive
-                  ? 'Practice cards are complete. Finish the tutorial to load the real queue.'
-                  : 'Citizen votes are ready for admin export and audit review.'}
-              </Text>
-              <Pressable
-                onPress={() => {
-                  if (isTutorialActive) {
-                    finishTutorial();
-                  } else {
-                    resetReviewQueue();
-                  }
-                }}
-                style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>
-                  {isTutorialActive ? 'Finish tutorial' : 'Restart demo queue'}
+              <View style={styles.headerText}>
+                <Text style={styles.eyebrow}>
+                  {isTutorialActive ? 'Glimo tutorial' : 'Glimo review'}
                 </Text>
-              </Pressable>
+                <Text style={[styles.title, isCompact && styles.titleCompact]}>
+                  {isTutorialActive ? 'Practice deck' : 'Evidence deck'}
+                </Text>
+              </View>
             </View>
-          )}
-        </View>
+            <View style={[styles.counter, isCompact && styles.counterCompact]}>
+              <Text style={styles.counterValue}>{remainingCount}</Text>
+              <Text style={styles.counterLabel}>{isTutorialActive ? 'practice' : 'left'}</Text>
+            </View>
+          </View>
 
-        <View
-          onLayout={captureTutorialTarget('actions', 40)}
-          style={[styles.actions, { width: cardWidth }]}>
-          <Pressable
-            disabled={!activeItem || isSubmittingDecision}
-            onPress={() => commitDecision('not_hatred', { x: -SWIPE_EXIT_DISTANCE, y: 32 })}
-            style={[styles.actionButton, styles.rejectButton]}>
-            <Text style={styles.rejectText}>X</Text>
-          </Pressable>
-          <Pressable
-            disabled={!activeItem || isSubmittingDecision}
-            onPress={markUncertain}
-            style={styles.actionButton}>
-            <Text style={styles.maybeText}>?</Text>
-          </Pressable>
-          <Pressable
-            disabled={!activeItem || isSubmittingDecision}
-            onPress={() => commitDecision('confirmed_hatred', { x: SWIPE_EXIT_DISTANCE, y: 32 })}
-            style={[styles.actionButton, styles.confirmButton]}>
-            <Text style={styles.confirmText}>YES</Text>
-          </Pressable>
+          <View
+            ref={deckRef}
+            onLayout={scheduleTutorialMeasurement}
+            style={[styles.deck, { minHeight: cardHeight + 24, width: cardWidth }]}>
+            {activeItem ? (
+              <>
+                {items[activeIndex + 1] && (
+                  <ReviewCard
+                    item={items[activeIndex + 1]}
+                    cardHeight={cardHeight}
+                    cardWidth={cardWidth}
+                    compact={isCompact}
+                    stacked
+                    animatedStyle={styles.stackedCard}
+                  />
+                )}
+                <Animated.View
+                  {...panResponder.panHandlers}
+                  style={[
+                    styles.animatedCard,
+                    { height: cardHeight, width: cardWidth },
+                    {
+                      transform: [
+                        { translateX: position.x },
+                        { translateY: position.y },
+                        { rotate },
+                      ],
+                    },
+                  ]}>
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[styles.decisionGlow, styles.rejectGlow, { opacity: rejectFeedback }]}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[styles.decisionGlow, styles.confirmGlow, { opacity: confirmFeedback }]}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionGlow,
+                      styles.uncertainGlow,
+                      { opacity: uncertainFeedback },
+                    ]}
+                  />
+                  <ReviewCard
+                    item={activeItem}
+                    cardHeight={cardHeight}
+                    cardWidth={cardWidth}
+                    compact={isCompact}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionStroke,
+                      styles.rejectStroke,
+                      { opacity: rejectFeedback },
+                    ]}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionStroke,
+                      styles.confirmStroke,
+                      { opacity: confirmFeedback },
+                    ]}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionStroke,
+                      styles.uncertainStroke,
+                      { opacity: uncertainFeedback },
+                    ]}
+                  />
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionBadge,
+                      styles.rejectBadge,
+                      {
+                        opacity: rejectFeedback,
+                        transform: [{ rotate: '-14deg' }, { scale: rejectScale }],
+                      },
+                    ]}>
+                    <Text style={[styles.decisionBadgeText, styles.rejectBadgeText]}>X</Text>
+                  </Animated.View>
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionBadge,
+                      styles.confirmBadge,
+                      {
+                        opacity: confirmFeedback,
+                        transform: [{ rotate: '12deg' }, { scale: confirmScale }],
+                      },
+                    ]}>
+                    <Text style={[styles.decisionBadgeText, styles.confirmBadgeText]}>YES</Text>
+                  </Animated.View>
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.decisionBadge,
+                      styles.uncertainBadge,
+                      {
+                        opacity: uncertainFeedback,
+                        transform: [{ rotate: '-3deg' }, { scale: uncertainScale }],
+                      },
+                    ]}>
+                    <Text style={[styles.decisionBadgeText, styles.uncertainBadgeText]}>?</Text>
+                  </Animated.View>
+                </Animated.View>
+              </>
+            ) : (
+              <View style={[styles.emptyCard, { minHeight: cardHeight, width: cardWidth }]}>
+                <Image
+                  source={require('@/assets/glimo_mascot.png')}
+                  style={styles.emptyMascot}
+                  contentFit="contain"
+                />
+                <Text style={styles.emptyTitle}>Queue complete</Text>
+                <Text style={styles.emptyCopy}>
+                  {isTutorialActive
+                    ? 'Practice cards are complete. Finish the tutorial to load the real queue.'
+                    : 'Citizen votes are ready for admin export and audit review.'}
+                </Text>
+                <Pressable
+                  onPress={() => {
+                    if (isTutorialActive) {
+                      finishTutorial();
+                    } else {
+                      resetReviewQueue();
+                    }
+                  }}
+                  style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>
+                    {isTutorialActive ? 'Finish tutorial' : 'Restart demo queue'}
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
+          <View
+            ref={actionsRef}
+            onLayout={scheduleTutorialMeasurement}
+            style={[styles.actions, { width: cardWidth }]}>
+            <Pressable
+              disabled={!activeItem || isSubmittingDecision}
+              onPress={() => commitDecision('not_hatred', { x: -SWIPE_EXIT_DISTANCE, y: 32 })}
+              style={[styles.actionButton, styles.rejectButton]}>
+              <Text style={styles.rejectText}>X</Text>
+            </Pressable>
+            <Pressable
+              disabled={!activeItem || isSubmittingDecision}
+              onPress={markUncertain}
+              style={styles.actionButton}>
+              <Text style={styles.maybeText}>?</Text>
+            </Pressable>
+            <Pressable
+              disabled={!activeItem || isSubmittingDecision}
+              onPress={() => commitDecision('confirmed_hatred', { x: SWIPE_EXIT_DISTANCE, y: 32 })}
+              style={[styles.actionButton, styles.confirmButton]}>
+              <Text style={styles.confirmText}>YES</Text>
+            </Pressable>
+          </View>
         </View>
+        {isTutorialActive && <OnboardingTutorial targets={tutorialTargets} />}
       </View>
-      {isTutorialActive && <OnboardingTutorial targets={tutorialTargets} />}
     </SafeAreaView>
   );
 }
@@ -432,6 +502,10 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: AppColors.paper,
+    overflow: 'hidden',
+  },
+  root: {
+    flex: 1,
     overflow: 'hidden',
   },
   page: {

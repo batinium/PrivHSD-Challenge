@@ -1,5 +1,7 @@
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import type { LayoutChangeEvent } from 'react-native';
 
 import { AppColors } from '@/constants/theme';
 import { TutorialTarget, useOnboarding } from '@/state/onboarding';
@@ -20,6 +22,11 @@ const SPOTLIGHT_PADDING = 8;
 const BUBBLE_HEIGHT = 228;
 
 export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
+  const windowSize = useWindowDimensions();
+  const [overlaySize, setOverlaySize] = useState({
+    height: windowSize.height,
+    width: windowSize.width,
+  });
   const {
     finishTutorial,
     nextTutorialStep,
@@ -28,7 +35,7 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
     tutorialStepCount,
     tutorialStepIndex,
   } = useOnboarding();
-  const { height, width } = useWindowDimensions();
+  const { height, width } = overlaySize;
   const target = targets[tutorialStep.target] ?? fallbackTarget(width, height);
   const spotlight = paddedTarget(target, width, height);
   const bubbleWidth = Math.min(width - 32, 430);
@@ -44,6 +51,17 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
     : clamp(spotlight.y - BUBBLE_HEIGHT - 18, 16, height - BUBBLE_HEIGHT - 16);
   const isFinalStep = tutorialStepIndex === tutorialStepCount - 1;
 
+  function handleOverlayLayout(event: LayoutChangeEvent) {
+    const { height: nextHeight, width: nextWidth } = event.nativeEvent.layout;
+    setOverlaySize((current) => {
+      if (current.height === nextHeight && current.width === nextWidth) {
+        return current;
+      }
+
+      return { height: nextHeight, width: nextWidth };
+    });
+  }
+
   function handlePrimaryPress() {
     if (isFinalStep) {
       finishTutorial();
@@ -53,7 +71,7 @@ export function OnboardingTutorial({ targets }: OnboardingTutorialProps) {
   }
 
   return (
-    <View pointerEvents="box-none" style={styles.overlay}>
+    <View pointerEvents="box-none" onLayout={handleOverlayLayout} style={styles.overlay}>
       <View
         pointerEvents="auto"
         style={[styles.scrim, { height: spotlight.y, left: 0, right: 0, top: 0 }]}

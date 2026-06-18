@@ -40,6 +40,8 @@ DEFAULT_TOKEN_PROTECT_THRESHOLD = 0.03
 RESTATEMENT_TOOL_NAME = "record_backend_restatement_batch"
 SOURCE_TEXT_COL = "source_text"
 SCRUBBED_TEXT_COL = "scrubbed_text"
+PREDICTED_LABEL_COL = "hs_predicted"
+PREDICTION_SCORE_COL = "hf_hsd_score"
 
 TOKEN_PATTERN = re.compile(
     r"\[[A-Z][A-Z_]*(?::[A-Za-z0-9_/-]+)?\]"
@@ -113,9 +115,11 @@ class TokenSpan:
 @dataclass(frozen=True)
 class BackendBundlePaths:
     importance_csv: Path
+    prediction_csv: Path
     scrubbed_csv: Path
     scrubbed_manifest: Path
     scrubbed_audit: Path
+    restatement_input_csv: Path
     restated_csv: Path
     restatement_annotated_csv: Path
     restatement_cache: Path
@@ -129,9 +133,11 @@ def default_bundle_paths(input_path: Path, output_dir: Path) -> BackendBundlePat
     stem = input_path.stem
     return BackendBundlePaths(
         importance_csv=output_dir / f"{stem}.dehatebert_token_importance.csv",
+        prediction_csv=output_dir / f"{stem}.dehatebert_predictions.csv",
         scrubbed_csv=output_dir / f"{stem}.scrubbed.csv",
         scrubbed_manifest=output_dir / f"{stem}.scrubbed.manifest.json",
         scrubbed_audit=output_dir / f"{stem}.scrubbed.audit.json",
+        restatement_input_csv=output_dir / f"{stem}.restatement_input.csv",
         restated_csv=output_dir / f"{stem}.restated.csv",
         restatement_annotated_csv=output_dir / f"{stem}.restated.annotated.csv",
         restatement_cache=output_dir / f"{stem}.restatement.cache.jsonl",
@@ -267,6 +273,86 @@ def generate_token_importance_csv(
         "model_path": model_path,
         "threshold": threshold,
         "protect_threshold": protect_threshold,
+    }
+
+
+def generate_hsd_predictions_csv(
+    input_path: Path,
+    output_path: Path,
+    *,
+    text_col: str = "text",
+    id_col: str | None = None,
+    model_path: str = DEFAULT_HF_HSD_MODEL_PATH,
+    threshold: float = DEFAULT_HF_HSD_THRESHOLD,
+    device: str = "auto",
+    max_length: int = DEFAULT_HF_HSD_MAX_LENGTH,
+    batch_size: int = DEFAULT_HF_HSD_BATCH_SIZE,
+    progress_callback: Any | None = None,
+) -> dict[str, Any]:
+    rows, fieldnames = read_csv(input_path)
+    if text_col not in fieldnames:
+        raise BackendBundleError(f"missing text column {text_col!r}")
+    if id_col and id_col not in fieldnames:
+        raise BackendBundleError(f"missing id column {id_col!r}")
+    if batch_size < 1:
+        raise BackendBundleError("classification batch size must be positive")
+
+    classifier = HfHsdClassifierRuntime(
+        model_path=model_path,
+        threshold=threshold,
+        device=device,
+        max_length=max_length,
+    )
+    output_rows: list[dict[str, Any]] = []
+    total = len(rows)
+    processed = 0
+    for offset in range(0, total, batch_size):
+        batch = rows[offset : offset + batch_size]
+        scores = classifier._scores([str(row.get(text_col, "") or "") for row in batch])
+        for batch_index, (row, score) in enumerate(zip(batch, scores, strict=True), start=1):
+            row_index = offset + batch_index
+            predicted_label = int(float(score) >= classifier.threshold)
+            output_rows.append(
+                {
+                    "row_index": row_index,
+                    "row_id": str(row.get(id_col or "", "") or row_index),
+                    PREDICTION_SCORE_COL: round(float(score), 6),
+                    PREDICTED_LABEL_COL: predicted_label,
+                    "hf_hsd_threshold": classifier.threshold,
+                }
+            )
+        processed += len(batch)
+        if progress_callback:
+            progress_callback(
+                {
+                    "stage": "hs_classification",
+                    "processed": processed,
+                    "total": total,
+                    "detail": "Generated DeHateBERT labels for unlabeled rows.",
+                }
+            )
+
+    write_csv(
+        output_path,
+        output_rows,
+        [
+            "row_index",
+            "row_id",
+            PREDICTION_SCORE_COL,
+            PREDICTED_LABEL_COL,
+            "hf_hsd_threshold",
+        ],
+    )
+    positives = sum(int(row[PREDICTED_LABEL_COL]) for row in output_rows)
+    return {
+        "status": "generated",
+        "path": str(output_path),
+        "sha256": sha256_file(output_path),
+        "row_count": len(rows),
+        "positive_rows": positives,
+        "negative_rows": len(rows) - positives,
+        "model_path": model_path,
+        "threshold": threshold,
     }
 
 
@@ -486,6 +572,7 @@ def run_llm_restatement_csv(
     final_scrub: bool = True,
     allow_fallback: bool = False,
     force: bool = False,
+    output_fieldnames: list[str] | None = None,
     progress_callback: Any | None = None,
 ) -> dict[str, Any]:
     rows, fieldnames = read_csv(input_path)
@@ -497,6 +584,11 @@ def run_llm_restatement_csv(
         raise BackendBundleError(f"missing label column {label_col!r}")
     if batch_size < 1:
         raise BackendBundleError("restatement batch size must be positive")
+    restated_fieldnames = output_fieldnames or fieldnames
+    if text_col not in restated_fieldnames:
+        raise BackendBundleError(
+            f"restated output fieldnames must contain text column {text_col!r}"
+        )
 
     if force and cache_path.exists():
         cache_path.unlink()
@@ -616,7 +708,9 @@ def run_llm_restatement_csv(
         )
         out_row = dict(row)
         out_row[text_col] = final_text
-        restated_rows.append(out_row)
+        restated_rows.append(
+            {fieldname: out_row.get(fieldname, "") for fieldname in restated_fieldnames}
+        )
     if not allow_fallback:
         bad_statuses = {
             status: count
@@ -637,7 +731,7 @@ def run_llm_restatement_csv(
         "final_scrub_count",
     ]
     write_csv(annotated_csv, annotated_rows, annotated_fieldnames)
-    write_csv(restated_csv, restated_rows, fieldnames)
+    write_csv(restated_csv, restated_rows, restated_fieldnames)
     return {
         "status": "ok" if status_counts.get("ok", 0) == len(rows) else "partial",
         "model": model,
@@ -763,6 +857,127 @@ def ensure_token_importance(
     )
 
 
+def ensure_hsd_predictions(
+    input_path: Path,
+    output_path: Path,
+    *,
+    text_col: str,
+    id_col: str | None,
+    model_path: str,
+    threshold: float,
+    device: str,
+    max_length: int,
+    batch_size: int,
+    force: bool,
+    progress_callback: Any | None,
+) -> dict[str, Any]:
+    if output_path.exists() and not force:
+        rows, _fieldnames = read_csv(output_path)
+        positives = sum(
+            int(str(row.get(PREDICTED_LABEL_COL, "")).strip() == "1") for row in rows
+        )
+        return {
+            "status": "loaded",
+            "path": str(output_path),
+            "sha256": sha256_file(output_path),
+            "row_count": len(rows),
+            "positive_rows": positives,
+            "negative_rows": len(rows) - positives,
+            "model_path": model_path,
+            "threshold": threshold,
+        }
+    return generate_hsd_predictions_csv(
+        input_path,
+        output_path,
+        text_col=text_col,
+        id_col=id_col,
+        model_path=model_path,
+        threshold=threshold,
+        device=device,
+        max_length=max_length,
+        batch_size=batch_size,
+        progress_callback=progress_callback,
+    )
+
+
+def prediction_rows_by_key(
+    prediction_csv: Path,
+    *,
+    id_col: str | None,
+) -> dict[str, dict[str, str]]:
+    rows, _fieldnames = read_csv(prediction_csv)
+    records: dict[str, dict[str, str]] = {}
+    for index, row in enumerate(rows, start=1):
+        key = str(row.get("row_id") or row.get(id_col or "", "") or index)
+        records[key] = row
+    return records
+
+
+def build_restatement_input_csv(
+    scrubbed_csv: Path,
+    output_path: Path,
+    *,
+    prediction_csv: Path,
+    text_col: str,
+    id_col: str | None,
+    label_col: str,
+    force: bool,
+) -> dict[str, Any]:
+    rows, fieldnames = read_csv(scrubbed_csv)
+    if label_col in fieldnames:
+        return {
+            "status": "provided",
+            "path": str(scrubbed_csv),
+            "sha256": sha256_file(scrubbed_csv),
+            "label_col": label_col,
+            "label_source": "provided",
+            "output_fieldnames": fieldnames,
+            "helper_columns": [],
+        }
+    helper_columns = [label_col]
+    if label_col != PREDICTED_LABEL_COL:
+        helper_columns.append(PREDICTED_LABEL_COL)
+    helper_columns.append(PREDICTION_SCORE_COL)
+    output_fieldnames = list(fieldnames)
+    internal_fieldnames = [*fieldnames, *helper_columns]
+    if output_path.exists() and not force:
+        return {
+            "status": "loaded",
+            "path": str(output_path),
+            "sha256": sha256_file(output_path),
+            "label_col": label_col,
+            "label_source": "predicted",
+            "output_fieldnames": output_fieldnames,
+            "helper_columns": helper_columns,
+        }
+
+    predictions = prediction_rows_by_key(prediction_csv, id_col=id_col)
+    augmented_rows: list[dict[str, Any]] = []
+    for index, row in enumerate(rows, start=1):
+        key = row_key(row, id_col=id_col, row_index=index)
+        prediction = predictions.get(key) or predictions.get(str(index))
+        if prediction is None:
+            raise BackendBundleError(f"missing classifier prediction for row {index}")
+        label = str(prediction.get(PREDICTED_LABEL_COL, "") or "")
+        score = str(prediction.get(PREDICTION_SCORE_COL, "") or "")
+        augmented = dict(row)
+        augmented[label_col] = label
+        if label_col != PREDICTED_LABEL_COL:
+            augmented[PREDICTED_LABEL_COL] = label
+        augmented[PREDICTION_SCORE_COL] = score
+        augmented_rows.append(augmented)
+    write_csv(output_path, augmented_rows, internal_fieldnames)
+    return {
+        "status": "generated",
+        "path": str(output_path),
+        "sha256": sha256_file(output_path),
+        "label_col": label_col,
+        "label_source": "predicted",
+        "output_fieldnames": output_fieldnames,
+        "helper_columns": helper_columns,
+    }
+
+
 def load_json_file(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -782,6 +997,7 @@ def run_backend_bundle(
     deviation_audit_summary: Path | None = None,
     manifest_path: Path | None = None,
     force_token_importance: bool = False,
+    force_classification: bool = False,
     force_scrubbed: bool = False,
     force_restatement: bool = False,
     force_deviation_audit: bool = False,
@@ -808,6 +1024,7 @@ def run_backend_bundle(
     paths = default_bundle_paths(input_path, output_dir)
     paths = BackendBundlePaths(
         importance_csv=importance_csv or paths.importance_csv,
+        prediction_csv=paths.prediction_csv,
         scrubbed_csv=scrubbed_csv or paths.scrubbed_csv,
         scrubbed_manifest=(scrubbed_csv or paths.scrubbed_csv).with_suffix(".manifest.json")
         if scrubbed_csv
@@ -815,6 +1032,7 @@ def run_backend_bundle(
         scrubbed_audit=(scrubbed_csv or paths.scrubbed_csv).with_suffix(".audit.json")
         if scrubbed_csv
         else paths.scrubbed_audit,
+        restatement_input_csv=paths.restatement_input_csv,
         restated_csv=restated_csv or paths.restated_csv,
         restatement_annotated_csv=restatement_annotated_csv or paths.restatement_annotated_csv,
         restatement_cache=(restatement_annotated_csv or paths.restatement_annotated_csv).with_suffix(".cache.jsonl"),
@@ -872,8 +1090,40 @@ def run_backend_bundle(
             hsd_token_protect_threshold=token_protect_threshold,
             progress_callback=progress_callback,
         )
-    restatement = run_llm_restatement_csv(
+    scrubbed_rows, scrubbed_fieldnames = read_csv(paths.scrubbed_csv)
+    classification: dict[str, Any] = {
+        "status": "provided",
+        "label_col": label_col,
+        "label_source": "provided",
+        "row_count": len(scrubbed_rows),
+    }
+    if label_col not in scrubbed_fieldnames:
+        classification = ensure_hsd_predictions(
+            paths.scrubbed_csv,
+            paths.prediction_csv,
+            text_col=text_col,
+            id_col=id_col,
+            model_path=hf_hsd_model_path,
+            threshold=hf_hsd_threshold,
+            device=hf_hsd_device,
+            max_length=hf_hsd_max_length,
+            batch_size=hf_hsd_batch_size,
+            force=force_classification,
+            progress_callback=progress_callback,
+        )
+        classification["label_col"] = label_col
+        classification["label_source"] = "predicted"
+    restatement_input = build_restatement_input_csv(
         paths.scrubbed_csv,
+        paths.restatement_input_csv,
+        prediction_csv=paths.prediction_csv,
+        text_col=text_col,
+        id_col=id_col,
+        label_col=label_col,
+        force=force_classification or force_restatement,
+    )
+    restatement = run_llm_restatement_csv(
+        Path(str(restatement_input["path"])),
         restated_csv=paths.restated_csv,
         annotated_csv=paths.restatement_annotated_csv,
         cache_path=paths.restatement_cache,
@@ -891,6 +1141,7 @@ def run_backend_bundle(
         final_scrub=final_scrub,
         allow_fallback=allow_restatement_fallback,
         force=force_restatement,
+        output_fieldnames=list(restatement_input["output_fieldnames"]),
         progress_callback=progress_callback,
     )
     admin_annotations = add_admin_source_columns(
@@ -962,6 +1213,12 @@ def run_backend_bundle(
         "text_col": text_col,
         "id_col": id_col,
         "label_col": label_col,
+        "classification": classification,
+        "restatement_input": {
+            key: value
+            for key, value in restatement_input.items()
+            if key != "output_fieldnames"
+        },
         "token_importance": token_importance,
         "scrubbed": {
             "csv": str(paths.scrubbed_csv),
@@ -977,6 +1234,8 @@ def run_backend_bundle(
         "validation": validation,
         "outputs": {
             "importance_csv": str(paths.importance_csv),
+            "prediction_csv": str(paths.prediction_csv),
+            "restatement_input_csv": str(paths.restatement_input_csv),
             "scrubbed_csv": str(paths.scrubbed_csv),
             "restated_csv": str(paths.restated_csv),
             "restatement_annotated_csv": str(paths.restatement_annotated_csv),
