@@ -1,7 +1,7 @@
 # Pipeline Reference
 
 Status: active
-Last verified: 2026-06-17
+Last verified: 2026-06-18
 
 The final public story is one command and one backend path:
 
@@ -35,7 +35,7 @@ Primary implementation:
 - `contextsafe_hsd/models/local_llm_hsd_review_runtime.py`
 - `contextsafe_hsd/models/local_llm_hsd_verifier_runtime.py`
 
-## Public Command
+## Locked Public Command
 
 ```bash
 python -m contextsafe_hsd.cli protect \
@@ -44,24 +44,29 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
+  --no-style-simplify-language \
   --manifest OUTPUT.manifest.json \
-  --audit OUTPUT.audit.json
+  --audit OUTPUT.audit.json \
+  --progress
 ```
 
 `--preset exact` is the hand-in path. `--preset audit` keeps the same CSV
-contract and requests deeper sidecars. The command defaults to the scalable
-fine-tuned local classifier sidecar:
-
-```bash
---hsd-classifier hf \
---hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
---hf-hsd-threshold 0.850469
-```
+contract and requests deeper sidecars. The locked 2026-06-18 profile keeps PII
+Assist and candidate selection enabled, generates a `style_scrubbed` candidate
+for every row, disables language simplification, runs the HF sidecar classifier,
+and keeps the verifier off.
 
 The current selected model is the official-train fine-tuned
 `Hate-speech-CNERG/dehatebert-mono-english` checkpoint. Its 5-fold out-of-fold
 best F1 is `0.8289` at threshold `0.850469`. Use `--hsd-classifier off` only
-for deterministic privacy-only runs without sidecar labels.
+for upload-only/privacy-only runs without sidecar labels; the protected CSV text
+is unchanged by the sidecar.
 
 GPT/local LLM review and verifier runs are optional backup/audit extensions. To
 enable the older local LLM sidecar path, pass `--llm-review local-llm`,
@@ -87,10 +92,12 @@ Meaning protection:
 - High-confidence direct identifiers are still removed even when sidecar review
   later flags classification uncertainty.
 - Cue-safe style scrubbing and conservative author-group masking are on by
-  default. Style scrubbing normalizes idiolect markers, casing, repeated
-  punctuation/letters, hashtags, emoji, and signatures while preserving HSD cue
-  terms and placeholders. Author-group masking only masks detector-backed
-  direct/quasi identifier spans that repeat within the same author/user group.
+  default. The locked profile generates a `style_scrubbed` candidate for every
+  row before selection. Style scrubbing normalizes idiolect markers, casing,
+  repeated punctuation/letters, hashtags, emoji, and signatures while preserving
+  HSD cue terms and placeholders. Author-group masking only masks
+  detector-backed direct/quasi identifier spans that repeat within the same
+  author/user group.
 
 Verification:
 

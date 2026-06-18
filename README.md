@@ -23,7 +23,7 @@ input CSV
   -> Expo mobile/web admin and citizen review app
 ```
 
-Run the final path:
+Run the locked score-grade/mobile queue profile:
 
 ```bash
 python -m contextsafe_hsd.cli protect \
@@ -32,15 +32,39 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
+  --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
+  --no-style-simplify-language \
   --manifest OUTPUT.manifest.json \
-  --audit OUTPUT.audit.json
+  --audit OUTPUT.audit.json \
+  --progress
 ```
 
 The output CSV keeps the input row order, row count, and columns exactly. Only
 the selected text column is replaced. Labels, diagnostics, suggestions, and
 warnings from sidecars stay in JSON sidecars.
 
-Scalable HSD labels default to the fine-tuned local HF classifier sidecar:
+Locked 2026-06-18 parameters: Presidio/scrubadub PII Assist on, candidate
+selection on, cue-safe style scrub on, `style_scrubbed` candidate generated for
+every row, language simplification off, DPMLM/TF-IDF/semantic clustering off,
+HF HSD sidecar on with threshold `0.850469`, and verifier off. The recovered
+train run wrote
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`,
+which is byte-identical to the scored `0.3721` baseline CSV
+(`sha256 531ae6fa663124a5a570929be44bd94dfea7223d99e768a4dcc4bd029e98a12e`).
+
+Use the fast deterministic-only path only for smoke tests:
+
+```bash
+--no-pii-assist \
+--no-candidate-selection
+```
+
+The HF sidecar classifier parameters are:
 
 ```bash
 --hsd-classifier hf \
@@ -48,9 +72,8 @@ Scalable HSD labels default to the fine-tuned local HF classifier sidecar:
 --hf-hsd-threshold 0.850469
 ```
 
-Use `--hsd-classifier off` for the fastest frozen upload CSV when sidecar labels
-are not needed. Use `--hsd-classifier hf` for app batches that need queue
-labels and audit summaries. The sidecar classifier does not alter the CSV text.
+Use this locked HF sidecar for app batches that need queue labels and audit
+summaries. The sidecar classifier does not alter the CSV text.
 
 The selected checkpoint is `Hate-speech-CNERG/dehatebert-mono-english`
 fine-tuned with 5-fold official-train validation. Out-of-fold best F1 was

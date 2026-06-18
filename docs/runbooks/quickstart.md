@@ -1,7 +1,7 @@
 # Quickstart
 
 Status: active
-Last verified: 2026-06-17
+Last verified: 2026-06-18
 
 ## Install
 
@@ -34,20 +34,50 @@ python -m contextsafe_hsd.cli protect \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --hsd-classifier off \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
   --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
   --no-style-simplify-language \
   --manifest OUTPUT.manifest.json \
-  --audit OUTPUT.audit.json
+  --audit OUTPUT.audit.json \
+  --progress
 ```
 
-This is the frozen MVP upload path. It keeps deterministic PII masking,
-Presidio/scrubadub PII Assist, strict residual cleanup, cue-safe style
-scrubbing, and author-group detector-backed residual masking. It disables
-language simplification because the no-simplify run was the best fast
-leaderboard baseline.
+This is the locked scored no-simplify mobile/upload path. It keeps deterministic
+PII masking, Presidio/scrubadub PII Assist, candidate selection, exact CSV
+validation, and language simplification disabled. Cue-safe style scrubbing is
+on, and a `style_scrubbed` candidate is generated for every row before
+selection. It preserves row order, row count, and all input columns; only the
+configured text column is replaced.
 
-Use the fine-tuned HF sidecar classifier only when you want local audit evidence:
+The 2026-06-18 recovered train run on `data/train/train_split.csv` (`1154`
+rows) completed in `1251.76s` wall time and wrote a valid CSV to
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`.
+That CSV is byte-identical to the saved `train_split.no_simplify.protected`
+baseline and re-scored at `0.37` / `0.3721`.
+
+Locked run checks:
+
+- output CSV sha256:
+  `531ae6fa663124a5a570929be44bd94dfea7223d99e768a4dcc4bd029e98a12e`
+- changed text cells: `799`
+- chosen candidates: `balanced` `405`, `balanced_strict_pii` `1`,
+  `provider_fusion_augmented` `32`, `style_scrubbed` `715`,
+  `style_scrubbed_strict_pii` `1`
+- HF classifier counts: `0: 773`, `1: 381`
+
+Use the faster deterministic-only path only for smoke tests; it ran in
+`252.33s` on the same data but hurt the score:
+
+```bash
+--no-pii-assist \
+--no-candidate-selection
+```
+
+The fine-tuned HF sidecar classifier parameters are locked as:
 
 ```bash
 --hsd-classifier hf \
@@ -56,8 +86,8 @@ Use the fine-tuned HF sidecar classifier only when you want local audit evidence
 ```
 
 GPT/local LLM sidecars are optional backup/audit extensions; enable them
-explicitly only when you want second-pass evidence, not for the default
-submission path.
+explicitly only when you want second-pass evidence, not for the locked mobile
+upload profile.
 
 ## Run The Expo App
 
@@ -69,7 +99,7 @@ npm run web
 
 The current Expo app contains:
 
-- Admin dashboard for the frozen baseline batch and restatement model choice.
+- Admin dashboard for the locked baseline batch and restatement model choice.
 - Citizen review deck with swipe decisions over guarded restated evidence.
 - Direct-identifier guard for restatements before they enter the review deck.
 

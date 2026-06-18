@@ -53,8 +53,9 @@ class AutoPipelineConfig:
     hf_hsd_batch_size: int = DEFAULT_HF_HSD_BATCH_SIZE
     hf_hsd_max_length: int = DEFAULT_HF_HSD_MAX_LENGTH
     generalize_targets: bool | None = False
+    candidate_selection: bool = True
     style_scrub: bool = True
-    style_simplify_language: bool = True
+    style_simplify_language: bool = False
     dpmlm_rewrite: bool = False
     dpmlm_model_path: str = DEFAULT_DPMLM_MODEL_PATH
     dpmlm_device: str = "auto"

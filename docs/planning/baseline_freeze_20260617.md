@@ -1,33 +1,42 @@
 # Baseline Freeze, 2026-06-17
 
-Status: frozen for MVP and mobile-app handoff
+Status: frozen for MVP and mobile-app handoff; 2026-06-18 locked profile update
 
 ## Selected CSV
 
-`data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv`
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
 
 This is the final frozen copy for the benchmark upload baseline. It is
-byte-identical to the scored #17 no-simplify artifact:
+byte-identical to the scored #17 no-simplify artifact and the recovered
+HF-sidecar rerun:
 
 `data/outputs/style_tradeoff_no_simplify_20260617/train_split.no_simplify.protected.csv`
 
-It is the best fast, explainable, non-LLM path observed after the final round
-of experiments.
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
 
-## Reproduction Command
+It is the best fast, explainable, non-LLM protection path observed after the
+final round of experiments. The 2026-06-18 locked mobile profile adds the HF HSD
+classifier sidecar for queue/audit metadata; the sidecar does not alter the CSV
+text.
+
+## Locked Reproduction Command
 
 ```bash
 python -m contextsafe_hsd.cli protect \
   --input data/train/train_split.csv \
-  --output data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv \
+  --output data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --hsd-classifier off \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
   --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
   --no-style-simplify-language \
-  --manifest data/outputs/frozen_final_baseline_20260617/protect_result.json \
-  --audit data/outputs/frozen_final_baseline_20260617/audit.json \
+  --manifest data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/manifest.json \
+  --audit data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/audit.json \
   --progress
 ```
 
@@ -37,21 +46,26 @@ python -m contextsafe_hsd.cli protect \
 - Keep Presidio and scrubadub as local PII Assist providers when installed.
 - Keep strict residual PII cleanup and span fusion.
 - Keep cue-safe style scrubbing.
+- Generate `style_scrubbed` candidates for every row before selection.
 - Keep language simplification disabled with `--no-style-simplify-language`.
 - Keep repeated author-group detector-backed residual masking.
+- Keep the HF HSD classifier sidecar enabled for mobile/audit queue metadata:
+  `data/outputs/dehatebert_official_kfold_20260617/final_model`,
+  threshold `0.850469`.
 - Keep GPT/local LLM verifier disabled.
 - Keep DPMLM, TF-IDF author masking, and semantic clustering outside the
   default path.
 
-For upload CSV generation, `--hsd-classifier off` is acceptable because the
-sidecar classifier does not change the exact output CSV. Use the HF classifier
-only when local audit evidence is needed.
+For upload-only CSV generation, `--hsd-classifier off` is acceptable because the
+sidecar classifier does not change the exact output CSV. The locked mobile path
+uses the HF classifier so queue labels and audit summaries are available.
 
 ## Result Log
 
 | Run | Candidate | Private score | Notes |
 | --- | --- | ---: | --- |
 | #17 | `train_split.no_simplify.protected` | `0.3721` | selected baseline |
+| 2026-06-18 | `train_split.no_simplify_hf.recovered.protected` | `0.37` | locked profile; CSV-identical to #17 |
 | #18 | `train_split.full_style.protected` | `0.3702` | essentially tied, slightly worse |
 | #23 | `train_split.semantic_cluster_guarded.protected` | `0.3696` | no score gain for added complexity |
 | #24 | `train_split.semantic_cluster_ranked.protected` | `0.2524` | topic masking became destructive |
@@ -61,10 +75,11 @@ only when local audit evidence is needed.
 
 ## Decision
 
-Freeze the no-simplify deterministic baseline. The score differences among the
+Freeze the no-simplify deterministic protection baseline and lock the HF
+sidecar parameters for mobile queue metadata. The score differences among the
 safe deterministic variants are too small to justify more privacy/utility
 complexity before the mobile app. Future experiments should be isolated behind
-explicit flags or developer-only UI controls and should not change the default
+explicit flags or developer-only UI controls and should not change the locked
 CSV path without a private-score win.
 
 ## Mobile-App Handoff
@@ -72,8 +87,8 @@ CSV path without a private-score win.
 The mobile app should start from this exact behavior:
 
 - upload CSV
-- run the frozen baseline path
+- run the locked no-simplify scored baseline path with HF sidecar metadata
 - show output CSV plus manifest/audit summaries
 - keep raw text out of logs and reviewer-facing surfaces
-- expose experimental GPT, DPMLM, TF-IDF, and semantic-clustering modes only as
-  advanced developer experiments
+- expose GPT, DPMLM, TF-IDF, semantic-clustering, and deterministic-only smoke
+  modes only as advanced developer experiments

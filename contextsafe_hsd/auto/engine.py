@@ -429,6 +429,18 @@ class AutoPipelineEngine:
                 row_id=profile.row_id,
             )
 
+        if not config.candidate_selection:
+            return self._baseline_only_result(
+                rows,
+                fieldnames,
+                states,
+                text_col=text_col,
+                id_col=id_col,
+                target_col=target_col,
+                replace_text=replace_text,
+                progress_callback=progress_callback,
+            )
+
         self._run_provider_batches(states, progress_callback=progress_callback)
         candidate_groups = []
         self._emit_progress(
@@ -608,9 +620,219 @@ class AutoPipelineEngine:
             "mode": "auto",
             "baseline_mode": config.baseline_mode,
             "metric_depth": config.metric_depth,
+            "candidate_selection": config.candidate_selection,
             "changed_text_cells": changed_count,
             "chosen_counts": dict(sorted(chosen_counts.items())),
             "fallback_counts": dict(sorted(fallback_counts.items())),
+            "stages": stage_summary,
+            "providers": status_summary(self.context.provider_status),
+            "models": status_summary(self.context.model_status),
+            "load_counts": {
+                "providers": dict(sorted(self.context.provider_load_counts.items())),
+                "models": dict(sorted(self.context.model_load_counts.items())),
+            },
+            "metrics": metrics,
+        }
+        return AutoPipelineResult(
+            rows=output_rows,
+            fieldnames=output_fieldnames,
+            summary=summary,
+            audit_rows=row_audit_limit(
+                audit_rows,
+                audit_level=self.context.config.audit_level,
+            ),
+        )
+
+    def _baseline_only_result(
+        self,
+        rows: list[dict[str, str]],
+        fieldnames: list[str],
+        states: list[AutoRowState],
+        *,
+        text_col: str,
+        id_col: str | None,
+        target_col: str,
+        replace_text: bool,
+        progress_callback: ProgressCallback | None = None,
+    ) -> AutoPipelineResult:
+        config = self.context.config
+        output_fieldnames = list(fieldnames)
+        if not replace_text and target_col not in output_fieldnames:
+            output_fieldnames.append(target_col)
+
+        self._emit_progress(
+            progress_callback,
+            stage="fast_output",
+            processed=0,
+            total=len(states),
+            detail="Writing deterministic baseline output without candidate selection.",
+        )
+        output_rows: list[dict[str, Any]] = []
+        for state in states:
+            output_row = dict(state.row)
+            output_row[target_col] = state.baseline.text
+            output_rows.append(output_row)
+        author_group_result = apply_author_group_masking(
+            output_rows,
+            fieldnames=fieldnames,
+            text_col=target_col,
+            config=AuthorGroupMaskingConfig(
+                enabled=config.author_group_masking,
+                author_col=config.author_group_col,
+                min_repetitions=config.author_group_min_repetitions,
+                min_author_rows=config.author_group_min_author_rows,
+                metric_depth=config.metric_depth,
+            ),
+            known_author_names=set(AUTHOR_COLUMN_NAMES),
+        )
+        output_rows = author_group_result.rows
+
+        audit_rows: list[dict[str, Any]] = []
+        metric_rows: list[dict[str, Any]] = []
+        chosen_counts: Counter[str] = Counter()
+        candidate_name_counts: Counter[str] = Counter()
+        changed_count = 0
+        residual_review_required_count = 0
+        candidate_count = 0
+        for state, output_row in zip(states, output_rows):
+            final_text = str(output_row.get(target_col, "") or "")
+            if state.original != final_text:
+                changed_count += 1
+            if final_text == state.baseline.text:
+                metrics = state.baseline_metrics
+            else:
+                metrics = row_metric_for_depth(
+                    state.original,
+                    final_text,
+                    metric_depth=config.metric_depth,
+                    row_index=state.row_index,
+                )
+            metric_rows.append(metrics)
+            residual_review_required = bool(metrics.get("privacy_warnings")) or int(
+                metrics.get("residual_identifier_count", 0) or 0
+            ) > 0
+            if residual_review_required:
+                residual_review_required_count += 1
+            chosen = AutoCandidate(
+                name="balanced",
+                text=state.baseline.text,
+                source="deterministic",
+                metadata={},
+            )
+            scored = [
+                {
+                    "name": "balanced",
+                    "source": "deterministic",
+                    "score_type": "not_scored_fast_path",
+                    "accepted": True,
+                    "hard_reject_reasons": [],
+                    "metrics": {
+                        "residual_identifier_count": metrics.get(
+                            "residual_identifier_count",
+                            metrics.get("privacy_identifier_count_after", 0),
+                        ),
+                        "residual_direct_identifier_count": metrics.get(
+                            "residual_direct_identifier_count",
+                            0,
+                        ),
+                        "residual_quasi_identifier_count": metrics.get(
+                            "residual_quasi_identifier_count",
+                            0,
+                        ),
+                        "target_cue_retention": metrics.get(
+                            "target_cue_retention",
+                            1.0,
+                        ),
+                        "utility_cue_retention": metrics.get(
+                            "utility_cue_retention",
+                            1.0,
+                        ),
+                        "character_utility_retention": metrics.get(
+                            "character_utility_retention",
+                            1.0,
+                        ),
+                    },
+                }
+            ]
+            chosen_counts[chosen.name] += 1
+            candidate_name_counts[chosen.name] += 1
+            candidate_count += 1
+            audit_rows.append(
+                self._row_audit(
+                    state,
+                    chosen=chosen,
+                    scored=scored,
+                    selection_reason="deterministic_baseline_fast_path",
+                    metrics=metrics,
+                    residual_review_required=residual_review_required,
+                    chosen_text=final_text,
+                    residual_cleanup=[],
+                    author_group_masking=author_group_result.row_transformations.get(
+                        state.row_index - 1,
+                        [],
+                    ),
+                )
+            )
+            self._emit_progress(
+                progress_callback,
+                stage="fast_output",
+                processed=state.row_index,
+                total=len(states),
+                detail="Prepared deterministic baseline output.",
+                row_id=state.row_id,
+            )
+
+        self._emit_progress(
+            progress_callback,
+            stage="summary",
+            processed=0,
+            total=0,
+            detail="Aggregating audit metrics.",
+        )
+        metrics = aggregate_metrics(metric_rows)
+        stage_summary = build_stage_summary(
+            config=config,
+            row_count=len(rows),
+            changed_text_cells=changed_count,
+            chosen_counts=chosen_counts,
+            fallback_counts=Counter(),
+            provider_statuses=self.context.provider_status,
+            model_statuses=self.context.model_status,
+            provider_load_counts=self.context.provider_load_counts,
+            model_load_counts=self.context.model_load_counts,
+            audit_counters=self.context.audit_counters,
+            metrics=metrics,
+            provider_rows_considered=0,
+            candidate_count=candidate_count,
+            candidate_name_counts=candidate_name_counts,
+            rejected_candidate_count=0,
+            rejection_counts=Counter(),
+            residual_review_required_count=residual_review_required_count,
+            residual_direct_cleanup_count=0,
+            author_group_masking=author_group_result.summary,
+            author_risk=author_risk_hook(
+                fieldnames,
+                rows,
+                author_metadata_rows=sum(
+                    1 for state in states if state.profile.author_metadata_available
+                ),
+            ),
+        )
+        summary = {
+            "artifact_type": "auto_csv_privatization",
+            "pipeline": "auto",
+            "row_count": len(rows),
+            "text_col": text_col,
+            "id_col": id_col,
+            "output_col": target_col,
+            "replace_text": replace_text,
+            "mode": "auto",
+            "baseline_mode": config.baseline_mode,
+            "metric_depth": config.metric_depth,
+            "candidate_selection": config.candidate_selection,
+            "changed_text_cells": changed_count,
+            "chosen_counts": dict(sorted(chosen_counts.items())),
+            "fallback_counts": {},
             "stages": stage_summary,
             "providers": status_summary(self.context.provider_status),
             "models": status_summary(self.context.model_status),
@@ -774,7 +996,7 @@ class AutoPipelineEngine:
                 metadata={},
             )
         ]
-        if self.context.config.style_scrub and state.decision.use_style_candidate:
+        if self.context.config.style_scrub:
             style_result = privatize_text(
                 state.original,
                 PrivatizerConfig(

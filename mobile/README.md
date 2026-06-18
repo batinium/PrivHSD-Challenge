@@ -16,13 +16,13 @@ Start the app:
 npm run web
 ```
 
-The app currently runs with seeded data from the frozen baseline:
+The app currently runs with seeded data from the locked baseline:
 
-`data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv`
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
 
 ## Current screens
 
-- Admin: frozen baseline status, restatement model selection, privacy guard summary.
+- Admin: locked baseline status, restatement model selection, privacy guard summary.
 - Review: swipe-card citizen review over guarded restated evidence.
 
 ## Product rules

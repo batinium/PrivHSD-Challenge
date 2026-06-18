@@ -1,7 +1,7 @@
 # Current Status
 
-Status: frozen MVP baseline selected
-Last verified: 2026-06-17
+Status: locked MVP profile selected
+Last verified: 2026-06-18
 
 ContextSafe-HSD is now reduced to the final exact CSV pipeline plus an Expo
 mobile/web review app. The current competition direction is deterministic
@@ -9,31 +9,38 @@ privacy protection plus classifier-friendly utility preservation, with a
 fine-tuned local HF classifier as the scalable HSD sidecar and GPT/local LLM
 kept as backup/audit tooling.
 
-## Frozen MVP Baseline
+## Locked MVP Profile
 
-The competition baseline is frozen for the mobile-application handoff. Use the
-final copied upload artifact:
+The competition baseline is locked for the mobile-application handoff. The
+protected CSV for upload remains the final copied artifact:
 
-`data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv`
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
 
-It is byte-identical to the scored #17 artifact:
+It is byte-identical to the scored #17 artifact and the recovered HF-sidecar
+rerun:
 
 `data/outputs/style_tradeoff_no_simplify_20260617/train_split.no_simplify.protected.csv`
 
-The corresponding reproducible command is:
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
+
+The corresponding locked mobile/audit command is:
 
 ```bash
 python -m contextsafe_hsd.cli protect \
   --input data/train/train_split.csv \
-  --output data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv \
+  --output data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv \
   --text-col text \
   --id-col ID \
   --preset exact \
-  --hsd-classifier off \
+  --hsd-classifier hf \
+  --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
+  --hf-hsd-threshold 0.850469 \
   --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
   --no-style-simplify-language \
-  --manifest data/outputs/frozen_final_baseline_20260617/protect_result.json \
-  --audit data/outputs/frozen_final_baseline_20260617/audit.json \
+  --manifest data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/manifest.json \
+  --audit data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/audit.json \
   --progress
 ```
 
@@ -43,25 +50,29 @@ Frozen behavior:
 - Presidio and scrubadub PII Assist stay enabled when installed
 - strict residual PII cleanup stays on
 - cue-safe style scrubbing stays on
+- `style_scrubbed` candidates are generated for every row before selection
 - language simplification stays off
 - author-group detector-backed residual masking stays on
+- HF HSD classifier sidecar stays on for mobile/audit queue metadata
 - GPT/local LLM verifier, DPMLM, TF-IDF masking, and semantic clustering stay
   out of the default path
 
-Private leaderboard context from 2026-06-17:
+Private leaderboard context:
 
 | Run | Candidate | Score | Decision |
 | --- | --- | ---: | --- |
 | #17 | `train_split.no_simplify.protected` | `0.3721` | frozen MVP |
+| 2026-06-18 | `train_split.no_simplify_hf.recovered.protected` | `0.37` | locked profile; CSV-identical to #17 |
 | #18 | `train_split.full_style.protected` | `0.3702` | no gain |
 | #23 | `train_split.semantic_cluster_guarded.protected` | `0.3696` | no gain, more complexity |
 | #24 | `train_split.semantic_cluster_ranked.protected` | `0.2524` | too destructive |
 | #21 | broad low-impact token masking | `0.3524` | worse than baseline |
 | #14 | LLM/checker run | `0.3835` | research only, too slow for MVP |
 
-The freeze decision is to preserve the fastest explainable deterministic path
-and move product work to the mobile application. Experiments remain useful
-notes, but they should not be promoted without a clear private-score gain.
+The lock decision is to preserve the explainable no-simplify path, keep the HF
+sidecar for mobile queue metadata, and move product work to the mobile
+application. Experiments remain useful notes, but they should not be promoted
+without a clear private-score gain.
 
 ## Public Runtime
 
@@ -69,27 +80,7 @@ notes, but they should not be promoted without a clear private-score gain.
 - `validate-submission`
 - `profile-dataset`
 
-The frozen upload command is:
-
-```bash
-python -m contextsafe_hsd.cli protect \
-  --input INPUT.csv \
-  --output OUTPUT.csv \
-  --text-col text \
-  --id-col ID \
-  --preset exact \
-  --hsd-classifier off \
-  --llm-verifier off \
-  --no-style-simplify-language \
-  --manifest OUTPUT.manifest.json \
-  --audit OUTPUT.audit.json
-```
-
-This is the selected MVP path for upload generation. It disables sidecar
-classification because sidecar labels do not affect the exact CSV output and
-the official evaluator supplies the trade-off score.
-
-Optional local audit classifier path:
+The current locked scored mobile/upload command is:
 
 ```bash
 python -m contextsafe_hsd.cli protect \
@@ -101,9 +92,25 @@ python -m contextsafe_hsd.cli protect \
   --hsd-classifier hf \
   --hf-hsd-model-path data/outputs/dehatebert_official_kfold_20260617/final_model \
   --hf-hsd-threshold 0.850469 \
+  --llm-verifier off \
+  --pii-assist \
+  --candidate-selection \
+  --no-style-simplify-language \
   --manifest OUTPUT.manifest.json \
-  --audit OUTPUT.audit.json
+  --audit OUTPUT.audit.json \
+  --progress
 ```
+
+This is the selected MVP path for mobile upload generation. It keeps PII Assist
+and candidate selection enabled, generates a `style_scrubbed` candidate for
+every row, disables language simplification, runs the HF sidecar classifier, and
+keeps the verifier off. The 2026-06-18 recovered run on
+`data/train/train_split.csv` (`1154` rows) completed in `1251.76s`, produced a
+valid CSV with `799` changed text cells, and matches the saved
+`train_split.no_simplify.protected` baseline, which scored `0.37` / `0.3721`.
+
+Use `--no-pii-assist --no-candidate-selection` only for deterministic-only smoke
+tests; that path was faster but hurt the score.
 
 The sidecar verifier is available for positive labels from a selected sidecar
 classifier; it records disagreement and uncertainty in the sidecars only and
@@ -111,7 +118,10 @@ does not change labels or CSV text.
 
 Current score context:
 
-- Recent checked run reported PrivHSD trade-off `0.3835`.
+- Current locked scored run reported `0.37` and is CSV-identical to the #17
+  `0.3721` artifact.
+- The older `0.3835` LLM/checker run remains research-only because it is too
+  slow and complex for the MVP mobile path.
 - Best current supervised classifier: `Hate-speech-CNERG/dehatebert-mono-english`
   fine-tuned on the official train split with 5-fold OOF validation.
   OOF best F1 is `0.8289` at threshold `0.850469`; the final checkpoint is
@@ -209,12 +219,12 @@ Retained:
 The legacy FastAPI/Vite workbench has been removed. The new product surface is
 `mobile/`, an Expo app with two MVP screens:
 
-- Admin dashboard for the frozen baseline batch, output CSV path, restatement
+- Admin dashboard for the locked baseline batch, output CSV path, restatement
   model selection, and restatement leakage guard state.
 - Citizen swipe review deck that shows guarded restatements only and records
   `confirmed_hatred`, `not_hatred`, or `uncertain` decisions.
 
-The current Expo app uses seeded data from the frozen baseline while the backend
+The current Expo app uses seeded data from the locked baseline while the backend
 contract is built. Reviewer-facing surfaces must not expose raw source text.
 Restatements must pass a direct-identifier guard before entering the deck.
 

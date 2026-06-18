@@ -148,7 +148,9 @@ def route_row(profile: RowRiskProfile) -> RowRoutingDecision:
         risk_reasons=tuple(sorted(set(risk_reasons))),
         low_risk_reasons=tuple(low_risk_reasons),
         style_candidate_policy=(
-            f"style_scrubbed candidates are generated only when "
-            f"style_risk_count >= {STYLE_CANDIDATE_MIN_RISK}"
+            "style_risk_count >= "
+            f"{STYLE_CANDIDATE_MIN_RISK} marks elevated style risk for routing; "
+            "the locked scored profile still generates a style_scrubbed "
+            "candidate for every row when style scrub is enabled"
         ),
     )

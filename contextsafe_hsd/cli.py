@@ -107,9 +107,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Protect a CSV while preserving row order, row count, and columns.",
         description=(
             "Run the final exact CSV pipeline: deterministic sanitization, "
-            "Presidio/scrubadub PII Assist, cue-safe candidate selection, "
-            "default HF sidecar classification, and optional local LLM audit "
-            "extensions on cleaned text only."
+            "PII Assist, candidate selection, exact-format CSV output, and "
+            "optional HF classification or local LLM audit extensions on "
+            "cleaned text only."
         ),
     )
     protect.add_argument("--input", type=Path, required=True)
@@ -137,9 +137,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--hsd-classifier",
         choices=["off", "hf", "hf-classifier", "local-llm"],
         help=(
-            "Sidecar-only HSD classifier after sanitization. Defaults to hf "
-            "for the fine-tuned local Transformers classifier; local-llm "
-            "keeps GPT as the main classifier; off disables classification."
+            "Sidecar-only HSD classifier after sanitization. Defaults to off "
+            "for the scored no-simplify mobile/upload path; hf enables the "
+            "fine-tuned local Transformers classifier for audit batches."
         ),
     )
     protect.add_argument(
@@ -229,6 +229,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print coarse raw-text-free pipeline progress to stderr.",
     )
     protect.add_argument(
+        "--pii-assist",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Run optional Presidio/scrubadub PII Assist providers. On by "
+            "default for the scored no-simplify baseline."
+        ),
+    )
+    protect.add_argument(
+        "--candidate-selection",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Generate and score alternate candidates. When style scrub is on, "
+            "the locked scored profile generates a style_scrubbed candidate for "
+            "every row. On by default for the scored no-simplify baseline."
+        ),
+    )
+    protect.add_argument(
         "--style-scrub",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -240,10 +259,11 @@ def build_parser() -> argparse.ArgumentParser:
     protect.add_argument(
         "--style-simplify-language",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
         help=(
             "When style scrubbing is enabled, simplify a small deterministic "
-            "set of high-register words and phrases. On by default."
+            "set of high-register words and phrases. Off by default for the "
+            "scored no-simplify baseline."
         ),
     )
     protect.add_argument(
@@ -406,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
                 else (
                     "local_llm"
                     if args.llm_review.replace("-", "_") == "local_llm"
-                    else "hf_classifier"
+                    else "none"
                 )
             )
             if hsd_classifier == "hf":
@@ -450,6 +470,10 @@ def main(argv: list[str] | None = None) -> int:
                     args.local_llm_verifier_reasoning_effort
                 ),
                 require_hate_classification=args.require_llm_review,
+                disabled_providers=[]
+                if args.pii_assist
+                else ["presidio", "scrubadub"],
+                candidate_selection=args.candidate_selection,
                 author_group_masking=args.author_group_masking,
                 author_group_col=args.author_group_col,
                 author_group_min_repetitions=args.author_group_min_repetitions,

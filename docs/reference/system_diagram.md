@@ -1,7 +1,7 @@
 # System Diagrams
 
 Status: active
-Last verified: 2026-06-17
+Last verified: 2026-06-18
 
 Two compact diagrams cover the core data flow and the civilian review platform.
 For the current Expo screen-by-screen flow, see
@@ -16,7 +16,7 @@ flowchart TB
     C --> D[Protected text]
     D --> E[Output CSV<br/>same shape, text replaced]
     D --> F[Manifest + audit<br/>sidecars only]
-    D --> G[HSD classifier<br/>cleaned text only]
+    D --> G[Locked HF HSD classifier<br/>cleaned text only]
     G --> H[Optional verifier<br/>positive rows only]
     G --> F
     H --> F

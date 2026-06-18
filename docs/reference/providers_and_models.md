@@ -1,7 +1,7 @@
 # Providers And Models
 
 Status: active
-Last verified: 2026-06-17
+Last verified: 2026-06-18
 
 The final runtime has a small provider/model story.
 
@@ -15,16 +15,21 @@ The final runtime has a small provider/model story.
 - Cue-safe style scrubbing and repeated author-group residual masking.
 - HSD cue safeguards.
 
-## Frozen MVP Baseline
+## Locked MVP Profile
 
 The mobile-app handoff baseline is:
 
-`data/outputs/frozen_final_baseline_20260617/train_split.frozen_baseline.protected.csv`
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
 
-This is a byte-identical copy of the scored #17 no-simplify artifact. It keeps
-deterministic PII, Presidio/scrubadub PII Assist, strict residual cleanup,
-cue-safe style scrubbing, and author-group detector-backed residual masking. It
-disables language simplification with `--no-style-simplify-language`.
+This is a byte-identical copy of the scored #17 no-simplify artifact and the
+2026-06-18 recovered HF-sidecar run:
+
+`data/locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed/train_split.no_simplify_hf.recovered.protected.csv`
+
+It keeps deterministic PII, Presidio/scrubadub PII Assist, strict residual
+cleanup, cue-safe style scrubbing, and author-group detector-backed residual
+masking. It generates `style_scrubbed` candidates for every row and disables
+language simplification with `--no-style-simplify-language`.
 
 Do not default to GPT/local LLM verification, DPMLM, broad TF-IDF author
 masking, or semantic clustering. Recent private runs showed no reliable gain:
@@ -40,9 +45,9 @@ cue checks, and candidate selection.
 Missing dependencies or initialization errors are reported in the manifest and
 fall back to deterministic output.
 
-## Default HF HSD Classifier
+## Locked HF HSD Classifier
 
-The default sidecar classifier is
+The locked mobile/audit sidecar classifier is
 `contextsafe_hsd.models.hf_hsd_classifier_runtime`.
 
 It runs after sanitization, receives cleaned text only, and writes sidecar
@@ -53,8 +58,10 @@ split with 5-fold out-of-fold validation:
 - model path: `data/outputs/dehatebert_official_kfold_20260617/final_model`
 - threshold: `0.850469`
 - OOF best F1: `0.8289`
+- recovered train prediction counts: `0: 773`, `1: 381`
 
-Use `--hsd-classifier off` for privacy-only runs without sidecar labels.
+Use `--hsd-classifier off` only for upload-only/privacy-only runs without
+sidecar labels. The sidecar does not change protected CSV text.
 
 ## Optional Local LLM Sidecar Review
 

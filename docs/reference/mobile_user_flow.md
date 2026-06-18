@@ -1,7 +1,7 @@
 # Mobile App User Flow
 
 Status: current implementation
-Last verified: 2026-06-17
+Last verified: 2026-06-18
 
 This diagram reflects the Expo app in `mobile/src/app`. The app currently has
 two routes: the admin console at `/` and the citizen review deck at `/review`.
@@ -15,8 +15,8 @@ flowchart TD
     Tabs -->|Admin tab| Admin[Admin dashboard]
     Tabs -->|Review tab| Review[Citizen review deck]
 
-    Admin --> Metrics[View frozen baseline metrics<br/>rows, changed text, private score, queue size]
-    Admin --> Baseline[Inspect baseline run<br/>input CSV, protected CSV, pipeline steps]
+    Admin --> Metrics[View locked profile metrics<br/>rows, changed text, private score, queue size]
+    Admin --> Baseline[Inspect locked run<br/>input CSV, protected CSV, sidecar steps]
     Admin --> Model[Pick restatement model<br/>local LLM, OSS model, manual mode]
     Admin --> GuardToggle[Toggle restatement PII leakage guard]
     Admin --> Queue[Inspect seeded citizen queue<br/>case id, source, class label, risk]
@@ -63,7 +63,7 @@ flowchart TD
 
 ## Current Screen Responsibilities
 
-- Admin dashboard: shows the frozen baseline state, allows model selection,
+- Admin dashboard: shows the locked baseline/profile state, allows model selection,
   toggles the guard, and previews the review queue/audit summary.
 - Citizen review deck: shows guarded restatements only, collects
   `confirmed_hatred`, `not_hatred`, or `uncertain` decisions, and maintains

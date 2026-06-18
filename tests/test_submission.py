@@ -87,7 +87,10 @@ def test_protect_help_is_short_public_surface():
     assert "rerank-candidates" not in result.stdout
 
 
-def test_protect_runtime_defaults_to_hf_classifier(monkeypatch, tmp_path):
+def test_protect_runtime_defaults_to_scored_no_simplify_baseline(
+    monkeypatch,
+    tmp_path,
+):
     source = tmp_path / "source.csv"
     output = tmp_path / "protected.csv"
     write_source(source)
@@ -118,8 +121,11 @@ def test_protect_runtime_defaults_to_hf_classifier(monkeypatch, tmp_path):
     )
 
     assert exit_code == 0
-    assert captured_call["hsd_classification_backend"] == "hf_classifier"
+    assert captured_call["hsd_classification_backend"] == "none"
     assert captured_call["llm_review"] == "off"
+    assert captured_call["disabled_providers"] == []
+    assert captured_call["candidate_selection"] is True
+    assert captured_call["style_simplify_language"] is False
 
 
 def test_protect_exact_preserves_schema_and_manifest_stages(tmp_path, capsys):

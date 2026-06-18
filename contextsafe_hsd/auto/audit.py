@@ -137,11 +137,15 @@ def build_stage_summary(
             if reason in MEANING_PROTECTION_REJECTION_REASONS
         }
     )
-    privacy_ladder_order = [
-        "deterministic_baseline",
-        "strict_residual_pii_cleanup",
-        "pii_assist",
-    ]
+    candidate_selection_enabled = bool(getattr(config, "candidate_selection", True))
+    privacy_ladder_order = ["deterministic_baseline"]
+    if candidate_selection_enabled:
+        privacy_ladder_order.extend(
+            [
+                "strict_residual_pii_cleanup",
+                "pii_assist",
+            ]
+        )
     meaning_protection = {
         "protected_cue_policy": (
             "target_action_negation_modality_quote_counterspeech_reporting"
@@ -168,6 +172,8 @@ def build_stage_summary(
                         "selection; high-confidence direct identifiers are eligible "
                         "by default, while ambiguous person/place/org residuals need "
                         "strong deterministic context"
+                        if candidate_selection_enabled
+                        else "disabled because candidate selection is off"
                     ),
                     "candidate_count": sum(
                         count
@@ -182,10 +188,11 @@ def build_stage_summary(
                 "always_run": True,
             },
             "style_candidate": {
-                "enabled": bool(config.style_scrub),
+                "enabled": bool(config.style_scrub and candidate_selection_enabled),
                 "policy": (
-                    "routed only when the cheap profile reports "
-                    "style_risk_count >= 2"
+                    "generated for every row when style scrub is enabled"
+                    if candidate_selection_enabled
+                    else "disabled because candidate selection is off"
                 ),
                 "simplify_language": bool(
                     getattr(config, "style_simplify_language", True)

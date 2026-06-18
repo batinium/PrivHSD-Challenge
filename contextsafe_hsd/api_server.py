@@ -18,12 +18,14 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROTECTED_CSV = (
     ROOT
     / "data"
-    / "outputs"
-    / "frozen_final_baseline_20260617"
-    / "train_split.frozen_baseline.protected.csv"
+    / "locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed"
+    / "train_split.no_simplify_hf.recovered.protected.csv"
 )
 DEFAULT_VALIDATION_JSON = (
-    ROOT / "data" / "outputs" / "frozen_final_baseline_20260617" / "validation.json"
+    ROOT
+    / "data"
+    / "locked_baseline_train_split_no_simplify_hf_recovered_20260618_timed"
+    / "manifest.json"
 )
 
 
@@ -49,18 +51,39 @@ def read_json(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def display_path(path: Path) -> str:
+    return str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path)
+
+
+def read_validation(
+    path: Path,
+    *,
+    submission_path: Path | None = None,
+) -> dict[str, Any] | None:
+    payload = read_json(path)
+    if payload is None:
+        return None
+    validation = payload.get("validation")
+    if isinstance(validation, dict):
+        validation = dict(validation)
+        if submission_path is not None:
+            validation["submission"] = display_path(submission_path)
+        return validation
+    return payload
+
+
 def protected_csv_summary(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {
             "exists": False,
-            "path": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path),
+            "path": display_path(path),
         }
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         rows = list(reader)
     return {
         "exists": True,
-        "path": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path),
+        "path": display_path(path),
         "sha256": file_sha256(path),
         "row_count": len(rows),
         "columns": reader.fieldnames or [],
@@ -120,7 +143,10 @@ class ContextSafeApiHandler(BaseHTTPRequestHandler):
             self.write_json(
                 {
                     "protectedCsv": protected_csv_summary(self.server.config.protected_csv),
-                    "validation": read_json(self.server.config.validation_json),
+                    "validation": read_validation(
+                        self.server.config.validation_json,
+                        submission_path=self.server.config.protected_csv,
+                    ),
                 }
             )
             return

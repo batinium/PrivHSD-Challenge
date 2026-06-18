@@ -191,6 +191,9 @@ def test_protect_parser_is_small_and_defaults_to_deterministic_review():
     assert args.llm_review == "off"
     assert args.llm_verifier == "off"
     assert args.hsd_classifier is None
+    assert args.pii_assist is True
+    assert args.candidate_selection is True
+    assert args.style_simplify_language is False
 
 
 def test_final_pipeline_preserves_exact_csv_and_writes_llm_sidecar(tmp_path):
@@ -365,6 +368,38 @@ def test_final_pipeline_can_skip_local_llm_sidecar(tmp_path):
     assert manifest["llm_review"] == "off"
     assert manifest["classification"]["status"] == "skipped"
     assert manifest["classification"]["skip_reason"] == "disabled"
+    assert read_rows(output)[0]["text"].count("[EMAIL]") == 1
+
+
+def test_final_pipeline_fast_path_skips_candidate_selection_and_pii_assist(tmp_path):
+    source = tmp_path / "input.csv"
+    output = tmp_path / "output.csv"
+    write_rows(source)
+
+    manifest = run_final_csv_pipeline(
+        source,
+        output,
+        text_col="text",
+        id_col="id",
+        disabled_providers=["presidio", "scrubadub"],
+        candidate_selection=False,
+        author_group_masking=False,
+        hsd_classification_backend="none",
+        llm_review="off",
+        llm_verifier="off",
+    )
+
+    assert manifest["candidate_selection"] is False
+    assert manifest["hsd_classification_backend"] == "none"
+    assert manifest["providers"]["presidio"]["status"] == "disabled"
+    assert manifest["providers"]["scrubadub"]["status"] == "disabled"
+    assert manifest["sanitization"]["chosen_counts"] == {"balanced": 2}
+    assert manifest["sanitization"]["stages"]["privacy_detection"][
+        "candidate_counts_by_name"
+    ] == {"balanced": 2}
+    assert manifest["sanitization"]["stages"]["meaning_protection"][
+        "candidate_count"
+    ] == 2
     assert read_rows(output)[0]["text"].count("[EMAIL]") == 1
 
 

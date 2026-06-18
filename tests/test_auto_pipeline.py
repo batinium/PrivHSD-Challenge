@@ -189,6 +189,33 @@ def test_dpmlm_rewrite_skips_rows_without_style_risk():
     )
 
 
+def test_style_scrub_candidate_is_generated_for_low_risk_rows():
+    context = AutoPipelineContext.create(
+        AutoPipelineConfig(
+            disabled_providers=frozenset({"presidio", "scrubadub"}),
+            style_scrub=True,
+            audit_level="row",
+        )
+    )
+    rows = [{"id": "1", "text": "This is the best reply."}]
+
+    result = AutoPipelineEngine(context).process_rows(
+        rows,
+        ["id", "text"],
+        text_col="text",
+        id_col="id",
+        output_col="text",
+        replace_text=True,
+    )
+
+    privacy_stage = result.summary["stages"]["privacy_detection"]
+    assert privacy_stage["style_candidate"]["policy"] == (
+        "generated for every row when style scrub is enabled"
+    )
+    assert privacy_stage["candidate_counts_by_name"]["style_scrubbed"] == 1
+    assert result.audit_rows[0]["candidate_count"] == 2
+
+
 def test_dpmlm_replacement_similarity_rejects_unrelated_tokens():
     assert replacement_similarity("coooool", "cool") >= 0.55
     assert replacement_similarity("Ooops", "ugs") < 0.55
