@@ -178,5 +178,5 @@ sidecar audits. Review outputs should still be checked before public release.
   `git ls-files data`.
 - Rotate any tokens that were ever committed or shared outside the local
   machine.
-- Review `mobile/src/data/` before publishing. It is source-controlled and can
-  contain bundled review data if a static review pool was generated.
+- Keep generated review pools out of source control. The checked-in
+  `mobile/src/data/` files use synthetic placeholders only.
