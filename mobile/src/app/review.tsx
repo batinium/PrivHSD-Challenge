@@ -8,11 +8,13 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlimoShieldBackground } from '@/components/glimo-shield-background';
 import { AppColors } from '@/constants/theme';
 import { ReviewDecision, ReviewItem, reviewSeedItems } from '@/data/review-data';
-import { guardRestatement } from '@/utils/privacy';
+import { guardRestatement, summarizeGuard } from '@/utils/privacy';
 
 const SWIPE_THRESHOLD = 110;
 
@@ -94,11 +96,19 @@ export default function CitizenReview() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <GlimoShieldBackground swipeX={position.x} variant="review" />
       <View style={styles.page}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>Citizen review</Text>
-            <Text style={styles.title}>Restated evidence deck</Text>
+          <View style={styles.brandLockup}>
+            <Image
+              source={require('@/assets/glimo_mascot.png')}
+              style={styles.headerMascot}
+              contentFit="contain"
+            />
+            <View style={styles.headerText}>
+              <Text style={styles.eyebrow}>Glimo review</Text>
+              <Text style={styles.title}>Evidence deck</Text>
+            </View>
           </View>
           <View style={styles.counter}>
             <Text style={styles.counterValue}>{stats.remaining}</Text>
@@ -140,6 +150,11 @@ export default function CitizenReview() {
             </>
           ) : (
             <View style={[styles.emptyCard, { width: cardWidth }]}>
+              <Image
+                source={require('@/assets/glimo_mascot.png')}
+                style={styles.emptyMascot}
+                contentFit="contain"
+              />
               <Text style={styles.emptyTitle}>Queue complete</Text>
               <Text style={styles.emptyCopy}>
                 Citizen votes are ready for admin export and audit review.
@@ -188,11 +203,29 @@ type ReviewCardProps = {
 
 function ReviewCard({ item, cardWidth, stacked, animatedStyle }: ReviewCardProps) {
   const guarded = guardRestatement(item.restatement);
+  const guardSignal =
+    guarded.findings.length === 0
+      ? 'Clear'
+      : `${guarded.findings.length} finding${guarded.findings.length === 1 ? '' : 's'}`;
+
   return (
     <View style={[styles.card, { width: cardWidth }, stacked && styles.cardStacked, animatedStyle]}>
+      <Image
+        source={require('@/assets/glimo_sheild.png')}
+        style={styles.cardWatermark}
+        contentFit="contain"
+      />
       <View style={styles.cardTop}>
-        <View style={styles.casePill}>
-          <Text style={styles.caseText}>{item.id}</Text>
+        <View style={styles.caseIdentity}>
+          <Image
+            source={require('@/assets/glimo_mascot.png')}
+            style={styles.cardMascot}
+            contentFit="contain"
+          />
+          <View>
+            <Text style={styles.caseText}>{item.id}</Text>
+            <Text style={styles.caseSource}>{item.source}</Text>
+          </View>
         </View>
         <View style={[styles.riskPill, riskTone[item.riskLevel]]}>
           <Text style={styles.riskText}>{item.riskLevel}</Text>
@@ -200,9 +233,34 @@ function ReviewCard({ item, cardWidth, stacked, animatedStyle }: ReviewCardProps
       </View>
 
       <View style={styles.restatementBlock}>
-        <Text style={styles.cardLabel}>Restated for citizen review</Text>
+        <Text style={styles.cardLabel}>Glimo protected restatement</Text>
         <Text style={styles.restatementText}>{guarded.text}</Text>
       </View>
+
+      <View style={styles.cardSignals}>
+        <View style={styles.signalBox}>
+          <Text style={styles.signalLabel}>Classifier</Text>
+          <Text style={styles.signalValue}>{Math.round(item.classifierScore * 100)}%</Text>
+        </View>
+        <View style={styles.signalBox}>
+          <Text style={styles.signalLabel}>Guard</Text>
+          <Text style={styles.signalValue}>{guardSignal}</Text>
+        </View>
+      </View>
+
+      {!stacked && (
+        <View style={styles.motionSeal}>
+          <Image
+            source={require('@/assets/shield_animation.gif')}
+            style={styles.motionGif}
+            contentFit="cover"
+          />
+          <View style={styles.motionCopy}>
+            <Text style={styles.motionTitle}>Shield pass</Text>
+            <Text style={styles.motionMeta}>{summarizeGuard(guarded.findings)}</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -226,6 +284,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: AppColors.paper,
+    overflow: 'hidden',
   },
   page: {
     flex: 1,
@@ -243,8 +302,21 @@ const styles = StyleSheet.create({
     gap: 16,
     paddingTop: 8,
   },
+  brandLockup: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerMascot: {
+    width: 58,
+    height: 66,
+  },
+  headerText: {
+    flex: 1,
+  },
   eyebrow: {
-    color: AppColors.coral,
+    color: AppColors.blue,
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -260,11 +332,11 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: AppColors.panel,
+    backgroundColor: AppColors.goldSoft,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: AppColors.line,
+    borderColor: '#F4D96B',
   },
   counterValue: {
     color: AppColors.ink,
@@ -286,7 +358,7 @@ const styles = StyleSheet.create({
   },
   stat: {
     flex: 1,
-    backgroundColor: AppColors.panel,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 8,
     paddingVertical: 10,
     alignItems: 'center',
@@ -314,13 +386,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   card: {
-    minHeight: 410,
-    backgroundColor: AppColors.panel,
+    minHeight: 472,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: AppColors.line,
     padding: 20,
-    justifyContent: 'space-between',
+    gap: 18,
+    overflow: 'hidden',
     shadowColor: '#111827',
     shadowOpacity: 0.16,
     shadowRadius: 18,
@@ -334,21 +407,40 @@ const styles = StyleSheet.create({
   stackedCard: {
     position: 'absolute',
   },
+  cardWatermark: {
+    position: 'absolute',
+    right: -42,
+    bottom: -28,
+    width: 190,
+    height: 190,
+    opacity: 0.08,
+  },
   cardTop: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
   },
-  casePill: {
-    borderRadius: 999,
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  caseIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  cardMascot: {
+    width: 42,
+    height: 48,
   },
   caseText: {
-    color: AppColors.slate,
+    color: AppColors.ink,
     fontSize: 12,
     fontWeight: '900',
+  },
+  caseSource: {
+    color: AppColors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 2,
   },
   riskPill: {
     borderRadius: 999,
@@ -363,22 +455,78 @@ const styles = StyleSheet.create({
   },
   restatementBlock: {
     gap: 12,
+    flex: 1,
+    justifyContent: 'center',
   },
   cardLabel: {
-    color: AppColors.muted,
+    color: AppColors.blue,
     fontSize: 12,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   restatementText: {
     color: AppColors.ink,
-    fontSize: 26,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 32,
     fontWeight: '800',
+  },
+  cardSignals: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  signalBox: {
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: AppColors.line,
+    backgroundColor: '#F8FBFF',
+    padding: 12,
+    gap: 4,
+  },
+  signalLabel: {
+    color: AppColors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  signalValue: {
+    color: AppColors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  motionSeal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F4D96B',
+    backgroundColor: AppColors.goldSoft,
+    padding: 10,
+  },
+  motionGif: {
+    width: 82,
+    height: 46,
+    borderRadius: 6,
+  },
+  motionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  motionTitle: {
+    color: AppColors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  motionMeta: {
+    color: AppColors.slate,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
   },
   emptyCard: {
     minHeight: 380,
-    backgroundColor: AppColors.panel,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: AppColors.line,
@@ -386,6 +534,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 14,
+  },
+  emptyMascot: {
+    width: 116,
+    height: 132,
   },
   emptyTitle: {
     color: AppColors.ink,

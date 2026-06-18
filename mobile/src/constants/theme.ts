@@ -7,36 +7,38 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#111827',
-    background: '#F7F7F2',
+    text: '#102044',
+    background: '#F6FAFF',
     backgroundElement: '#FFFFFF',
-    backgroundSelected: '#E8F1EE',
-    textSecondary: '#667085',
+    backgroundSelected: '#FFF1B8',
+    textSecondary: '#60718E',
   },
   dark: {
     text: '#F9FAFB',
-    background: '#111827',
-    backgroundElement: '#1F2937',
-    backgroundSelected: '#263D45',
-    textSecondary: '#CBD5E1',
+    background: '#0B1530',
+    backgroundElement: '#15213D',
+    backgroundSelected: '#2A2B38',
+    textSecondary: '#C8D3E8',
   },
 } as const;
 
 export const AppColors = {
-  ink: '#111827',
+  ink: '#102044',
   panel: '#FFFFFF',
-  paper: '#F7F7F2',
-  line: '#E5E7EB',
-  muted: '#667085',
+  paper: '#F6FAFF',
+  line: '#DDE6F3',
+  muted: '#60718E',
   coral: '#E85D75',
   coralSoft: '#FCE8EC',
   mint: '#2A9D8F',
   mintSoft: '#DFF4EF',
-  amber: '#F4A261',
-  amberSoft: '#FFF0DA',
-  blue: '#2F80ED',
-  blueSoft: '#E7F0FF',
-  slate: '#344054',
+  amber: '#F6C84C',
+  amberSoft: '#FFF1B8',
+  blue: '#18376D',
+  blueSoft: '#E7EEF9',
+  gold: '#F7C84B',
+  goldSoft: '#FFF7D7',
+  slate: '#334663',
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;

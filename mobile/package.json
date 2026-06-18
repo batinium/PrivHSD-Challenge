@@ -1,5 +1,5 @@
 {
-  "name": "contextsafe-review-mobile",
+  "name": "glimo-mobile",
   "main": "expo-router/entry",
   "version": "0.1.0",
   "dependencies": {

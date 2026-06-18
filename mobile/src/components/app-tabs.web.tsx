@@ -6,6 +6,7 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
+import { Image } from 'expo-image';
 import { Pressable, View, StyleSheet } from 'react-native';
 
 import { ThemedText } from './themed-text';
@@ -20,7 +21,7 @@ export default function AppTabs() {
       <TabList asChild>
         <CustomTabList>
           <TabTrigger name="home" href="/" asChild>
-            <TabButton>Admin</TabButton>
+            <TabButton>Console</TabButton>
           </TabTrigger>
           <TabTrigger name="review" href="/review" asChild>
             <TabButton>Review</TabButton>
@@ -49,9 +50,16 @@ export function CustomTabList(props: TabListProps) {
   return (
     <View {...props} style={styles.tabListContainer}>
       <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          ContextSafe Review
-        </ThemedText>
+        <View style={styles.brandLockup}>
+          <Image
+            source={require('@/assets/glimo_mascot_text_below.png')}
+            style={styles.brandMark}
+            contentFit="contain"
+          />
+          <ThemedText type="smallBold" style={styles.brandText}>
+            Glimo
+          </ThemedText>
+        </View>
 
         {props.children}
       </ThemedView>
@@ -70,7 +78,7 @@ const styles = StyleSheet.create({
   },
   innerContainer: {
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
+    paddingHorizontal: Spacing.three,
     borderRadius: Spacing.five,
     flexDirection: 'row',
     alignItems: 'center',
@@ -78,8 +86,18 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
   },
-  brandText: {
+  brandLockup: {
     marginRight: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  brandMark: {
+    width: 42,
+    height: 42,
+  },
+  brandText: {
+    color: '#102044',
   },
   pressed: {
     opacity: 0.7,

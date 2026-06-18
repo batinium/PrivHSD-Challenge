@@ -7,8 +7,10 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { GlimoShieldBackground } from '@/components/glimo-shield-background';
 import { AppColors } from '@/constants/theme';
 import { frozenBatch, restatementModels, reviewSeedItems } from '@/data/review-data';
 import { guardRestatement, summarizeGuard } from '@/utils/privacy';
@@ -19,7 +21,7 @@ const pipelineSteps = [
   'HSD classification sidecar',
   'Frozen protected CSV export',
   'Restatement leakage guard',
-  'Citizen swipe review queue',
+  'Glimo swipe review queue',
 ];
 
 export default function AdminDashboard() {
@@ -46,11 +48,19 @@ export default function AdminDashboard() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <GlimoShieldBackground />
       <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>Frozen MVP</Text>
-            <Text style={styles.title}>ContextSafe review console</Text>
+          <View style={styles.brandLockup}>
+            <Image
+              source={require('@/assets/glimo_mascot_text_below.png')}
+              style={styles.brandMark}
+              contentFit="contain"
+            />
+            <View style={styles.headerText}>
+              <Text style={styles.eyebrow}>Frozen MVP</Text>
+              <Text style={styles.title}>Glimo review console</Text>
+            </View>
           </View>
           <View style={styles.statusPill}>
             <View style={styles.statusDot} />
@@ -142,7 +152,19 @@ export default function AdminDashboard() {
           </View>
 
           <View style={styles.panel}>
-            <Text style={styles.panelTitle}>Privacy guard</Text>
+            <View style={styles.guardHeader}>
+              <Image
+                source={require('@/assets/glimo_mascot.png')}
+                style={styles.guardMascot}
+                contentFit="contain"
+              />
+              <View style={styles.guardHeaderCopy}>
+                <Text style={styles.panelTitle}>Glimo guard</Text>
+                <Text style={styles.panelCopy}>
+                  Every restatement is checked before it reaches the swipe deck.
+                </Text>
+              </View>
+            </View>
             <View style={styles.guardScore}>
               <Text style={styles.guardNumber}>{guardSummary.clean}</Text>
               <Text style={styles.guardLabel}>clean restatements</Text>
@@ -188,6 +210,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: AppColors.paper,
+    overflow: 'hidden',
   },
   page: {
     padding: 20,
@@ -202,6 +225,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  brandLockup: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  brandMark: {
+    width: 82,
+    height: 82,
+  },
+  headerText: {
+    flex: 1,
   },
   eyebrow: {
     color: AppColors.coral,
@@ -274,7 +310,7 @@ const styles = StyleSheet.create({
   },
   panel: {
     flex: 1,
-    backgroundColor: AppColors.panel,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     borderRadius: 8,
     padding: 18,
     borderWidth: 1,
@@ -413,6 +449,19 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'right',
     maxWidth: 150,
+  },
+  guardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  guardMascot: {
+    width: 68,
+    height: 76,
+  },
+  guardHeaderCopy: {
+    flex: 1,
+    gap: 4,
   },
   guardScore: {
     backgroundColor: AppColors.mintSoft,
