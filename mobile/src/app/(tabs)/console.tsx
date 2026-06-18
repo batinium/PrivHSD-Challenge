@@ -10,7 +10,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Redirect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { GlimoShieldBackground } from '@/components/glimo-shield-background';
@@ -107,10 +106,6 @@ type AdminJob = {
 };
 
 export default function AdminDashboard() {
-  if (isStaticReviewMode) {
-    return <Redirect href="/review" />;
-  }
-
   return <AdminDashboardLive />;
 }
 

@@ -1,3 +1,5 @@
+import { staticAdminCaseItems, staticFrozenBatch } from './static-demo-data';
+
 export type ReviewDecision = 'pending' | 'confirmed_hatred' | 'not_hatred' | 'uncertain';
 export type AdminDisposition = 'review' | 'approved' | 'lookup' | 'train' | 'hold';
 export type TrainingDecision = Exclude<ReviewDecision, 'pending'>;
@@ -54,20 +56,7 @@ export type BatchSummary = {
   currentStage: string;
 };
 
-export const frozenBatch: BatchSummary = {
-  id: 'local-placeholder',
-  sourceCsv: 'data/train/train_split.csv',
-  protectedCsv: 'data/outputs/local/protected.csv',
-  annotatedCsv: 'data/outputs/local/annotated.csv',
-  restatedCsv: 'data/outputs/local/restated.csv',
-  deviationAuditCsv: 'data/outputs/local/deviation_audit.csv',
-  tokenImportanceCsv: 'data/outputs/local/token_importance.csv',
-  rows: 0,
-  changedTextCells: 0,
-  validationStatus: 'valid',
-  baselineScore: 'local data not bundled',
-  currentStage: 'Connect the local API or build a private static review bundle',
-};
+export const frozenBatch: BatchSummary = staticFrozenBatch;
 
 export const restatementModels = [
   'local-llm-selected-by-admin',
@@ -76,83 +65,7 @@ export const restatementModels = [
   'manual-restatement-only',
 ] as const;
 
-export const adminCaseItems: AdminCaseItem[] = [
-  {
-    id: 'demo-admin-001',
-    source: 'DEMO',
-    originalText:
-      'Synthetic example: a user attacks a protected group while mentioning a place name.',
-    scrubbedText:
-      'Synthetic example: a user attacks a protected group while mentioning [LOCATION].',
-    protectedText:
-      'Synthetic example: a user attacks a protected group while mentioning [LOCATION].',
-    restatement:
-      'The comment attacks a protected group and omits the local place name.',
-    classifierLabel: 'hate',
-    classifierScore: 0.91,
-    riskLevel: 'medium',
-    guardFindings: [],
-    decision: 'pending',
-    deviationRisk: 'ok',
-    deviationScore: 0,
-    deviationReasons: [],
-    missingTargetTerms: [],
-    missingContextTerms: [],
-    tokenHighlights: ['protected group'],
-    reviewerVotes: { confirmedHatred: 2, notHatred: 0, uncertain: 1 },
-    adminDisposition: 'review',
-  },
-  {
-    id: 'demo-admin-002',
-    source: 'DEMO',
-    originalText:
-      'Synthetic example: a user criticizes a policy without targeting identity.',
-    scrubbedText:
-      'Synthetic example: a user criticizes a policy without targeting identity.',
-    protectedText:
-      'Synthetic example: a user criticizes a policy without targeting identity.',
-    restatement:
-      'The comment criticizes a policy decision without attacking a protected group.',
-    classifierLabel: 'not_hate',
-    classifierScore: 0.12,
-    riskLevel: 'low',
-    guardFindings: [],
-    decision: 'pending',
-    deviationRisk: 'ok',
-    deviationScore: 0,
-    deviationReasons: [],
-    missingTargetTerms: [],
-    missingContextTerms: [],
-    tokenHighlights: ['policy'],
-    reviewerVotes: { confirmedHatred: 0, notHatred: 3, uncertain: 0 },
-    adminDisposition: 'approved',
-  },
-  {
-    id: 'demo-admin-003',
-    source: 'DEMO',
-    originalText:
-      'Synthetic example: a masked comment is too vague to classify confidently.',
-    scrubbedText:
-      'Synthetic example: a [STYLE] comment is too vague to classify confidently.',
-    protectedText:
-      'Synthetic example: a [STYLE] comment is too vague to classify confidently.',
-    restatement:
-      'The protected text is ambiguous and should be sent to admin review.',
-    classifierLabel: 'not_hate',
-    classifierScore: 0.49,
-    riskLevel: 'medium',
-    guardFindings: ['ambiguous_after_masking'],
-    decision: 'pending',
-    deviationRisk: 'low',
-    deviationScore: 1,
-    deviationReasons: ['context_reduced'],
-    missingTargetTerms: [],
-    missingContextTerms: ['masked context'],
-    tokenHighlights: ['ambiguous'],
-    reviewerVotes: { confirmedHatred: 0, notHatred: 1, uncertain: 2 },
-    adminDisposition: 'lookup',
-  },
-];
+export const adminCaseItems: AdminCaseItem[] = staticAdminCaseItems;
 
 export const reviewSeedItems: ReviewItem[] = adminCaseItems.map(
   ({

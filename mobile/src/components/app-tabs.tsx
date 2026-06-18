@@ -1,7 +1,6 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useColorScheme } from 'react-native';
 
-import { isStaticReviewMode } from '@/config/runtime';
 import { Colors } from '@/constants/theme';
 
 export default function AppTabs() {
@@ -29,15 +28,13 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      {!isStaticReviewMode ? (
-        <NativeTabs.Trigger name="console">
-          <NativeTabs.Trigger.Label>Console</NativeTabs.Trigger.Label>
-          <NativeTabs.Trigger.Icon
-            src={require('@/assets/images/tabIcons/home.png')}
-            renderingMode="template"
-          />
-        </NativeTabs.Trigger>
-      ) : null}
+      <NativeTabs.Trigger name="console">
+        <NativeTabs.Trigger.Label>Console</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/home.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
