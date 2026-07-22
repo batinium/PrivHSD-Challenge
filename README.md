@@ -8,6 +8,27 @@ The project is for privacy review and research workflows around harmful-speech
 datasets. It is not a moderation product, and its classifier output should not
 be used for automated enforcement.
 
+![Glimo review workspace sign-in](docs/images/glimo-signin.png)
+
+> **Write-up:** [Releasing Harmful-Speech Data Without Leaking People](https://batinorene.hashnode.dev/releasing-harmful-speech-data-without-leaking-people)
+> — the engineering decisions behind this repo.
+
+## Screenshots
+
+All screens below use a local demo build with synthetic data. No real source text is shown.
+
+**Review app.** Reviewers swipe to decide on a *protected restatement* of what a comment does, never the raw text.
+
+![Reviewer swiping a review card](docs/images/swipe-demo.gif)
+
+**Admin console.** CSV intake with fixed text/id/label columns, row and change counts, a deviation queue, and audit sidecars written beside the protected output.
+
+![Admin review console](docs/images/admin-console.png)
+
+**Reviewer training.** Built-in guidance on what to preserve, what to ignore, and how to use uncertainty when masking removes the target or direction.
+
+![Reviewer training lectures](docs/images/reviewer-lectures.png)
+
 ## What Is In This Repo
 
 ```text
